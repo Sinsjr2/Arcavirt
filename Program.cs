@@ -36,17 +36,8 @@ public class BitLogger {
 
 internal class Program {
 
-    // static int BoolToInt(bool x) => x ? 1 : 0;
-
     private static void Main(string[] args) {
-
-        // var dataX = new List<int>() { 0 };
-        // var clock = new List<int>() { 0 };
-        // bool prevOutput = false;
-
         int tickCount = 0;
-
-        //var pwmTimers = new[] { new PWMTimer(), new PWMTimer() };
 
         var contexts = new[] { new MotorSignalContext(), new MotorSignalContext() };
 
@@ -57,35 +48,8 @@ internal class Program {
                 motorSignal.Time.Add(count);
                 motorSignal.Time.Add(count);
                 motorSignal.StepClockLogger.Write(motorSignal.StepClock, output);
-
-                // dataX.Add(count);
-                // dataX.Add(count);
-
-                // clock.Add(BoolToInt(prevOutput));
-                // clock.Add(BoolToInt(output));
-
-                // prevOutput = output;
             };
         }
-
-        // pwmTimers.OnChangedOutputSignal += () => {
-        //     var count = tickCount;
-        //     var output = pwmTimers.OutputSignal;
-        //     dataX.Add(count);
-        //     dataX.Add(count);
-
-        //     clock.Add(BoolToInt(prevOutput));
-        //     clock.Add(BoolToInt(output));
-
-        //     prevOutput = output;
-        // };
-
-        // var stepperPositionsTime = new List<int>();
-        // var stepperPositions = new List<int>();
-        // var stepperSpeeds = new List<float>();
-        // var steppers = Enumerable.Range(0, contexts.Length)
-        //     .Select(_ => new StepperMotor() )
-        //     .ToArray();
 
         foreach (var context in contexts) {
             var motor = context.Motor;
@@ -139,19 +103,6 @@ internal class Program {
         //Console.WriteLine(string.Join("\n", stepperPositions));
         myPlot.SavePng("quickstart.png", 400, 300);
     }
-
-    // static IEnumerable<int> ToPosition(IEnumerable<int> pulse, int beginPosition, bool ccw) {
-    //     var prevSignal = 0;
-    //     var pos = beginPosition;
-    //     foreach (var x in pulse) {
-    //         var riging = prevSignal == 0 && x != 0;
-    //         prevSignal = x;
-    //         if (riging) {
-    //             pos = ccw ? pos + 1 : pos - 1;
-    //         }
-    //         yield return pos;
-    //     }
-    // }
 }
 
 public class StepperMotor {
