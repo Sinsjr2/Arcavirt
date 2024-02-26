@@ -104,7 +104,7 @@ public class StepperController {
         time += cycle;
         currentTime = time;
         OnChangedPosition?.Invoke();
-        if (driveParameter.EndTime <= time) {
+        if (targetPosition == currentPosition) {
             timer.SetEnable(false);
             isRunning = false;
             OnReachedTarget?.Invoke();

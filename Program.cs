@@ -39,7 +39,9 @@ internal class Program {
     private static void Main(string[] args) {
         int tickCount = 0;
 
-        var contexts = new[] { new MotorSignalContext(), new MotorSignalContext() };
+        var contexts = new[] { new MotorSignalContext() };
+
+        var allowTransportDelay = new PWMTimer();
 
         foreach (var motorSignal in contexts) {
             motorSignal.StepClockGenerator.OnChangedOutputSignal += () => {
@@ -63,36 +65,102 @@ internal class Program {
         var transportMotor1 = new StepperController(contexts[0].StepClockGenerator, dirSignal => contexts[0].Motor.CCW_CW = dirSignal);
         contexts[0].StepClockGenerator.OnCompareMatchTriggerB += transportMotor1.OnCompareMatched;
 
-        var transportMotor2 = new StepperController(contexts[1].StepClockGenerator, dirSignal => contexts[1].Motor.CCW_CW = dirSignal);
-        contexts[1].StepClockGenerator.OnCompareMatchTriggerB += transportMotor2.OnCompareMatched;
-
-
-        transportMotor1.SetTargetPosition(40);
-        transportMotor1.OnChangedPosition += OnCangedPos;
-        void OnCangedPos() {
-            if (35 <= transportMotor1.GetCurrentPosition()) {
-                transportMotor1.OnChangedPosition -= OnCangedPos;
-                transportMotor1.SetTargetPosition(100);
+        // var transportMotor2 = new StepperController(contexts[1].StepClockGenerator, dirSignal => contexts[1].Motor.CCW_CW = dirSignal);
+        // contexts[1].StepClockGenerator.OnCompareMatchTriggerB += transportMotor2.OnCompareMatched;
+        var transportManager = new TransportBeltManager(new TransportBelt(10, 500));
+        int? prevPos = 0;
+        void UpdateNextStopPos() {
+            transportManager.Update(transportMotor1.GetCurrentPosition());
+            var stopPos = transportManager.GetNextStopPosition();
+            if (prevPos != stopPos) {
+                Console.WriteLine(stopPos);
+            }
+            prevPos = stopPos;
+            if (stopPos.HasValue) {
+                transportMotor1.SetTargetPosition(stopPos.Value);
             }
         }
+        transportMotor1.OnChangedPosition +=
+            () => {
+                // TODO 1ステップごとに呼び出すと計算量が多いので減らすようにしたい
+                UpdateNextStopPos();
+            };
 
-        transportMotor2.SetTargetPosition(80);
-        transportMotor2.OnChangedPosition += OnCangedPos2;
-        void OnCangedPos2() {
-            if (70 <= transportMotor2.GetCurrentPosition()) {
-                transportMotor2.OnChangedPosition -= OnCangedPos2;
-                transportMotor2.SetTargetPosition(140);
+        transportManager.PutObjectOnBelt(new TransportObjectInfo(70), new TransportModeSetting[] {
+                 new(0, TransportMode.Go, 30),
+                 new(1, TransportMode.Stop, 100),
+                 new(2, TransportMode.Stop, 570),
+             });
+
+        transportManager.OnChangedTransportStatus += (jobNo, timingNo, status) => {
+            Console.WriteLine($"jobNo: {jobNo}, timingNo: {timingNo}, {status}");
+            if (timingNo != 1) {
+                return;
             }
-        }
+            void AllowTransport() {
+                // Console.WriteLine("khkjhk");
+                transportManager.AllowTransport(jobNo, timingNo);
+                allowTransportDelay.OnCompareMatchTriggerB -= AllowTransport;
+                UpdateNextStopPos();
+
+                // transportManager.Update(transportMotor1.GetCurrentPosition());
+                // var stopPos = transportManager.GetNextStopPosition();
+                // Console.WriteLine(stopPos);
+                // if (stopPos.HasValue) {
+                //     transportMotor1.SetTargetPosition(stopPos.Value);
+                // }
+
+            };
+            allowTransportDelay.OnCompareMatchTriggerB += AllowTransport;
+            allowTransportDelay.SetEnable(true);
+        };
+
+        allowTransportDelay.TriggerB = 5000;
 
 
-        for (tickCount = 0; tickCount < 100000; tickCount++) {
+        UpdateNextStopPos();
+                //         transportManager.Update(transportMotor1.GetCurrentPosition());
+                // var stopPos = transportManager.GetNextStopPosition();
+                // Console.WriteLine(stopPos);
+                // if (stopPos.HasValue) {
+                //     transportMotor1.SetTargetPosition(stopPos.Value);
+                // }
+
+
+        // return;
+
+        // transportMotor1.SetTargetPosition(40);
+        // transportMotor1.OnChangedPosition += OnCangedPos;
+        // void OnCangedPos() {
+        //     if (35 <= transportMotor1.GetCurrentPosition()) {
+        //         transportMotor1.OnChangedPosition -= OnCangedPos;
+        //         transportMotor1.SetTargetPosition(100);
+        //     }
+        // }
+
+        // transportMotor2.SetTargetPosition(80);
+        // transportMotor2.OnChangedPosition += OnCangedPos2;
+        // void OnCangedPos2() {
+        //     if (70 <= transportMotor2.GetCurrentPosition()) {
+        //         transportMotor2.OnChangedPosition -= OnCangedPos2;
+        //         transportMotor2.SetTargetPosition(140);
+        //     }
+        // }
+
+        var timers = new List<PWMTimer> { allowTransportDelay };
+
+        for (tickCount = 0; tickCount < 1000000; tickCount++) {
             for (int i = 0; i < contexts.Length; i++) {
                 contexts[i].StepClockGenerator.Tick();
                 contexts[i].Motor.Clock = contexts[i].StepClockGenerator.OutputSignal;
                 contexts[i].Motor.Tick();
             }
+            foreach (var timer in timers) {
+                timer.Tick();
+            }
         }
+
+        Console.WriteLine(transportMotor1.GetCurrentPosition());
 
         Plot myPlot = new();
         foreach (var context in contexts) {
