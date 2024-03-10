@@ -47,6 +47,8 @@ public class StepperController {
     /// </summary>
     bool isRunning;
 
+    public bool IsRunning => isRunning;
+
     /// <summary>
     /// 回転方向を変更します。
     /// true は正転 false は逆転
@@ -62,8 +64,13 @@ public class StepperController {
         return currentPosition;
     }
 
+    public int GetTargetPosition() {
+        return targetPosition;
+    }
+
     public void SetTargetPosition(int targetPosition) {
         // 同じ位置であると動かす必要なし
+        // TODO 逆回転禁止モードを追加する
         if (targetPosition == currentPosition) {
             return;
         }
