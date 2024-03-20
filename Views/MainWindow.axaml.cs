@@ -262,7 +262,7 @@ public partial class MainWindow : Window
 
         var transportObjects = new TransportObject[] {
             new("transport obj 1", 150, solenoidOns, "aaa", 0),
-            new("transport obj 1", 70, solenoidOns, "aaa", 200),
+            new("transport obj 2", 70, solenoidOns, "aaa", 200),
 
             //Move(transportPaths, new("transport obj 3", 150, solenoidOns, "bbb", 410), 1, junctions, solenoidOns, mergePoints)
             // new("transport obj 1", 80, solenoidOns, "bbb", 450),
