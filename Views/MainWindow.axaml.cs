@@ -14,7 +14,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Update(canvas);
+        Loop(canvas);
     }
 
     /// <summary>
@@ -190,7 +190,7 @@ public partial class MainWindow : Window
                 };
     }
 
-    async ValueTask Update(Canvas canvas) {
+    async ValueTask Loop(Canvas canvas) {
         var transportPath1 = new TransportPath("aaa", new Point[] {
                 new(0, 40),
                 new(600, 40),
@@ -255,37 +255,44 @@ public partial class MainWindow : Window
             new("bbb", 440, new TransportRoller("motor4", 0, 15)),
         };
 
+
         var transportObjects = new TransportObject[] {
             // new("transport obj 1", 80, solenoidOns, "bbb", 300),
             Move(transportPaths, new("transport obj 2", 150, solenoidOns, "aaa", 10), 500, junctions, solenoidOns, mergePoints)
         };
 
-        var transpotObjPaths = transportObjects
-            .Select(obj => (
-                        obj.ObjectID,
-                        path: CreateTransportObjPath(transportPaths, junctions, obj.SolenoidJunctionOns, mergePoints, obj.PathID, obj.PathPosition, obj.Length)
-                        .ToArray()));
+        while (true) {
 
-        var transportObjPoints = transpotObjPaths
-            .Select(obj => (
-                        obj.ObjectID,
-                        (IReadOnlyList<IReadOnlyList<Point>>)obj.path.Select(objPath => (IReadOnlyList<Point>)objPath.path).ToArray()))
-            .ToArray();
+            var transpotObjPaths = transportObjects
+                .Select(obj => (
+                            obj.ObjectID,
+                            path: CreateTransportObjPath(transportPaths, junctions, obj.SolenoidJunctionOns, mergePoints, obj.PathID, obj.PathPosition, obj.Length)
+                            .ToArray()));
 
-        var sensorOns = transportDevices
-            .Select(x => (x, sensor: x.Device as TransportSensor))
-            .Where(t => t.sensor is not null)
-            .ToDictionary(
-                x => x.sensor!.SensorID,
-                x => transpotObjPaths.SelectMany(xs => xs.path)
-                // 搬送している物体のパスとセンサーが同じ場所にあるかでセンサーが反応しているかを判定する
-                .Any(path => path.pathID == x.x.PathID &&
-                     path.pathPos <= x.x.Position &&
-                     x.x.Position <= path.pathPos + path.length));
+            var transportObjPoints = transpotObjPaths
+                .Select(obj => (
+                            obj.ObjectID,
+                            (IReadOnlyList<IReadOnlyList<Point>>)obj.path.Select(objPath => (IReadOnlyList<Point>)objPath.path).ToArray()))
+                .ToArray();
 
+            var sensorOns = transportDevices
+                .Select(x => (x, sensor: x.Device as TransportSensor))
+                .Where(t => t.sensor is not null)
+                .ToDictionary(
+                    x => x.sensor!.SensorID,
+                    x => transpotObjPaths.SelectMany(xs => xs.path)
+                    // 搬送している物体のパスとセンサーが同じ場所にあるかでセンサーが反応しているかを判定する
+                    .Any(path => path.pathID == x.x.PathID &&
+                         path.pathPos <= x.x.Position &&
+                         x.x.Position <= path.pathPos + path.length));
 
-        var state = new TransportSimulatorModel(transportPaths, junctions, mergePoints, transportDevices, solenoidOns, sensorOns, transportObjPoints);
-        Render(canvas, state);
+            var state = new TransportSimulatorModel(transportPaths, junctions, mergePoints, transportDevices, solenoidOns, sensorOns, transportObjPoints);
+            Render(canvas, state);
+            await Task.Delay(500);
+            transportObjects = transportObjects
+                .Select(obj => Move(transportPaths, obj, 10, junctions, solenoidOns, mergePoints))
+                .ToArray();
+        }
     }
 
 
@@ -370,7 +377,7 @@ public partial class MainWindow : Window
         // 物体の描画
         foreach (var paths in state.TransportObjectPoints) {
             foreach (var path in paths.Points) {
-                canvas.Children.Add(new Polyline() { Points = path.ToArray(), Stroke = Brushes.Red });
+                canvas.Children.Add(new Polyline() { Points = path.ToArray(), Stroke = Brushes.Red, StrokeThickness = 3 });
             }
         }
     }
