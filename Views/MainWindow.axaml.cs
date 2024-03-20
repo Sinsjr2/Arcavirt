@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
@@ -13,7 +14,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Render(canvas);
+        Update(canvas);
     }
 
     /// <summary>
@@ -184,14 +185,12 @@ public partial class MainWindow : Window
 
         return obj with {
             SolenoidJunctionOns = solenoidJunctionOns,
-            PathID = nextStartPos.pathID,
-            PathPosition = nextStartPos.pathPos + nextStartPos.length
-        };
+                PathID = nextStartPos.pathID,
+                PathPosition = nextStartPos.pathPos + nextStartPos.length
+                };
     }
 
-
-    void Render(Canvas canvas) {
-
+    async ValueTask Update(Canvas canvas) {
         var transportPath1 = new TransportPath("aaa", new Point[] {
                 new(0, 40),
                 new(600, 40),
@@ -262,30 +261,44 @@ public partial class MainWindow : Window
         };
 
         var transpotObjPaths = transportObjects
-            .Select(obj => CreateTransportObjPath(transportPaths, junctions, obj.SolenoidJunctionOns, mergePoints, obj.PathID, obj.PathPosition, obj.Length)
-            .ToArray());
+            .Select(obj => (
+                        obj.ObjectID,
+                        path: CreateTransportObjPath(transportPaths, junctions, obj.SolenoidJunctionOns, mergePoints, obj.PathID, obj.PathPosition, obj.Length)
+                        .ToArray()));
 
         var transportObjPoints = transpotObjPaths
-            .Select(obj => obj.Select(objPath => objPath.path));
+            .Select(obj => (
+                        obj.ObjectID,
+                        (IReadOnlyList<IReadOnlyList<Point>>)obj.path.Select(objPath => (IReadOnlyList<Point>)objPath.path).ToArray()))
+            .ToArray();
 
         var sensorOns = transportDevices
             .Select(x => (x, sensor: x.Device as TransportSensor))
             .Where(t => t.sensor is not null)
             .ToDictionary(
                 x => x.sensor!.SensorID,
-                x => transpotObjPaths.SelectMany(xs => xs)
+                x => transpotObjPaths.SelectMany(xs => xs.path)
                 // 搬送している物体のパスとセンサーが同じ場所にあるかでセンサーが反応しているかを判定する
                 .Any(path => path.pathID == x.x.PathID &&
                      path.pathPos <= x.x.Position &&
                      x.x.Position <= path.pathPos + path.length));
 
+
+        var state = new TransportSimulatorModel(transportPaths, junctions, mergePoints, transportDevices, solenoidOns, sensorOns, transportObjPoints);
+        Render(canvas, state);
+    }
+
+
+    void Render(Canvas canvas, TransportSimulatorModel state) {
+        canvas.Children.Clear();
+
         // 経路の描画
-        foreach (var transportPath in transportPaths.Values) {
+        foreach (var transportPath in state.TransportPaths.Values) {
             canvas.Children.Add(new Polyline() { Points = transportPath.Path.ToArray(), Stroke = Brushes.Black });
         }
 
         // 搬送用ローラーの描画
-        foreach (var t in transportDevices
+        foreach (var t in state.TransportDevices
                  .Select(x => (x, roller: x.Device as TransportRoller))
                  .Where(t => t.roller is not null)) {
             var rollerDispSize = t.roller!.DisplaySize;
@@ -296,18 +309,18 @@ public partial class MainWindow : Window
                 Margin = new Thickness(-(rollerDispSize / 2), 0)
             };
             canvas.Children.Add(rollerCircle);
-            var pos = CreatePathPoint(transportPaths[t.x.PathID].Path, t.x.Position);
+            var pos = CreatePathPoint(state.TransportPaths[t.x.PathID].Path, t.x.Position);
             Canvas.SetLeft(rollerCircle, pos.pos.X);
             Canvas.SetTop(rollerCircle, pos.pos.Y);
         }
 
         // 分岐点の描画
-        foreach (var targetJunction in junctions) {
-            var junctionPath = transportPaths[targetJunction.SrcPathID];
+        foreach (var targetJunction in state.Junctions) {
+            var junctionPath = state.TransportPaths[targetJunction.SrcPathID];
             var junctionPos = CreatePathPoint(junctionPath.Path, targetJunction.SrcPathPosition);
             var junctionDispSize = 10;
             var circle = new Ellipse() {
-                Fill = solenoidOns[targetJunction.JunctionID] ? Brushes.Blue : Brushes.White,
+                Fill = state.SolenoidJunctionOns[targetJunction.JunctionID] ? Brushes.Blue : Brushes.White,
                 StrokeThickness = 3,
                 Stroke = Brushes.Blue,
                 Width = junctionDispSize,
@@ -320,8 +333,8 @@ public partial class MainWindow : Window
         }
 
         // 合流点の描画
-        foreach (var transportMerge in mergePoints) {
-            var transportPath = transportPaths[transportMerge.DestPathID];
+        foreach (var transportMerge in state.MergePoints) {
+            var transportPath = state.TransportPaths[transportMerge.DestPathID];
             var mergePos = CreatePathPoint(transportPath.Path, transportMerge.DestPathPosition);
             var mergeDispSize = 10;
             var circle = new Ellipse() {
@@ -336,12 +349,12 @@ public partial class MainWindow : Window
         }
 
         // センサーの描画
-        foreach (var t in transportDevices
+        foreach (var t in state.TransportDevices
                  .Select(x => (x, sensor: x.Device as TransportSensor))
                  .Where(t => t.sensor is not null)) {
             var sensorDispSize = 10;
             var sensorCircle = new Ellipse() {
-                Fill = sensorOns[t.sensor!.SensorID] ? Brushes.Orange : Brushes.White,
+                Fill = state.SensorOns[t.sensor!.SensorID] ? Brushes.Orange : Brushes.White,
                 StrokeThickness = 2,
                 Stroke = Brushes.Orange,
                 Width = sensorDispSize,
@@ -349,15 +362,15 @@ public partial class MainWindow : Window
                 Margin = new Thickness(-(sensorDispSize / 2), -(sensorDispSize / 2))
             };
             canvas.Children.Add(sensorCircle);
-            var pos = CreatePathPoint(transportPaths[t.x.PathID].Path, t.x.Position);
+            var pos = CreatePathPoint(state.TransportPaths[t.x.PathID].Path, t.x.Position);
             Canvas.SetLeft(sensorCircle, pos.pos.X);
             Canvas.SetTop(sensorCircle, pos.pos.Y);
         }
 
         // 物体の描画
-        foreach (var paths in transportObjPoints) {
-            foreach (var path in paths) {
-                canvas.Children.Add(new Polyline() { Points = path, Stroke = Brushes.Red });
+        foreach (var paths in state.TransportObjectPoints) {
+            foreach (var path in paths.Points) {
+                canvas.Children.Add(new Polyline() { Points = path.ToArray(), Stroke = Brushes.Red });
             }
         }
     }
