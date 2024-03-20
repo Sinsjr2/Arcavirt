@@ -184,6 +184,54 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// 指定した物体を指定した距離移動させます。
+    ///
+    /// TODO 物体のたわみも計算に含めること
+    /// </summary>
+    TransportObject Move(IReadOnlyDictionary<string, TransportPath> transportPaths,
+                         TransportObject obj,
+                         double moveDistance,
+                         IReadOnlyList<SolenoidTransportPathJunction> solenoidJunctions,
+                         IReadOnlyDictionary<string, bool> solenoidOns,
+                         IReadOnlyList<MergeTransportPath> mergePoints) {
+        // 移動した後の後端のいち計算する
+        var nextStartPos = CreateTransportObjPath(
+            transportPaths,
+            solenoidJunctions,
+            obj.SolenoidJunctionOns,
+            mergePoints,
+            obj.PathID,
+            obj.PathPosition,
+            moveDistance)
+            .First();
+
+        var newTransportPath = CreateTransportObjPath(
+            transportPaths,
+            solenoidJunctions,
+            obj.SolenoidJunctionOns,
+            mergePoints,
+            nextStartPos.pathID,
+            nextStartPos.pathPos + nextStartPos.length,
+            obj.Length);
+
+        // パス内にある分岐点を抽出し、分岐方向を通過中に変わらないようにする
+        var solenoidJunctionOns = newTransportPath.SelectMany(
+            path => solenoidJunctions
+            .Where(x => path.pathID == x.SrcPathID &&
+                   path.pathPos <= x.SrcPathPosition &&
+                   x.SrcPathPosition <= path.pathPos + path.length))
+            .DistinctBy(x => x.JunctionID)
+            .ToDictionary(x => x.JunctionID,
+                          x => solenoidOns.TryGetValue(x.JunctionID, out var isOn) && isOn);
+
+        return obj with {
+            SolenoidJunctionOns = solenoidJunctionOns,
+            PathID = nextStartPos.pathID,
+            PathPosition = nextStartPos.pathPos + nextStartPos.length
+        };
+    }
+
 
     void Render(Canvas canvas) {
 
@@ -202,7 +250,7 @@ public partial class MainWindow : Window
             });
 
         var solenoidOns = new Dictionary<string, bool> {
-            { "junction", false }
+            { "junction", true }
         };
         var junctions = new SolenoidTransportPathJunction[] {
             new("junction", "aaa", 380, "bbb")
@@ -252,8 +300,8 @@ public partial class MainWindow : Window
         };
 
         var transportObjects = new TransportObject[] {
-            new("transport obj 1", 80, solenoidOns, "bbb", 300),
-            new("transport obj 2", 150, solenoidOns, "aaa", 200)
+            // new("transport obj 1", 80, solenoidOns, "bbb", 300),
+            Move(transportPaths, new("transport obj 2", 150, solenoidOns, "aaa", 10), 500, junctions, solenoidOns, mergePoints)
         };
 
         var transpotObjPaths = transportObjects
