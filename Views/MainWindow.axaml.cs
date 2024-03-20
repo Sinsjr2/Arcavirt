@@ -120,10 +120,14 @@ public partial class MainWindow : Window
             return new[] { (path, srcPathID, srcPathPos, length) };
         }
         else {
+            var paths = transportPath.Path.ToArray();
+            var totalLength = CalcPathLength(paths);
             // 分岐点はなかったので、のこりのパスの長さを計測し、与えれれた長さのパスを返せるか計算
-            var path = CreatePathLine(transportPath.Path.ToArray(), length, srcPathPos);
+            var path = CreatePathLine(paths, length, srcPathPos);
             var pathLength = CalcPathLength(path);
-            if (pathLength < length) {
+            // パスの最後まで伸ばしたが距離が足りなかった場合
+            // 取得したパスに対して計算すると計算誤差で、パスの端に達する前に以下の処理をされてしまう
+            if ((totalLength - srcPathPos) < length) {
                 // 指定した長さよりもパスが短かったので、合流した先のパスも長さに含める
                 // 1つの終端に複数の合流点があることを想定していない
                 var mergePoint = mergePoints
@@ -185,9 +189,9 @@ public partial class MainWindow : Window
 
         return obj with {
             SolenoidJunctionOns = solenoidJunctionOns,
-                PathID = nextStartPos.pathID,
-                PathPosition = nextStartPos.pathPos + nextStartPos.length
-                };
+            PathID = nextStartPos.pathID,
+            PathPosition = nextStartPos.pathPos + nextStartPos.length
+        };
     }
 
     async ValueTask Loop(Canvas canvas) {
@@ -257,8 +261,10 @@ public partial class MainWindow : Window
 
 
         var transportObjects = new TransportObject[] {
-            // new("transport obj 1", 80, solenoidOns, "bbb", 300),
-            Move(transportPaths, new("transport obj 2", 150, solenoidOns, "aaa", 10), 500, junctions, solenoidOns, mergePoints)
+            new("transport obj 1", 150, solenoidOns, "aaa", 0),
+            //Move(transportPaths, new("transport obj 3", 150, solenoidOns, "bbb", 410), 1, junctions, solenoidOns, mergePoints)
+            // new("transport obj 1", 80, solenoidOns, "bbb", 450),
+            //Move(transportPaths, new("transport obj 2", 150, solenoidOns, "aaa", 10), 500, junctions, solenoidOns, mergePoints)
         };
 
         while (true) {
@@ -288,9 +294,9 @@ public partial class MainWindow : Window
 
             var state = new TransportSimulatorModel(transportPaths, junctions, mergePoints, transportDevices, solenoidOns, sensorOns, transportObjPoints);
             Render(canvas, state);
-            await Task.Delay(500);
+            await Task.Delay(30);
             transportObjects = transportObjects
-                .Select(obj => Move(transportPaths, obj, 10, junctions, solenoidOns, mergePoints))
+                .Select(obj => Move(transportPaths, obj, 5, junctions, solenoidOns, mergePoints))
                 .ToArray();
         }
     }
