@@ -46,49 +46,6 @@ public partial class MainWindow : Window
     }
 
     Point[] CreatePathLine(Point[] transportPath, double objLength, double endPos) {
-        // double beginTotalLength = 0;
-        // int beginIndex = -1;
-        // for (int i = 1; i < transportPath.Length; i++) {
-        //     Vector linePath = transportPath[i] - transportPath[i - 1];
-        //     if (endPos <= beginTotalLength + linePath.Length) {
-        //         beginIndex = i;
-        //         break;
-        //     }
-        //     beginTotalLength += linePath.Length;
-        // }
-
-        // if (beginIndex <= 0) {
-        //     return Array.Empty<Point>();
-        // }
-
-        // double endTotalLength = beginTotalLength;
-        // int endIndex = beginIndex;
-        // for (int i = beginIndex; i < transportPath.Length; i++) {
-        //     Vector linePath = transportPath[i] - transportPath[i - 1];
-        //     if (endPos + objLength <= endTotalLength + linePath.Length) {
-        //         endIndex = i;
-        //         break;
-        //     }
-        //     endTotalLength += linePath.Length;
-        // }
-
-        // Vector beginX1 = transportPath[beginIndex - 1];
-        // Vector beginX2 = transportPath[beginIndex];
-        // var line1 = (beginX2 - beginX1).Normalize() * (endPos - beginTotalLength);
-
-        // Vector endX1 = transportPath[endIndex - 1];
-        // Vector endX2 = transportPath[endIndex];
-        // Vector endLine = (endX2 - endX1);
-        // var line2 = endLine.Normalize() *
-        //     // パスの長さ以上の長さを返さないようにするため
-        //     Math.Min(
-        //         endLine.Length,
-        //         endPos + objLength - endTotalLength);
-
-        // return new Point[] { (Point)beginX1 + line1 }
-        //     .Concat(transportPath[beginIndex..endIndex])
-        //     .Append((Point)endX1 + line2)
-        //     .ToArray();
         if (!transportPath.Any()) {
             return Array.Empty<Point>();
         }
