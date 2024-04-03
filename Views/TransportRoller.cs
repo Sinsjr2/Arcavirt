@@ -1,12 +1,17 @@
+using Avalonia;
 using System;
 using System.Collections.Generic;
-using Avalonia;
+using System.Linq;
+
+/// <summary>
+/// 数値の範囲を表します。
+/// </summary>
+public record struct RangeD(double Min, double Max);
 
 public record DeviceID(Type DeviceType, string ID);
 
-// TODO デバイスの間というクラス名にする
 // ローラーやデバイスごとのたるみ量を表す
-public record DeviceMid(DeviceID ID1, DeviceID ID2, int たるみ);
+public record BetweenDevice(DeviceID ID1, DeviceID ID2, double Sagging);
 
 /// <summary>
 /// 搬送している物体の現在位置や長さを表す。
@@ -21,9 +26,27 @@ public record DeviceMid(DeviceID ID1, DeviceID ID2, int たるみ);
 public record TransportObject(
     string ObjectID,
     double Length,
+    double PathLength,
     IReadOnlyDictionary<string, bool> SolenoidJunctionOns,
+    // 現在位置からの各ローラ間のたるみ量を保持している
+    IReadOnlyList<double> Saggings,
     string PathID,
-    double PathPosition);
+    double PathPosition
+    // たわみ量を考慮したパスの長さを返します。
+    ) {
+
+    // /// <summary>
+    // /// 物体の先頭位置を取得します。
+    // /// </summary>
+    // public double TopPosition =>
+    //     PathPosition + Length - Saggings.Values.Sum(x => -x);
+
+    // /// <summary>
+    // /// たわみ量を考慮したパスの長さを返します。
+    // /// </summary>
+    // public double PathLength =>
+    //     Length - Saggings.Values.Sum(x => -x);
+}
 
 public record TransportPath(
     // TransportDevice から参照する時に使用するパスの名前
@@ -56,7 +79,7 @@ public record TransportDevice(
     // 配置するときの対象となる搬送経路の名前
     string PathID,
     // 搬送経路の先頭基準で配置する位置
-    int Position,
+    double Position,
     ITransportDevice Device
 );
 
@@ -72,6 +95,8 @@ public record TransportSensor(
 ) : ITransportDevice;
 
 public record TransportRoller(
+    // ローラーの識別子
+    string RollerID,
     // ローラーを回すモーター名
     string PowerSource,
     // // モーター1パルス当たりの紙の進む距離
