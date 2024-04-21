@@ -1,5 +1,6 @@
 ﻿// See https://aka.ms/new-console-template for more information
 using System.Diagnostics;
+using Clock;
 using ScottPlot;
 
 public class MotorSignalContext {
@@ -36,7 +37,60 @@ public class BitLogger {
 
 internal class Program {
 
-    private static void Main(string[] args) {
+     static void Main() {
+         var clock = new SimulationClock();
+         var sim = new Simulator(clock);
+        var irqList = new CPU.ISRActions();
+        var pwm = new Pheripheral.PWM(clock, irqList, 1, 60_000_000);
+        var port1 = new Pheripheral.GPIO8Bit();
+        var gpioDirDriver = new GPOutput1BitDriver(port1, 0, 0);
+        var pwmTimerDriver = new PWMTimerDriver(pwm, 0, 60_000_000);
+        var stepperDriver = new StepperDriver(pwmTimerDriver, gpioDirDriver);
+        irqList.SetCallback(1, stepperDriver.OnCompareMatchedISR);
+        var stepperMot1 = new Device.StepperMotor(clock, pwm, port1.Pins[0], 100);
+
+        var plot = new Plot();
+        var motorLogger1 = new GraphLogger.StepperMotorLogger(
+            clock, stepperMot1,
+            plot.Add.DataLogger(),
+            plot.Add.DataLogger());
+
+        motorLogger1.StartLog();
+
+        gpioDirDriver.ChangeToOutput();
+
+        Console.WriteLine("アイドル開始");
+        for (int i = 0; i < 10; i++) {
+            sim.Step();
+        }
+        Console.WriteLine("アイドル終了");
+
+        stepperDriver.SetTargetPosition(500);
+        Console.WriteLine("モーター位置 500");
+
+        var alarm = clock.CreateAlarm(() => { });
+        for (int i = 0; i < 1000; i++) {
+            sim.Step();
+        }
+
+        alarm.Schedule(100_000_000);
+
+        for (int i = 0; i < 10; i++) {
+            sim.Step();
+        }
+
+        stepperDriver.SetTargetPosition(300);
+        Console.WriteLine("モーター位置 300");
+        for (int i = 0; i < 10000; i++) {
+            sim.Step();
+        }
+
+
+        plot.Render();
+        plot.SavePng("quickstart.png", 400, 300);
+    }
+
+    private static void Main_(string[] args) {
         int tickCount = 0;
 
         var contexts = new[] { new MotorSignalContext() };
@@ -98,18 +152,9 @@ internal class Program {
                 return;
             }
             void AllowTransport() {
-                // Console.WriteLine("khkjhk");
                 transportManager.AllowTransport(jobNo, timingNo);
                 allowTransportDelay.OnCompareMatchTriggerB -= AllowTransport;
                 UpdateNextStopPos();
-
-                // transportManager.Update(transportMotor1.GetCurrentPosition());
-                // var stopPos = transportManager.GetNextStopPosition();
-                // Console.WriteLine(stopPos);
-                // if (stopPos.HasValue) {
-                //     transportMotor1.SetTargetPosition(stopPos.Value);
-                // }
-
             };
             allowTransportDelay.OnCompareMatchTriggerB += AllowTransport;
             allowTransportDelay.SetEnable(true);
@@ -119,15 +164,6 @@ internal class Program {
 
 
         UpdateNextStopPos();
-                //         transportManager.Update(transportMotor1.GetCurrentPosition());
-                // var stopPos = transportManager.GetNextStopPosition();
-                // Console.WriteLine(stopPos);
-                // if (stopPos.HasValue) {
-                //     transportMotor1.SetTargetPosition(stopPos.Value);
-                // }
-
-
-        // return;
 
         // transportMotor1.SetTargetPosition(40);
         // transportMotor1.OnChangedPosition += OnCangedPos;
