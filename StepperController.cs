@@ -120,16 +120,3 @@ public class StepperController {
     }
 }
 
-// public class StepperManager {
-//     readonly PWMTimer timer;
-
-//     public StepperManager(PWMTimer timer) {
-//         this.timer = timer;
-//     }
-
-//     public readonly List<StepperAgent> Steppers = new();
-
-//     public void OnCompareMatched() {
-        
-//     }
-// }
