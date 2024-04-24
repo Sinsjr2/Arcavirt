@@ -7,6 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Clock;
 using MoreLinq;
 
 namespace TransportSimulatorAvalonia.Views;
@@ -17,7 +18,15 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         //Loop(canvas);
-        Dispatcher.UIThread.InvokeAsync(() => Loop(canvas).AsTask());
+        Dispatcher.UIThread.InvokeAsync(async () => {
+            try
+            {
+                await Loop(canvas).AsTask();
+            }
+            catch (Exception ex) {
+                Console.WriteLine(ex);
+            }
+        });
     }
 
     /// <summary>
@@ -240,10 +249,10 @@ public partial class MainWindow : Window
                 if (!linkBegin.HasValue && isLowerLimit) {
                     // たわみの下限を超えたので隣接するローラーの影響を受ける
                     linkBegin = i;
-                    Console.WriteLine($"--------------------{i}--------------");
+                    // Console.WriteLine($"--------------------{i}--------------");
                 }
                 else if (linkBegin.HasValue && (!isLowerLimit ||rollerPiches.Length - 1 <= i)) {
-                    Console.WriteLine("lower");
+                    // Console.WriteLine("lower");
                     // たるみ状態の区間を発見したので、ひっぱり具合を確定させる
                     // もしくは、配列の最後までひっぱり状態の場合
                     var linkEnd = i + 1;
@@ -582,6 +591,39 @@ public partial class MainWindow : Window
             new("bbb", 440, new TransportRoller("roller4_12", "motor4", 0, 15)),
         };
 
+        var clock = new SimulationClock();
+        var sim = new Simulator(clock);
+        var irqList = new CPU.ISRActions();
+        var pwms = Enumerable.Range(1, 4)
+            .Select(i => new Pheripheral.PWM(clock, irqList, i, 60_000_000))
+            .ToArray();
+        var port1 = new Pheripheral.GPIO8Bit();
+
+        var stepperDrivers = pwms
+            .Select((x, i) => {
+                var gpioDirDriver = new GPOutput1BitDriver(port1, 0, i);
+                gpioDirDriver.ChangeToOutput();
+                return new StepperDriver(new PWMTimerDriver(x, 0, 60_000_000), gpioDirDriver);
+                })
+            .ToArray();
+        for (int i = 0; i < stepperDrivers.Length; i++) {
+            irqList.SetCallback(i + 1, stepperDrivers[i].OnCompareMatchedISR);
+        }
+
+        var stpperMotors = new Dictionary<string, Device.StepperMotor>()
+        {
+            { "motor1", new Device.StepperMotor(clock, pwms[0], port1.Pins[0], 100) },
+            { "motor2", new Device.StepperMotor(clock, pwms[1], port1.Pins[1], 100) },
+            { "motor3", new Device.StepperMotor(clock, pwms[2], port1.Pins[2], 100) },
+            { "motor4", new Device.StepperMotor(clock, pwms[3], port1.Pins[3], 100) },
+        };
+
+
+
+        stepperDrivers[0].SetTargetPosition(100);
+        stepperDrivers[1].SetTargetPosition(100);
+        stepperDrivers[2].SetTargetPosition(100);
+        stepperDrivers[3].SetTargetPosition(100);
 
         var transportObjects = new TransportObject[] {
             new("transport obj 1", 150, 150, solenoidOns, Array.Empty<double>(), "aaa", 0),
@@ -602,8 +644,16 @@ public partial class MainWindow : Window
             select (roller.RollerID, delta: 5.0))
             .ToDictionary(t => t.RollerID, t => t.delta);
 
-        while (true) {
+        var motorAndRollers =
+            (from device in transportDevices
+             where device.Device is TransportRoller
+             let roller = (TransportRoller)device.Device
+             group roller by roller.PowerSource into source
+             select (source.Key, source.Select(roller => roller.RollerID).ToArray()))
+            .ToDictionary(t => t.Key, t => t.Item2);
 
+
+        while (true) {
             var transpotObjPaths = transportObjects
                 .Select(obj => (
                             obj.ObjectID,
@@ -629,10 +679,18 @@ public partial class MainWindow : Window
 
             var state = new TransportSimulatorModel(transportPaths, junctions, mergePoints, transportDevices, solenoidOns, sensorOns, transportObjPoints);
             Render(canvas, state);
-            await Task.Delay(30);
+            await Task.Delay(10);
+
+            var beginPositions = stpperMotors.Select(stepper => stepper.Value.Position)
+                .ToArray();
+            sim.Step();
+            var deltaPositions = stpperMotors
+                .Zip(beginPositions, (stepper, pos) => (motorName: stepper.Key, delta: stepper.Value.Position - pos))
+                .SelectMany(t => motorAndRollers[t.motorName].Select(rollerName => (rollerName, t.delta)))
+                .ToDictionary(x => x.rollerName, x => x.delta);
 
             transportObjects = transportObjects
-                .Select(obj => MoveWithRoller(obj, transportPaths, junctions, mergePoints, solenoidOns, transportDevices, rollerDeltaSteps))
+                .Select(obj => MoveWithRoller(obj, transportPaths, junctions, mergePoints, solenoidOns, transportDevices, deltaPositions))
                 .ToArray();
             // transportObjects = transportObjects
             //     .Select(obj => Move(transportPaths, obj, 5, junctions, solenoidOns, mergePoints))
