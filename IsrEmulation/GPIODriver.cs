@@ -11,6 +11,7 @@ public class GPOutput1BitDriver {
         if (!(0 <= bitPos && bitPos < 8)) {
             throw new ArgumentException($"bitPos: {bitPos}");
         }
+        this.bitPos = bitPos;
         this.mask = (uint)1 << bitPos;
         this.gpio = gpio;
         this.addrOffset = addrOffset;
@@ -18,7 +19,8 @@ public class GPOutput1BitDriver {
 
     public void ChangeToOutput() {
         var dirReg = addrOffset + (uint)GPIORegister.PortDir;
-        gpio.WriteUint32(dirReg, (uint)GPIODir.Output << bitPos);
+        var dir = gpio.ReadUint32(dirReg);
+        gpio.WriteUint32(dirReg, (uint)(dir & ~mask) | ((uint)GPIODir.Output << bitPos));
 
     }
 
@@ -41,6 +43,7 @@ public class GPInput1BitDriver {
         if (!(0 <= bitPos && bitPos < 8)) {
             throw new ArgumentException($"bitPos: {bitPos}");
         }
+        this.bitPos = bitPos;
         this.mask = (uint)1 << bitPos;
         this.gpio = gpio;
         this.addrOffset = addrOffset;
@@ -48,7 +51,8 @@ public class GPInput1BitDriver {
 
     public void ChangeToInput() {
         var dirReg = addrOffset + (uint)GPIORegister.PortDir;
-        gpio.WriteUint32(dirReg, (uint)GPIODir.Input << bitPos);
+        var dir = gpio.ReadUint32(dirReg);
+        gpio.WriteUint32(dirReg, (uint)(dir & ~mask) | ((uint)GPIODir.Input << bitPos));
 
     }
 
