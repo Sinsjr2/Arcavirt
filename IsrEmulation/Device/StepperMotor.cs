@@ -60,8 +60,8 @@ namespace Device {
             this.dir = dir;
             this.minSpeed = minSpeed;
 
-            step.OnOutputValueChanged += Update;
-            dir.OnOutputValueChanged += Update;
+            step.OnChangedGPIOValue += Update;
+            dir.OnChangedGPIOValue += Update;
             this.onSpeedZeroTimer = clock.CreateAlarm(() => {
                 // パルスが停止してから一定時間経過すると速度を0にするための処理
                 prevRiseTime = null;

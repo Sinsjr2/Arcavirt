@@ -620,10 +620,10 @@ public partial class MainWindow : Window
 
 
 
-        stepperDrivers[0].SetTargetPosition(100);
-        stepperDrivers[1].SetTargetPosition(100);
-        stepperDrivers[2].SetTargetPosition(100);
-        stepperDrivers[3].SetTargetPosition(100);
+        stepperDrivers[0].SetTargetPosition(10000);
+        stepperDrivers[1].SetTargetPosition(10000);
+        stepperDrivers[2].SetTargetPosition(10000);
+        stepperDrivers[3].SetTargetPosition(10000);
 
         var transportObjects = new TransportObject[] {
             new("transport obj 1", 150, 150, solenoidOns, Array.Empty<double>(), "aaa", 0),

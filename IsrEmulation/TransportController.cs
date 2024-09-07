@@ -1,4 +1,7 @@
+using Clock;
+
 public enum TransportMode {
+    None,
 
     /// <summary>
     /// 指定した位置で停止し、
@@ -14,10 +17,10 @@ public enum TransportMode {
     /// </summary>
     Go,
 
-    /// <summary>
-    /// 指定した位置に到達すると速度を変更するモード
-    /// </summary>
-    ChangeSpeed
+    // /// <summary>
+    // /// 指定した位置に到達すると速度を変更するモード
+    // /// </summary>
+    // ChangeSpeed
 }
 
 public enum TransportStatus {
@@ -47,32 +50,83 @@ public class TransportParam {
     }
 }
 
-// public class TransportController {
+public class TimingParam {
+    public readonly int TimingNo;
+    public readonly Clock.ICountObserver<int> Observer;
+    public TransportMode Mode;
+    public TransportStatus Status;
+    public int Position;
 
-//     /// <summary>
-//     /// キーは搬送JOB番号、タイミング番号
-//     /// </summary>
-//     Dictionary<byte, Dictionary<ushort, TransportParam>> RunningStatus = new();
+    public TimingParam(int timingNo, ICountObserver<int> observer, TransportMode mode, TransportStatus status, int position) {
+        TimingNo = timingNo;
+        Observer = observer;
+        Status = status;
+        Position = position;
+        Mode = mode;
+    }
+}
 
-//     public void StartTransportJob(ushort jobNo) {
-//     }
+public class TransportController {
 
-//     /// <summary>
-//     /// 停止する位置が設定されていない場合は、null を返します。
-//     /// </summary>
-//     int? GetNextStopPosition() {
-//         // 次に停止する最小の位置を検索する
-//         int? nextStopPos = null;
-//         foreach (var job in RunningStatus.Values) {
-//             foreach (var x in job.Values) {
-//                 if (x.Mode == TransportMode.Stop) {
-//                     nextStopPos ??= int.MaxValue;
-//                     if (x.Position < nextStopPos) {
-//                         nextStopPos = x.Position;
-//                     }
-//                 }
-//             }
-//         }
-//         return nextStopPos;
-//     }
-// }
+    readonly StepperDriver[] drivers;
+
+    readonly Clock.CountWatcher<int> nextStopPositionManager = new(0, (a, b) => a < b);
+
+    readonly TimingParam[] timingParams;
+
+    /// <summary>
+    /// キーは搬送JOB番号、タイミング番号
+    /// </summary>
+    Dictionary<byte, Dictionary<ushort, TransportParam>> RunningStatus = new();
+
+    public event Action<int>? OnChangedTransportStatus;
+
+    public TransportController(StepperDriver[] drivers) {
+        this.drivers = drivers;
+
+        timingParams = Enumerable.Range(0, 50)
+            .Select(i => {
+                var observer = nextStopPositionManager.Create(pos => { OnChangedTransportStatus?.Invoke(i); });
+                var param = new TimingParam(i, observer, TransportMode.None, TransportStatus.NotArrival, 0);
+                return param;
+            })
+            .ToArray();
+    }
+
+    public void StartTransportJob() {
+        var currentPos = drivers[0].GetCurrentPosition();
+        int maxPosition = 0;
+        foreach (var param in timingParams) {
+            if (param.Mode != TransportMode.None) {
+                break;
+            }
+            // 次に停止もしくは、通過を通知するための位置を設定する
+            param.Observer.Schedule(param.Position + currentPos);
+        }
+    }
+
+    public void AddTransportJob(int timingNo, TransportMode mode, int position) {
+        var timingParam = timingParams[timingNo];
+        timingParam.Mode = mode;
+        timingParam.Position = position;
+    }
+
+    /// <summary>
+    /// 停止する位置が設定されていない場合は、null を返します。
+    /// </summary>
+    int? GetNextStopPosition() {
+        // 次に停止する最小の位置を検索する
+        int? nextStopPos = null;
+        foreach (var job in RunningStatus.Values) {
+            foreach (var x in job.Values) {
+                if (x.Mode == TransportMode.Stop) {
+                    nextStopPos ??= int.MaxValue;
+                    if (x.Position < nextStopPos) {
+                        nextStopPos = x.Position;
+                    }
+                }
+            }
+        }
+        return nextStopPos;
+    }
+}

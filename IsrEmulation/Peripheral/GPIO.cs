@@ -70,14 +70,14 @@ namespace Pheripheral {
                 }
             }
 
-            public event Action? OnOutputValueChanged;
+            public event Action? OnChangedGPIOValue;
 
             public void Update() {
                 if (!outputIsChanged) {
                     return;
                 }
                 outputIsChanged = false;
-                OnOutputValueChanged?.Invoke();
+                OnChangedGPIOValue?.Invoke();
             }
         }
         readonly IReadOnlyList<GPIOPin> pins = Enumerable

@@ -57,7 +57,7 @@ namespace Pheripheral {
         bool interruptEnable = false;
         bool invertOutput = false;
 
-        public event Action? OnOutputValueChanged;
+        public event Action? OnChangedGPIOValue;
 
         bool gpioValue;
 
@@ -84,7 +84,7 @@ namespace Pheripheral {
             bool isChanged = gpioValue != converted;
             gpioValue = converted;
             if (isChanged) {
-                OnOutputValueChanged?.Invoke();
+                OnChangedGPIOValue?.Invoke();
             }
         }
 
