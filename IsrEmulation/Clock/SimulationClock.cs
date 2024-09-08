@@ -89,7 +89,7 @@ namespace Clock {
             return false;
         }
 
-        public void tick(double deltaNanos) {
+        public void Tick(double deltaNanos) {
             var targetNanos = this.nanosCounter + deltaNanos;
             var alarm = this.nextAlarm;
             while (alarm != null && alarm.nanos <= targetNanos) {

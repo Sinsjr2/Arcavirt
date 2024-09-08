@@ -10,6 +10,6 @@ public class Simulator {
 
     public void Step() {
         var nanosToNextAlarm = clock.nanosToNextAlarm;
-        clock.tick(nanosToNextAlarm);
+        clock.Tick(nanosToNextAlarm);
     }
 }
