@@ -5,6 +5,7 @@ using static RX.RXv1Assembler;
 using static RX.Reg;
 using Pheripheral;
 using System.Buffers;
+using System;
 
 namespace IsrEmulationTest;
 public class RXv1InstrunctionTest {
@@ -12,10 +13,72 @@ public class RXv1InstrunctionTest {
     RAM32Bit memory;
     readonly Translate rxv1Translate;
 
+    public  Random random_generate = new Random();
+
     public RXv1InstrunctionTest() {
         memory = new RAM32Bit("sram", 256);
         cpu = new RXv1Core(memory);
         rxv1Translate = new();
+    }
+
+    //乱数を生成する・
+    public uint getSfrag(LengthOfImmediate value,uint data)
+    {
+        int result = 0;
+        switch (value){
+                case LengthOfImmediate.SIMM8:
+                    result = 7;
+                    break;
+                case LengthOfImmediate.SIMM16:
+                    result = 15;
+                    break;
+                case LengthOfImmediate.SIMM24:
+                    result = 23;
+                    break;
+                case LengthOfImmediate.IMM32:
+                    result = 31;
+                    break;
+                    
+                    
+                default:
+                    result = 1;
+                    break;
+
+
+        
+        
+        }
+        return (data >> result) & 1;
+
+    }
+
+    public uint randomIMM(LengthOfImmediate value)
+    {
+        uint result = 0;
+        switch (value){
+                case LengthOfImmediate.SIMM8:
+                    result = Convert.ToUInt32(random_generate.NextInt64(127));
+                    break;
+                case LengthOfImmediate.SIMM16:
+                    result = Convert.ToUInt32(random_generate.NextInt64(32767));
+                    break;
+                case LengthOfImmediate.SIMM24:
+                    result = Convert.ToUInt32(random_generate.NextInt64(16777215));
+                    break;
+                case LengthOfImmediate.IMM32:
+                    result = Convert.ToUInt32(random_generate.NextInt64(4294967295));
+                    break;
+                    
+                    
+                    default:
+                        break;
+
+
+        
+        
+        }
+        return result;
+
     }
 
     [SetUp]
@@ -168,7 +231,7 @@ public class RXv1InstrunctionTest {
     public void BRA_Test() {
         throw new NotImplementedException();
         // TODO 実装する
-    }
+    }  
 
     // [Test]
     public void BRK_Test() {
@@ -1088,6 +1151,33 @@ public class RXv1InstrunctionTest {
         cpu.PSW_s.Is(expS);
     }
 
+    //あとで乱数持ってくるように改造する
+    //IMM即値 bit長を変える必要がある。
+    [Test]
+    [TestCase(LengthOfImmediate.SIMM8 )]
+    [TestCase(LengthOfImmediate.SIMM16 )]
+    [TestCase(LengthOfImmediate.SIMM24 )]
+    [TestCase(LengthOfImmediate.IMM32)]
+    
+    public void XORIMM_Test(LengthOfImmediate li ) {
+        uint b = randomIMM(li);
+        cpu.Registers[2] = b;
+        uint a = randomIMM(li);
+        uint result = a ^ b;
+        bool expZ,expS;
+
+        if(result == 0)expZ = true;
+        else expZ = false;
+        if(getSfrag(li,result) == 1) expS = true;
+        else expS = false;
+        
+        RunOpcode(XOR(new StdImmValue(li,a), R2));
+        cpu.Registers[2].Is(result);
+        cpu.PSW_z.Is(expZ);
+        cpu.PSW_s.Is(expS);
+    }
+
+    //レジスタ指定?
     [Test]
     [TestCase(0b1010_0000u, 0b0111_0011u, 0b1101_0011u, false,  false)]
     [TestCase(0b1010_0000u << 24, 0b0111_0011u << 24, 0b1101_0011u << 24, false,  true)]
