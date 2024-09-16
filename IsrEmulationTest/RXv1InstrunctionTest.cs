@@ -1151,6 +1151,19 @@ public class RXv1InstrunctionTest {
         cpu.PSW_s.Is(expS);
     }
 
+    [Test]
+    [TestCase(0b1010_0000u, 0b0111_0011u)]
+    [TestCase(0b1010_0000u << 24, 0b0111_0011u << 24)]
+    [TestCase(0xFFFF_FFFFu, 0xFFFF_FFFFu)]
+    [TestCase(          0u,           0u)]
+    public void XCHG_Test(uint a, uint b) {
+        cpu.Registers[1] = a;
+        cpu.Registers[2] = b;
+        RunOpcode(XCHG(R1,R2));
+        cpu.Registers[2].Is(a);
+    }
+   
+
     //あとで乱数持ってくるように改造する
     //IMM即値 bit長を変える必要がある。
     [Test]
