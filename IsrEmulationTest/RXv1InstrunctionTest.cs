@@ -56,6 +56,15 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
+    public void ADD_() {
+        this.memory.Write(0x001, 1, 100);
+        cpu.Registers[1] = 1;
+        cpu.Registers[2] = 10;
+        RunOpcode(ADD(new RelRef8(0, R1, MemEx.B), R2));
+        cpu.Registers[2].Is(110u);
+    }
+
+    [Test]
     [TestCase(false, LengthOfImmediate.IMM32, 10u, 5u, 15u)]
     [TestCase( true, LengthOfImmediate.IMM32, 10u, 5u, 16u)]
     public void ADC_imm_Test(bool psw_c, LengthOfImmediate li, uint a, uint b, uint result) {
@@ -1100,5 +1109,33 @@ public class RXv1InstrunctionTest {
         cpu.Registers[2].Is(result);
         cpu.PSW_z.Is(expZ);
         cpu.PSW_s.Is(expS);
+    }
+
+       [Test]
+    public void TSTRS_Test()
+    {
+        /*
+        //addr指定
+        uint addrA = Convert.ToUInt32(random_generate.NextInt64(1,10));
+        uint addrB;
+        do
+        {
+            addrB = Convert.ToUInt32(random_generate.NextInt64(1,10));
+        }while(addrA == addrB);
+        */
+        //ランダムネーム
+        var address = 0x3u;
+        var a = 0xCCDDEEFFu;
+        var b = 0x11223344u;
+        memory.Write(address, 4, a);
+        cpu.Registers[1] = address;
+        cpu.Registers[2] = b;
+        //Reg reg = (Reg)Enum.ToObject(typeof(Reg), 2);
+
+        RunOpcode(XCHG(new RegRef(R1, MemEx.L), R2));
+        //cpu.Registers[2].Is(a&b);
+        memory.Read(address, 4).Is(b);
+
+
     }
 }
