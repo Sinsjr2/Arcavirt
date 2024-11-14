@@ -18,8 +18,8 @@ namespace Pheripheral {
             }
             return size switch {
                 1 => memory[address],
-                2 => BinaryPrimitives.ReadUInt16BigEndian(memory),
-                4 => BinaryPrimitives.ReadUInt16BigEndian(memory),
+                2 => BinaryPrimitives.ReadUInt16LittleEndian(memory.AsSpan((int)address, 2)),
+                4 => BinaryPrimitives.ReadUInt32LittleEndian(memory.AsSpan((int)address, 4)),
                 _ => throw new ArgumentException($"invalid size access. name: {name} addr: 0x{address:X} size:{size}", nameof(size))
             };
         }
