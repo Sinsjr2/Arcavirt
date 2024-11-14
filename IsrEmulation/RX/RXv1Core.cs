@@ -255,6 +255,10 @@ namespace RX {
         }
 
         uint LoadSourceOperand(uint ld, uint mi, uint rs, ReadOnlySpan<uint> dsp) {
+            if (ld == 0) {
+                var memOp = MemOps.Span[(int)mi];
+                return bus.Read(Registers[rs], 1 << memOp.Size);
+            }
             if (ld < 3) {
                 var memOp = MemOps.Span[(int)mi];
                 var addr = ReadIndexAddr((int)ld, dsp[0], (int)rs);
@@ -276,15 +280,19 @@ namespace RX {
         }
 
         void StoreDestOperand(uint sz, uint rd, uint ld, ReadOnlySpan<uint> dsp, uint value) {
+            var size = sz switch {
+                (uint)MemEx.B => 1,
+                (uint)MemEx.W => 2,
+                (uint)MemEx.L => 4,
+                (uint)MemEx.UW => 2,
+                _ => throw new ArgumentException($"not supported sz. actual: {sz}")
+            };
+            if (ld == 0) {
+                bus.Write(Registers[rd], size, value);
+                return;
+            }
             if (ld < 3) {
                 var addr = ReadIndexAddr((int)ld, dsp[0], (int)rd);
-                var size = sz switch {
-                    (uint)MemEx.B => 1,
-                    (uint)MemEx.W => 2,
-                    (uint)MemEx.L => 4,
-                    (uint)MemEx.UW => 2,
-                    _ => throw new ArgumentException($"not supported sz. actual: {sz}")
-                };
                 bus.Write(addr, size, value);
                 return;
             }
@@ -2124,14 +2132,22 @@ namespace RX {
                 case OpCode.WAIT:
                     OpWAIT();
                     break;
-                case OpCode.XCHG_ub_rs_mr:
-                    StoreDestOperand(0, operand[1], operand[2], operand.Slice(3),
-                                     LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3)));
+                case OpCode.XCHG_ub_rs_mr: {
+                    var src = LoadSourceOperand(operand[0], 4, operand[0], operand.Slice(3));
+                    ref var dest = ref Registers[operand[3]];
+                    var tmp = dest;
+                    dest = src;
+                    StoreDestOperand((uint)MemEx.B, operand[1], operand[0], operand.Slice(3), tmp);
                     break;
-                case OpCode.XCHG_mr:
-                    StoreDestOperand(operand[0], operand[2], operand[3], operand.Slice(4),
-                                     LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4)));
+                }
+                case OpCode.XCHG_mr: {
+                    var src = LoadSourceOperand(operand[1], operand[0], operand[2], operand.Slice(4));
+                    ref var dest = ref Registers[operand[3]];
+                    var tmp = dest;
+                    dest = src;
+                    StoreDestOperand(MemOps.Span[(int)operand[0]].Size, operand[2], operand[1], operand.Slice(4), tmp);
                     break;
+                }
                 case OpCode.XOR_ir: {
                     ref var dest = ref Registers[operand[1]];
                     dest = OpXOR(operand[2], dest);
