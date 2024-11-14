@@ -114,9 +114,9 @@ namespace RX {
                 // ADD //imm, rs, rd
                 Create(OpCode.ADD_irr, "0111 00.. .... ....", b2_rd_rs_li),
                 // ADD dsp[rs].ub, rd
-                // ADD rs, rd
+                // (3) ADD rs, rd
                 Create(OpCode.ADD_ub_rs_mr, "0100 10.. .... ....", b2_rd_ld_ub),
-                // ADD dsp[rs], rd
+                // (3) ADD dsp[rs], rd
                 Create(OpCode.ADD_mr, "0000 0110 ..00 10.. .... ....", b3_rd_ld),
                 Create(OpCode.ADD_irrr, "0111 00.. .... ....", b2_rs2_rd_li),
                 // ADD rs, rs2, rd
