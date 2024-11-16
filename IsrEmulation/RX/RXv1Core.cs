@@ -933,7 +933,7 @@ namespace RX {
         }
 
         void OpRACW(uint src) {
-            long tmp = (long)Acc << (int)src;
+            long tmp = (long)Acc << (int)(src + 1);
             tmp += 0x0000000080000000;
             if (tmp > (long)0x00007FFF00000000) {
                 Acc = 0x00007FFF00000000;
@@ -941,7 +941,9 @@ namespace RX {
             else if (tmp < unchecked((long)0xFFFF800000000000)) {
                 Acc = 0xFFFF800000000000;
             }
-            Acc = (ulong)tmp & 0xFFFFFFFF00000000;
+            else {
+                Acc = (ulong)tmp & 0xFFFFFFFF00000000;
+            }
         }
 
         uint OpREVL(uint src) {
