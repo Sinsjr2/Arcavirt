@@ -812,13 +812,13 @@ public class RXv1InstrunctionTest {
 
     [Test]
     [TestCase(false,          100u,          1_000_905u,           1_000_804u,  true, false, false, false)]
-    [TestCase( true,            0u,        0x8000_0000u,         0x8000_0000u,  false, false,  true, false)]
+    [TestCase( true,            0u,        0x8000_0000u,         0x8000_0000u,  true, false,  true, false)]
     [TestCase(false,            0u,        0x8000_0000u,         0x7FFF_FFFFu,  true, false, false,  true)]
     [TestCase( true,            1u,        0x8000_0000u,         0x7FFF_FFFFu,  true, false, false,  true)]
     [TestCase( true,          100u,          1_000_905u,           1_000_805u,  true, false, false, false)]
     [TestCase( true,         2000u,               2000u,                   0u,  true,  true, false, false)]
     [TestCase(false,         2000u,               2000u,  unchecked((uint)-1), false,  false, true, false)]
-    [TestCase( true,  0x7FFF_FFFFu, unchecked((uint)-1),         0x8000_0000u, false,  false, true, false)]
+    [TestCase( true,  0x7FFF_FFFFu, unchecked((uint)-1),         0x8000_0000u, true,  false, true, false)]
     public void SBB_Test(
         bool psw_c, uint a, uint b, uint result,
         bool expC, bool expZ, bool expS, bool expO) {
@@ -1067,11 +1067,11 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
-    //[TestCase(                100u,          1_000_905u,             1_000_805u,  true, false, false, false)]
-    //[TestCase(               2000u,               2000u,                     0u,  true,  true, false, false)]
-    //[TestCase( unchecked((uint)-1),         0x7FFF_FFFFu,           0x8000_0000u,  true, false,  true,  true)]
+    [TestCase(                100u,          1_000_905u,             1_000_805u,  true, false, false, false)]
+    [TestCase(               2000u,               2000u,                     0u,  true,  true, false, false)]
+    [TestCase( unchecked((uint)-1),         0x7FFF_FFFFu,           0x8000_0000u,  false, false,  true,  true)]
     [TestCase(                100u, unchecked((uint)-1),   unchecked((uint)-101),  true, false,  true, false)]
-    //[TestCase( unchecked((uint)-1),         0xFFFF_FFFFu,                     0u, false,  true, false,  true)]
+    [TestCase( unchecked((uint)-1),         0xFFFF_FFFFu,                     0u, true,  true, false,  false)]
     public void SUB_Test(
         uint a, uint b, uint result,
         bool expC, bool expZ, bool expS, bool expO) {

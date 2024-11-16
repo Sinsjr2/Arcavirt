@@ -515,7 +515,7 @@ namespace RX {
         }
 
         void SubFlags(uint op1, uint op2, uint result) {
-            PSW_c = (IsNegativeValue(op1) && IsNegativeValue(op2))
+            PSW_c = (IsNegativeValue(op1) && !IsNegativeValue(op2))
                  || (IsNegativeValue(op1) && !IsNegativeValue(result))
                  || (!IsNegativeValue(op2) && !IsNegativeValue(result));
             PSW_o = (IsNegativeValue(op1) && !IsNegativeValue(op2) && !IsNegativeValue(result))
