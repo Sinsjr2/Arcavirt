@@ -7,7 +7,6 @@ namespace RX {
         ADC_rr,
         ADC_mr,
         ADD_4irr,
-        ADD_irr,
         ADD_ub_rs_mr,
         ADD_mr,
         ADD_irrr,

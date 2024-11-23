@@ -1335,11 +1335,6 @@ namespace RX {
                     dest = OpADD(operand[0], dest);
                     break;
                 }
-                case OpCode.ADD_irr: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpADD(operand[3], dest);
-                    break;
-                }
                 case OpCode.ADD_ub_rs_mr: {
                     var src = LoadSourceOperand(operand[0], 4, operand[1], operand.Slice(3));
                     ref var dest = ref Registers[operand[2]];

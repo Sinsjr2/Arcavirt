@@ -5,34 +5,56 @@ using static RX.RXv1Assembler;
 using static RX.Reg;
 using Pheripheral;
 using System.Buffers;
+using Peripheral.Renesas;
 
 namespace IsrEmulationTest;
 public class RXv1InstrunctionTest {
     RXv1Core cpu;
     RAM32Bit memory;
-    readonly Translate rxv1Translate;
+    RAM32Bit rom;
+
+    // 毎回インスタンスを作ると重いため
+    static readonly Translate rxv1Translate = new();
+
+    uint romEndAddress;
+    uint romBeginAddress;
 
     public RXv1InstrunctionTest() {
-        memory = new RAM32Bit("sram", 256);
-        cpu = new RXv1Core(memory);
-        rxv1Translate = new();
+        Setup();
     }
 
     [SetUp]
     public void Setup() {
         memory = new RAM32Bit("sram", 256);
-        cpu = new RXv1Core(memory);
+        rom = new RAM32Bit("rom", 1024);
+        var busManager = new BusManager();
+        busManager.AddRangedAddressMapping(0, 0u + memory.MemorySize, memory);
+        romEndAddress = 0xFFFFFFFF;
+        romBeginAddress = romEndAddress - rom.MemorySize;
+        busManager.AddRangedAddressMapping(romBeginAddress, romEndAddress, rom);
+        cpu = new RXv1Core(busManager);
+        cpu.PC = romBeginAddress;
     }
 
     void RunOpcode(params Instruction32[] instructions) {
         var writer = new ArrayBufferWriter<byte>();
         var asmWriter = new AssemblyWriter(writer);
         foreach (var inst in instructions) {
+            writer.Clear();
             rxv1Translate.CreateBinary(inst, ref asmWriter);
+            var instData = new RAM32Bit("", 10);
+            instData.WriteRange(0, writer.WrittenMemory.ToArray());
+            var reader = new Reader(instData, 0);
+            var queue = new Queue<uint>();
+            rxv1Translate.ParseAssembly(ref reader, queue);
+
+            var instArgs = queue.ToArray();
+            cpu.ExecuteInstruction((OpCode)instArgs[0], instArgs.AsSpan(1));
         }
-        foreach(var inst in instructions) {
-            cpu.ExecuteInstruction((OpCode)inst.OpcodeKind, inst.Operands.ToArray());
-        }
+        // rom.WriteRange(0, writer.WrittenMemory.ToArray());
+        // foreach(var inst in instructions) {
+        //     cpu.ExecuteInstruction((OpCode)inst.OpcodeKind, inst.Operands.ToArray());
+        // }
     }
 
     [Test]

@@ -7,9 +7,21 @@ namespace Pheripheral {
         readonly string name;
         readonly byte[] memory;
 
-        public RAM32Bit(string name, int memorySize) {
+        /// <summary>
+        /// メモリーのサイズを返します。
+        /// </summary>
+        public uint MemorySize => (uint)memory.LongLength;
+
+        public RAM32Bit(string name, uint memorySize) {
             this.memory = new byte[memorySize];
             this.name = name;
+        }
+
+        /// <summary>
+        /// 指定されたアドレスに指定された配列をすべて書き込みます。
+        /// </summary>
+        public void WriteRange(uint beginAddress, byte[] data) {
+            Array.Copy(data, 0L, memory, 0L, data.LongLength);
         }
 
         public uint Read(uint address, int size) {

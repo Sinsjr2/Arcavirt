@@ -319,7 +319,7 @@ namespace RX {
             Create(OpCode.ADD_4irr, src.Value, (uint)dest);
 
         public static Instruction32 ADD(StdImmValue src, Reg dest) =>
-            Create(OpCode.ADD_irr, (uint)dest, (uint)dest, (uint)src.LI, src.Value);
+            Create(OpCode.ADD_irrr, (uint)dest, (uint)dest, (uint)src.LI, src.Value);
 
         public static Instruction32 ADD(StdRegAddressing src, Reg dest) =>
             src.Memex.HasValue

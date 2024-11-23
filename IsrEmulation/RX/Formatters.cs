@@ -120,10 +120,12 @@ namespace RX {
                     int immediate = FetchU16();
                     return (uint)immediate;
                 }
-                // case 3: {
-                //     uint immediate = ReadU8() | ((uint)ReadU8() << 8) | ((uint)ReadU8() << 16);
-                //     return (uint)immediate;
-                // }
+                case 3: {
+                    var prevPos = pos;
+                    uint immediate = bus.Read(pos, 1) | (bus.Read(pos + 1, 1) << 8) | (bus.Read(pos + 2, 1) << 16);
+                    pos = prevPos;
+                    return (uint)immediate;
+                }
                 case 4: {
                     return FetchU32();
                 }
@@ -166,13 +168,13 @@ namespace RX {
         //     throw new NotImplementedException();
         // }
 
-        public void SetMaskedU32(uint mask, uint value) {
-            SetMaskedUInteger(4, mask, value);
-        }
-
+        // public void SetMaskedU32(uint mask, uint value) {
+        //     SetMaskedUInteger(4, mask, value);
+        // }
 
         /// <summary>
         /// バッファにマスク掛けた上で値を書き込みます。
+        /// リトルエンディアンとして書き込みます。
         /// 書き進めません。
         /// </summary>
         public void SetMaskedUInteger(int size, uint mask, uint value) {
@@ -184,7 +186,7 @@ namespace RX {
             for (int i = 0; i < size; i++) {
                 current |= (uint)currentBuffer[i] << (i * 8);
             }
-            var masked = (current & mask) | (value & mask);
+            var masked = (current & ~mask) | (value & mask);
             for (int i = 0; i < size; i++) {
                 currentBuffer[i] = (byte)((masked >> (i * 8)) & 0xFF);
             }
@@ -208,13 +210,14 @@ namespace RX {
 
         public void WriteMaskedUInteger(int size, uint mask, uint value) {
             SetMaskedUInteger(size, mask, value);
+            writer.Advance(size);
         }
 
         /// <summary>
         /// バッファに対して何も操作せずに書き込み位置を進めます。
         /// </summary>
         public void Skip(int offset) {
-            throw new NotImplementedException();
+            writer.Advance(offset);
         }
     }
 
@@ -311,7 +314,9 @@ namespace RX {
                         throw new ArgumentException($"{code} is invalid.");
                 }
             }
-            return new OpCode32Value(codeMask, codeID);
+            return new OpCode32Value(
+                BinaryPrimitives.ReverseEndianness(codeMask),
+                BinaryPrimitives.ReverseEndianness(codeID));
         }
     }
 
@@ -340,36 +345,35 @@ namespace RX {
         /// マスク値で有効なバイト数を取得します。
         /// </summary>
         static int GetOpcodeLength(uint opcodeMask) {
-            int bitLength = -1;
-            for (int i = 31; 0 <= i; i--) {
+            int bitLength = 0;
+            for (int i = 0; i < 32; i++) {
                 var mask = 1u << i;
                 if ((opcodeMask & mask) != 0) {
                     bitLength = i;
                 }
             }
-            return bitLength == -1
+            return bitLength == 0
                 ? 0
                 // 切り上げる
-                : ((32 - bitLength) + 7) / 8;
+                : (bitLength + 7) / 8;
         }
 
         public OpCode32PatternMatchFormatter(uint unknownOpcodeKind, IReadOnlyList<OpCodePair32> formatters_) {
-
-            // TODO soft gun の コードから拝借しており、3バイトの長さまでしか解釈出来ないので、4バイトまで解釈出来るようにする
-            var instrlist = formatters_;
-            formatters = new OpCodePair32[65536][];
-            for (uint i = 0; i < instrlist.Count; i++) {
+            formatters = new OpCodePair32[ushort.MaxValue][];
+            var formatterArray = formatters_.ToArray();
+            int twoLevelCount = 0;
+            for (uint i = 0; i < formatters.Length; i++) {
                 bool twolevel = false;
-                foreach (var pair in instrlist) {
+                foreach (var pair in formatters_) {
                     uint opcode = i;
-                    foreach (var instr in pair.OpCode.DecodeOpCodes) {
-                        if ((opcode & instr.Mask) == (instr.OpCode & 0xffff0000)) {
-                            if (GetOpcodeLength(instr.Mask) > 2) {
+                    foreach (var instraction in pair.OpCode.DecodeOpCodes) {
+                        if ((opcode & instraction.Mask) == (instraction.OpCode & 0xffff)) {
+                            if (GetOpcodeLength(instraction.Mask) > 2) {
+                                twoLevelCount++;
                                 twolevel = true;
                             } else if (formatters[i] is not null) {
                                 throw new ArgumentException(
-                                    string.Format("Instruction already exists for icode 0x%08x at %s %s",
-                                                  opcode, pair.OpCode.Name, formatters[i]![0].OpCode.Name));
+                                    $"Instruction already exists for code 0x{opcode:X} at {pair.OpCode.Name} {formatters[i]![0].OpCode.Name}");
                             } else {
                                 formatters[i] = new[] { pair };
                             }
@@ -379,20 +383,19 @@ namespace RX {
                 if (twolevel) {
                     if (formatters[i] is not null) {
                         throw new ArgumentException(
-                            string.Format("Twolevel subtab slot already busy: %s",
-                                          formatters[i]![0]!.OpCode.Name));
+                            $"Twolevel sub table slot already busy: {formatters[i]![0]!.OpCode.Name}");
                     }
-                    var subFormatters = new OpCodePair32[256];
+                    var subFormatters = new OpCodePair32[byte.MaxValue];
                     formatters[i] = subFormatters;
-                    for (int k = 0; k < subFormatters.Length; k++) {
-                        var icode = i | ((uint)k << 8);
-                        foreach (var pair in instrlist) {
-                            foreach (var instr in pair.OpCode.DecodeOpCodes) {
-                                if ((icode & instr.Mask) == instr.OpCode) {
+                    for (int j = 0; j < subFormatters.Length; j++) {
+                        var subCode = i | ((uint)j << 16);
+                        foreach (var subPair in formatters_) {
+                            foreach (var instr in subPair.OpCode.DecodeOpCodes) {
+                                if ((subCode & instr.Mask) == instr.OpCode) {
                                     if (GetOpcodeLength(instr.Mask) < 3) {
                                         throw new ArgumentException("Short instruction in 3 byte instr. subtab");
                                     } else {
-                                        subFormatters[k] = pair;
+                                        subFormatters[j] = subPair;
                                     }
                                 }
                             }
@@ -412,18 +415,16 @@ namespace RX {
                 throw new ArgumentException($"not found. {opcode}");
             }
 
-            // ビッグエンディアンで書き込む
             writer.SetMaskedUInteger(
-                GetOpcodeLength(formatter.OpCode.EncodeOpCode.Mask),
+                4,
                 formatter.OpCode.EncodeOpCode.Mask,
-                BinaryPrimitives.ReverseEndianness(formatter.OpCode.EncodeOpCode.OpCode));
+                formatter.OpCode.EncodeOpCode.OpCode);
             formatter.Operand.Serialize(result, ref writer);
         }
 
         public void Deserialize(ref Reader reader, Queue<uint> result) {
-            // ビッグエンディアンで読み込む
-            uint code = BinaryPrimitives.ReverseEndianness(reader.FetchU32());
-            var sub = formatters[code >> 16];
+            uint code = reader.FetchU32();
+            var sub = formatters[code & 0xFFFF];
             if (sub == null) {
                 result.Enqueue(unknownOpcodeKind);
                 return;
@@ -433,7 +434,7 @@ namespace RX {
                 sub[0].Operand.Deserialize(ref reader, result);
                 return;
             }
-            var pair = sub[(0xFF & code) >> 8];
+            var pair = sub[(code >> 16) & 0xFF];
             result.Enqueue(pair.OpCode.OpCodeKind);
             pair.Operand.Deserialize(ref reader, result);
         }
@@ -453,7 +454,9 @@ namespace RX {
             this.skipByte = skipByte;
         }
 
-        public void Serialize(Queue<uint> result, ref AssemblyWriter writer) { }
+        public void Serialize(Queue<uint> result, ref AssemblyWriter writer) {
+            writer.Skip(skipByte);
+        }
 
         public void Deserialize(ref Reader reader, Queue<uint> result) {
             reader.ReadUInteger(skipByte);
@@ -516,7 +519,7 @@ namespace RX {
 
         public void Serialize(Queue<uint> result, ref AssemblyWriter writer) {
             var value = result.Dequeue();
-            writer.SetMaskedUInteger(byteLength, mask, value);
+            writer.SetMaskedUInteger(byteLength, mask << shift, value << shift);
         }
 
         public void Deserialize(ref Reader reader, Queue<uint> result) {
@@ -556,8 +559,8 @@ namespace RX {
             var value = result.Dequeue();
             writer.SetMaskedUInteger(
                 byteLength,
-                BinaryPrimitives.ReverseEndianness(mask) >> ((4 - byteLength) * 8),
-                BinaryPrimitives.ReverseEndianness(value) >> ((4 - byteLength) * 8));
+                BinaryPrimitives.ReverseEndianness(mask << shift) >> ((4 - byteLength) * 8),
+                BinaryPrimitives.ReverseEndianness(value << shift) >> ((4 - byteLength) * 8));
         }
 
         public void Deserialize(ref Reader reader, Queue<uint> result) {
