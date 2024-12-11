@@ -1139,6 +1139,49 @@ public class RXv1InstrunctionTest {
         cpu.PSW_o.Is(expO);
     }
 
+
+    /*
+    TST のテスト　RS
+        var address = 0x10u;  //アドレスは1~10までのランダム
+        var a = 0xCCDDEEFFu;  //
+        var b = 0x11223344u;
+        memory.Write(address, 4, a);//size 指定乱数作成でいけるかも？
+        cpu.Registers[1] = address;
+        cpu.Registers[2] = b;
+        RunOpcode(XCHG(new RegRef(R1, MemEx.L), R2));
+        cpu.Registers[2].Is(a);
+        memory.Read(address, 4).Is(b);
+    */
+    [Test]
+    public void TSTRS_Test()
+    {
+        /*
+        //addr指定
+        uint addrA = Convert.ToUInt32(random_generate.NextInt64(1,10));
+        uint addrB;
+        do
+        {
+            addrB = Convert.ToUInt32(random_generate.NextInt64(1,10));
+        }while(addrA == addrB);
+        */
+        //ランダムネーム
+        var address = 0x3u;
+        var a = 0xCCDDEEFFu;
+        var b = 0x11223344u;
+        memory.Write(address, 4, a);
+        cpu.Registers[1] = address;
+        cpu.Registers[2] = b;
+        //Reg reg = (Reg)Enum.ToObject(typeof(Reg), 2);
+        
+        RunOpcode(XCHG (new RelRef8(displacement:8,R1,MemEx.B), R2));
+        //cpu.Registers[2].Is(a&b);
+        memory.Read(address, 4).Is(b);
+
+
+    }
+
+
+
     [Test]
     [TestCase(          0u, 0xFFFF_FFFFu,  true, false)]
     [TestCase(          4u,         100u, false, false)]
@@ -1160,6 +1203,7 @@ public class RXv1InstrunctionTest {
         cpu.Registers[1] = a;
         cpu.Registers[2] = b;
         RunOpcode(XCHG(R1,R2));
+        
         cpu.Registers[2].Is(a);
     }
    
