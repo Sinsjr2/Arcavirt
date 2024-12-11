@@ -6,19 +6,23 @@ using static RX.Reg;
 using Pheripheral;
 using System.Buffers;
 using System;
+using Peripheral.Renesas;
 
 namespace IsrEmulationTest;
 public class RXv1InstrunctionTest {
     RXv1Core cpu;
     RAM32Bit memory;
-    readonly Translate rxv1Translate;
+    RAM32Bit rom;
 
+    // 毎回インスタンスを作ると重いため
+    static readonly Translate rxv1Translate = new();
+
+    uint romEndAddress;
+    uint romBeginAddress;
     public  Random random_generate = new Random();
 
     public RXv1InstrunctionTest() {
-        memory = new RAM32Bit("sram", 256);
-        cpu = new RXv1Core(memory);
-        rxv1Translate = new();
+        Setup();
     }
 
     //乱数を生成する・
@@ -84,18 +88,35 @@ public class RXv1InstrunctionTest {
     [SetUp]
     public void Setup() {
         memory = new RAM32Bit("sram", 256);
-        cpu = new RXv1Core(memory);
+        rom = new RAM32Bit("rom", 1024);
+        var busManager = new BusManager();
+        busManager.AddRangedAddressMapping(0, 0u + memory.MemorySize, memory);
+        romEndAddress = 0xFFFFFFFF;
+        romBeginAddress = romEndAddress - rom.MemorySize;
+        busManager.AddRangedAddressMapping(romBeginAddress, romEndAddress, rom);
+        cpu = new RXv1Core(busManager);
+        cpu.PC = romBeginAddress;
     }
 
     void RunOpcode(params Instruction32[] instructions) {
         var writer = new ArrayBufferWriter<byte>();
         var asmWriter = new AssemblyWriter(writer);
         foreach (var inst in instructions) {
+            writer.Clear();
             rxv1Translate.CreateBinary(inst, ref asmWriter);
+            var instData = new RAM32Bit("", 10);
+            instData.WriteRange(0, writer.WrittenMemory.ToArray());
+            var reader = new Reader(instData, 0);
+            var queue = new Queue<uint>();
+            rxv1Translate.ParseAssembly(ref reader, queue);
+
+            var instArgs = queue.ToArray();
+            cpu.ExecuteInstruction((OpCode)instArgs[0], instArgs.AsSpan(1));
         }
-        foreach(var inst in instructions) {
-            cpu.ExecuteInstruction((OpCode)inst.OpcodeKind, inst.Operands.ToArray());
-        }
+        // rom.WriteRange(0, writer.WrittenMemory.ToArray());
+        // foreach(var inst in instructions) {
+        //     cpu.ExecuteInstruction((OpCode)inst.OpcodeKind, inst.Operands.ToArray());
+        // }
     }
 
     [Test]
@@ -116,6 +137,15 @@ public class RXv1InstrunctionTest {
         cpu.Registers[1] = a;
         RunOpcode(ABS(R1, R2));
         cpu.Registers[2].Is(result);
+    }
+
+    [Test]
+    public void ADD_() {
+        this.memory.Write(0x001, 1, 100);
+        cpu.Registers[1] = 1;
+        cpu.Registers[2] = 10;
+        RunOpcode(ADD(new RelRef8(0, R1, MemEx.B), R2));
+        cpu.Registers[2].Is(110u);
     }
 
     [Test]
@@ -866,13 +896,13 @@ public class RXv1InstrunctionTest {
 
     [Test]
     [TestCase(false,          100u,          1_000_905u,           1_000_804u,  true, false, false, false)]
-    [TestCase( true,            0u,        0x8000_0000u,         0x8000_0000u,  false, false,  true, false)]
+    [TestCase( true,            0u,        0x8000_0000u,         0x8000_0000u,  true, false,  true, false)]
     [TestCase(false,            0u,        0x8000_0000u,         0x7FFF_FFFFu,  true, false, false,  true)]
     [TestCase( true,            1u,        0x8000_0000u,         0x7FFF_FFFFu,  true, false, false,  true)]
     [TestCase( true,          100u,          1_000_905u,           1_000_805u,  true, false, false, false)]
     [TestCase( true,         2000u,               2000u,                   0u,  true,  true, false, false)]
     [TestCase(false,         2000u,               2000u,  unchecked((uint)-1), false,  false, true, false)]
-    [TestCase( true,  0x7FFF_FFFFu, unchecked((uint)-1),         0x8000_0000u, false,  false, true, false)]
+    [TestCase( true,  0x7FFF_FFFFu, unchecked((uint)-1),         0x8000_0000u, true,  false, true, false)]
     public void SBB_Test(
         bool psw_c, uint a, uint b, uint result,
         bool expC, bool expZ, bool expS, bool expO) {
@@ -1121,11 +1151,11 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
-    //[TestCase(                100u,          1_000_905u,             1_000_805u,  true, false, false, false)]
-    //[TestCase(               2000u,               2000u,                     0u,  true,  true, false, false)]
-    //[TestCase( unchecked((uint)-1),         0x7FFF_FFFFu,           0x8000_0000u,  true, false,  true,  true)]
+    [TestCase(                100u,          1_000_905u,             1_000_805u,  true, false, false, false)]
+    [TestCase(               2000u,               2000u,                     0u,  true,  true, false, false)]
+    [TestCase( unchecked((uint)-1),         0x7FFF_FFFFu,           0x8000_0000u,  false, false,  true,  true)]
     [TestCase(                100u, unchecked((uint)-1),   unchecked((uint)-101),  true, false,  true, false)]
-    //[TestCase( unchecked((uint)-1),         0xFFFF_FFFFu,                     0u, false,  true, false,  true)]
+    [TestCase( unchecked((uint)-1),         0xFFFF_FFFFu,                     0u, true,  true, false,  false)]
     public void SUB_Test(
         uint a, uint b, uint result,
         bool expC, bool expZ, bool expS, bool expO) {
@@ -1247,5 +1277,33 @@ public class RXv1InstrunctionTest {
         cpu.Registers[2].Is(result);
         cpu.PSW_z.Is(expZ);
         cpu.PSW_s.Is(expS);
+    }
+
+       [Test]
+    public void TSTRS_Test()
+    {
+        /*
+        //addr指定
+        uint addrA = Convert.ToUInt32(random_generate.NextInt64(1,10));
+        uint addrB;
+        do
+        {
+            addrB = Convert.ToUInt32(random_generate.NextInt64(1,10));
+        }while(addrA == addrB);
+        */
+        //ランダムネーム
+        var address = 0x3u;
+        var a = 0xCCDDEEFFu;
+        var b = 0x11223344u;
+        memory.Write(address, 4, a);
+        cpu.Registers[1] = address;
+        cpu.Registers[2] = b;
+        //Reg reg = (Reg)Enum.ToObject(typeof(Reg), 2);
+
+        RunOpcode(XCHG(new RegRef(R1, MemEx.L), R2));
+        //cpu.Registers[2].Is(a&b);
+        memory.Read(address, 4).Is(b);
+
+
     }
 }

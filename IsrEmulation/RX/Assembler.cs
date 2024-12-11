@@ -319,12 +319,12 @@ namespace RX {
             Create(OpCode.ADD_4irr, src.Value, (uint)dest);
 
         public static Instruction32 ADD(StdImmValue src, Reg dest) =>
-            Create(OpCode.ADD_irr, (uint)dest, (uint)dest, (uint)src.LI, src.Value);
+            Create(OpCode.ADD_irrr, (uint)dest, (uint)dest, (uint)src.LI, src.Value);
 
         public static Instruction32 ADD(StdRegAddressing src, Reg dest) =>
             src.Memex.HasValue
-            ? Create(OpCode.ADD_mr, (uint)src.Memex, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement)
-            : Create(OpCode.ADD_ub_rs_mr, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement);
+            ? Create(OpCode.ADD_mr, (uint)src.Memex, (uint)src.LD, (uint)src.TargetReg, (uint)dest, src.Displacement)
+            : Create(OpCode.ADD_ub_rs_mr, (uint)src.LD, (uint)src.TargetReg, (uint)dest, src.Displacement);
 
         public static Instruction32 ADD(StdImmValue src, Reg src2, Reg dest) =>
             Create(OpCode.ADD_irrr, (uint)src2, (uint)dest, (uint)src.LI, src.Value);
@@ -1068,7 +1068,7 @@ namespace RX {
 
         public static Instruction32 XCHG(StdRegAddressing src, Reg dest) =>
             src.Memex.HasValue
-            ? Create(OpCode.XCHG_mr, (uint)src.Memex, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement)
+            ? Create(OpCode.XCHG_mr, (uint)src.Memex, (uint)src.LD, (uint)src.TargetReg, (uint)dest, src.Displacement)
             : Create(OpCode.XCHG_ub_rs_mr, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement);
 
         public static Instruction32 XOR(StdImmValue src, Reg dest) =>

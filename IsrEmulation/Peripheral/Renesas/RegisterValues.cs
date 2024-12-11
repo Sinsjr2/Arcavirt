@@ -322,6 +322,20 @@ public class BusManager : IBus32 {
     readonly List<(uint beginAddress, uint endAddress, IBus32 target)> rangedMapping = new();
     readonly Dictionary<uint, IRegisterValue32> registers = new();
 
+    /// <summary>
+    /// 範囲指定されたアドレスをバスアクセス出来るように登録します。
+    /// </summary>
+    public void AddRangedAddressMapping(uint beginAddress, uint endAddress, IBus32 target) {
+        rangedMapping.Add((beginAddress, endAddress, target));
+    }
+
+    /// <summary>
+    /// 指定のアドレスにアクセスできるレジスタを登録します。
+    /// </summary>
+    public void AddMapping(uint address, IRegisterValue32 register) {
+        registers[address] = register;
+    }
+
     public uint Read(uint address, int size) {
         foreach (var t in rangedMapping)
         {

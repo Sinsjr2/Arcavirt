@@ -74,15 +74,15 @@ namespace RX {
             var b3_rd_rs = new Composite(new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new Skip(3));
             var b3_rd_ld = new Composite(new LEUInt(12, 2, 3), new LEUInt(20, 4, 3),
                                          new LEUInt(16, 4, 3), new DisplacementValueFormatter(3, 8));
-            var b3_rd_ld_ub = new Composite(new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new Skip(2));
-            var b3_rs_rd = new Composite(new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new Skip(2));
+            var b3_rd_ld_ub = new Composite(new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new DisplacementValueFormatter(3, 8));
+            var b3_rs_rd = new Composite(new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new Skip(3));
             var b3_rd_li = new Composite(new LEUInt(16, 4, 3), new ImmediateValueFormatter(3, 10));
             var b3_rd_ld_ul = new Composite(
                 new LEUInt(20, 4 , 3), new LEUInt(16, 4 , 3), new DisplacementValueFormatter(3, 8));
             var b3_rd_rs_imm5 = new Composite(
                 new LEUInt(8, 5, 3),
                 new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new Skip(3));
-            var b3_sz_ld_rd_cd = new Composite(new LEUInt(10, 2, 3), new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new Skip(3));
+            var b3_sz_ld_rd_cd = new Composite(new LEUInt(10, 2, 3), new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new DisplacementValueFormatter(3, 8));
             var b3_rds_imm5 = new Composite(new BEUIntegerFormatter(4, 5, 3), new LEUInt(16, 4, 3), new Skip(3));
             var b3_ld_rd_rs = new Composite(new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new DisplacementValueFormatter(3, 8));
             var b3_ir = new Composite(new LEUInt(16, 4, 3), new Skip(3), new LEUInt(0, 32, 4));
@@ -111,13 +111,14 @@ namespace RX {
 
                 // ADD //uimm4, rd
                 Create(OpCode.ADD_4irr, "0110 0010 .... ....", b2_rds_uimm4),
-                // ADD //imm, rs, rd
-                Create(OpCode.ADD_irr, "0111 00.. .... ....", b2_rd_rs_li),
+                // (2) ADD //imm, rs, rd
+                //Create(OpCode.ADD_irr, "0111 00.. .... ....", b2_rd_rs_li),
                 // ADD dsp[rs].ub, rd
-                // ADD rs, rd
+                // (3) ADD rs, rd
                 Create(OpCode.ADD_ub_rs_mr, "0100 10.. .... ....", b2_rd_ld_ub),
-                // ADD dsp[rs], rd
+                // (3) ADD dsp[rs], rd
                 Create(OpCode.ADD_mr, "0000 0110 ..00 10.. .... ....", b3_rd_ld),
+                // (4)
                 Create(OpCode.ADD_irrr, "0111 00.. .... ....", b2_rs2_rd_li),
                 // ADD rs, rs2, rd
                 Create(OpCode.ADD_rrr, "1111 1111 0010 .... .... ....", b3_rd_rs_rs2),
@@ -148,11 +149,9 @@ namespace RX {
                 Create(OpCode.BCLR_rr, "1111 1100 0110 0111 .... ....", b3_rs_rd),
                 // BCnd.s dsp
                 Create(OpCode.BCnd_s, "0001 ....", b1_bcnd_s),
-                // BRA.b dsp
+                // BRA.b dsp "0010 1110 .... ...."
                 // BCnd.b dsp
-                Create(OpCode.BRA_b, "0010 1110 .... ....", b2_bra_b),
                 Create(OpCode.BCnd_b, "0010 .... .... ....", b2_bcnd_b),
-
                 // BCnd.w dsp
                 Create(OpCode.BCnd_w, "0011 101 . .... .... .... ....", b3_bcnd_w),
                 // (1) BMCnd //imm, dsp[rd] (imm, rd, cd, ld[, dest])
@@ -487,8 +486,8 @@ namespace RX {
 
                 // MVTC //imm, cr
                 Create(OpCode.MVTC_i, "1111 1101 0111 ..11 0000 ....", new Composite(new LEUInt(16, 4, 3), new ImmediateValueFormatter(3, 10))),
-                // MVTC rs, cr
-                Create(OpCode.MVTC_r, "1111 1101 0110 1000 .... ....", new Composite(new LEUInt(20, 4, 3), new LEUInt(16, 4, 3))),
+                // MVMicrosoft.Windows.Simulator.ClientTC rs, cr
+                Create(OpCode.MVTC_r, "1111 1101 0110 1000 .... ....", new Composite(new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new Skip(3))),
 
                 // MVTIPL //imm
                 Create(OpCode.MVTIPL, "0111 0101 0111 0000 0000 ....", b3_imm4),
@@ -497,7 +496,7 @@ namespace RX {
                 Create(OpCode.NEG_rd, "0111 1110 0001 ....", b2_rds),
                 // NEG rs, rd
                 Create(OpCode.NEG_rs_rd, "1111 1100 0000 0111 .... ....", b3_rd_rs),
-                Create(OpCode.NOP, "0000 0011"),
+                Create(OpCode.NOP, "0000 0011", new Skip(1)),
 
                 // NOT rd
                 Create(OpCode.NOT_rd, "0111 1110 0000 ....", b2_rds),
@@ -524,7 +523,11 @@ namespace RX {
                 // POP rd
                 // PUSH.<bwl> rs
                 Create(OpCode.POP, "0111 1110 1011 ....", b2_r),
-                Create(OpCode.PUSH_r, "0111 1110 10.. ....", b2_sz_r),
+                CreateGroup(OpCode.PUSH_r, "0111 1110 10.. ....", new[] {
+                        "0111 1110 1000 ....",
+                        "0111 1110 1001 ....",
+                        "0111 1110 1010 ...."
+                    }, b2_sz_r),
 
                 // PUSH.<bwl> dsp[rs]
                 Create(OpCode.PUSH_m, "1111 01.. .... 10..", new Composite(new LEUInt(12, 4, 2), new LEUInt(8, 2, 2), new DisplacementValueFormatter(2, 0))),
@@ -544,7 +547,11 @@ namespace RX {
                 // SMOVF
                 // RPMA.<bwl>
                 Create(OpCode.SMOVF, "0111 1111 1000 1111"),
-                Create(OpCode.RMPA, "0111 1111 1000 11..", b2_sz),
+                CreateGroup(OpCode.RMPA, "0111 1111 1000 11..", new[] {
+                        "0111 1111 1000 1100",
+                        "0111 1111 1000 1101",
+                        "0111 1111 1000 1110"
+                    }, b2_sz),
 
                 // ROLC rd
                 Create(OpCode.ROLC, "0111 1110 0101 ....", b2_rds),
@@ -576,7 +583,7 @@ namespace RX {
                 // SAT rd
                 Create(OpCode.SAT, "0111 1110 0011 ....", b2_rds),
                 // SATR
-                Create(OpCode.SATR, "0111 1111 1001 0011"),
+                Create(OpCode.SATR, "0111 1111 1001 0011", new Skip(2)),
 
                 // SBB rs, rd
                 Create(OpCode.SBB_rr, "1111 1100 0000 0011 .... ....", b3_rd_rs),
@@ -614,7 +621,11 @@ namespace RX {
                 // SMOVB
                 // SSTR.<bwl>
                 Create(OpCode.SMOVB, "0111 1111 1000 1011"),
-                Create(OpCode.SSTR, "0111 1111 1000 10..", b2_sz),
+                CreateGroup(OpCode.SSTR, "0111 1111 1000 10..", new[] {
+                        "0111 1111 1000 1000",
+                        "0111 1111 1000 1001",
+                        "0111 1111 1000 1010"
+                    }, b2_sz),
 
                 // STNZ //imm, rd
                 Create(OpCode.STNZ, "1111 1101 0111 ..00 1111 ....", b3_rd_li),
@@ -634,12 +645,20 @@ namespace RX {
                 // SCMPU
                 // SUNTIL.<bwl>
                 Create(OpCode.SCMPU, "0111 1111 1000 0011"),
-                Create(OpCode.SUNTIL, "0111 1111 1000 00..", b2_sz),
+                CreateGroup(OpCode.SUNTIL, "0111 1111 1000 00..", new[] {
+                        "0111 1111 1000 0000",
+                        "0111 1111 1000 0001",
+                        "0111 1111 1000 0010"
+                    }, b2_sz),
 
                 // SMOVU
                 // SWHILE.<bwl>
                 Create(OpCode.SMOVU, "0111 1111 1000 0111"),
-                Create(OpCode.SWHILE, "0111 1111 1000 01..", b2_sz),
+                CreateGroup(OpCode.SWHILE, "0111 1111 1000 01..", new[] {
+                        "0111 1111 1000 0100",
+                        "0111 1111 1000 0101",
+                        "0111 1111 1000 0110"
+                    }, b2_sz),
 
                 // TST //imm, rd
                 Create(OpCode.TST_ir, "1111 1101 0111 ..00 1100 ....", b3_rd_li),
