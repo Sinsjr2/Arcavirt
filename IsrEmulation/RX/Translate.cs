@@ -90,7 +90,7 @@ namespace RX {
             var b3_r = new Composite(new LEUInt(16, 4, 3), new Skip(3));
             var b3_imm4 = new Composite(new LEUInt(16, 4, 3), new Skip(3));
 
-            var b4_rd_ldmi = new Composite(new LEUInt(28, 4, 4), new LEUInt(24, 4, 4), new DisplacementValueFormatter(4, 8));
+            var b4_rd_ldmi = new Composite(new LEUInt(14, 2, 4), new LEUInt(28, 4, 4), new LEUInt(24, 4, 4), new DisplacementValueFormatter(4, 8));
 
             var conditionPatterns = Enumerable.Range(0, 14)
                 .Select(i => Convert.ToString(i, 2).PadLeft(4, '0'))

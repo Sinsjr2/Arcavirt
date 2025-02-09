@@ -1074,7 +1074,7 @@ namespace RX {
 
         public static Instruction32 XCHG(StdRegAddressing src, Reg dest) =>
             src.Memex.HasValue
-            ? Create(OpCode.XCHG_mr, (uint)src.Memex, (uint)src.LD, (uint)src.TargetReg, (uint)dest, src.Displacement)
+            ? Create(OpCode.XCHG_mr, (uint)src.Memex, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement)
             : Create(OpCode.XCHG_ub_rs_mr, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement);
 
         public static Instruction32 XOR(StdImmValue src, Reg dest) =>

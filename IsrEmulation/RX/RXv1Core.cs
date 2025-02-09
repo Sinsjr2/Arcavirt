@@ -2167,11 +2167,11 @@ namespace RX {
                     break;
                 }
                 case OpCode.XCHG_mr: {
-                    var src = LoadSourceOperand(operand[1], operand[0], operand[2], operand.Slice(4));
-                    ref var dest = ref Registers[operand[3]];
+                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                    ref var dest = ref Registers[operand[2]];
                     var tmp = dest;
                     dest = src;
-                    StoreDestOperand(MemOps.Span[(int)operand[0]].Size, operand[2], operand[1], operand.Slice(4), tmp);
+                    StoreDestOperand(MemOps.Span[(int)operand[0]].Size, operand[1], operand[3], operand.Slice(4), tmp);
                     break;
                 }
                 case OpCode.XOR_ir: {
