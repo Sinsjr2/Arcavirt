@@ -911,9 +911,12 @@ public class RXv1InstrunctionTest {
         var random = TestContext.CurrentContext.Random;
         var rd = random.NextByte(1, 7);
         var dspOffset = random.NextByte(0, 31);
+        var initial = random.NextUInt();
         var dsp = new RegAddressing5(dspOffset, (Reg)rd);
+        // mov命令は指定したサイズで上書き出来ていることを確認するため、乱数を設定する
+        StoreDestOperand(cpu.Registers, busManager, MemEx.L, dsp.TargetReg, LengthOfDisplacement.DSP8Reg, dsp.Displacement, initial);
         RunOpcode(MOV(sz, src, dsp));
-        LoadData(cpu.Registers, busManager, LengthOfDisplacement.DSP8Reg, (uint)MemEx.L, dsp.Displacement, dsp.TargetReg)
+        LoadData(cpu.Registers, busManager, LengthOfDisplacement.DSP8Reg, (uint)sz, dsp.Displacement, dsp.TargetReg)
         .Is(expected);
     }
 
