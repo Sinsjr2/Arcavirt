@@ -1,5 +1,6 @@
 using Composite = RX.CompositeFormatter;
 using LEUInt = RX.LEUIntegerFormatter;
+using LEInt = RX.LEIntegerFormatter;
 using Skip = RX.SkipFormatter;
 using BEUConnection = RX.BEUBitConnectionFormatter;
 
@@ -43,9 +44,9 @@ namespace RX {
             var b3_bcnd_w = new Composite(new LEUInt(0, 1, 3), new LEUInt(8, 16, 3), new Skip(3));
 
             var b1_bra_s = new Composite(new LEUInt(0, 3, 1), new Skip(1));
-            var b2_bra_b = new Composite(new LEUInt(8, 8, 2), new Skip(2));
-            var b3_bra_w = new Composite(new LEUInt(8, 16, 3), new Skip(3));
-            var b4_bra_a = new Composite(new LEUInt(8, 24, 4), new Skip(4));
+            var b2_bra_b = new Composite(new LEInt(8, 8, 2), new Skip(2));
+            var b3_bra_w = new Composite(new LEInt(8, 16, 3), new Skip(3));
+            var b4_bra_a = new Composite(new LEInt(8, 24, 4), new Skip(4));
 
             var b1_imm8 = new Composite(new LEUInt(8, 8, 2), new Skip(2));
 
@@ -61,7 +62,7 @@ namespace RX {
             var b2_r = new Composite(new LEUInt(8, 4, 2), new Skip(2));
             var b2_cr = new Composite(new LEUInt(8, 4, 2), new Skip(2));
             var b2_imm8 = new Composite(new LEUInt(16, 8, 3), new Skip(3));
-            var b2_rs_rs2 = new Composite(new LEUInt(12, 4, 2), new LEUInt(8, 4, 1), new Skip(2));
+            var b2_rs_rs2 = new Composite(new LEUInt(12, 4, 2), new LEUInt(8, 4, 2), new Skip(2));
             var b2_r_imm8 = new Composite(new LEUInt(8, 4, 2), new LEUInt(16, 8, 3), new Skip(3));
             var b2_rd_rd = new Composite(new LEUInt(12, 4, 2), new LEUInt(8, 4, 2), new Skip(2));
             var b2_sz = new Composite(new LEUInt(8, 2, 2), new Skip(2));
@@ -149,9 +150,10 @@ namespace RX {
                 Create(OpCode.BCLR_rr, "1111 1100 0110 0111 .... ....", b3_rs_rd),
                 // BCnd.s dsp
                 Create(OpCode.BCnd_s, "0001 ....", b1_bcnd_s),
-                // BRA.b dsp "0010 1110 .... ...."
                 // BCnd.b dsp
-                Create(OpCode.BCnd_b, "0010 .... .... ....", b2_bcnd_b),
+                CreateGroup(OpCode.BCnd_b, "0010 .... .... ....",
+                        Enumerable.Range(0, 14).Select(x => "0010 " + Convert.ToString(x, 2).PadLeft(4, '0') + " .... ....").ToArray(),
+                        b2_bcnd_b),
                 // BCnd.w dsp
                 Create(OpCode.BCnd_w, "0011 101 . .... .... .... ....", b3_bcnd_w),
                 // (1) BMCnd //imm, dsp[rd] (imm, rd, cd, ld[, dest])
@@ -159,7 +161,7 @@ namespace RX {
                             conditionPatterns
                             .Select(p => $"1111 1100 111. .... .... {p}")
                             .ToArray(),
-                    new Composite(new LEUInt(10, 3, 2), new LEUInt(8, 2, 2), new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new Skip(3))),
+                    new Composite(new LEUInt(10, 3, 2), new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new DisplacementValueFormatter(3, 8))),
                 // (2) BMCnd //imm, rd ()
                 CreateGroup(OpCode.BMCnd_ir, "1111 1101 111. .... .... ....",
                             conditionPatterns
@@ -180,13 +182,15 @@ namespace RX {
                 Create(OpCode.BNOT_ir, "1111 1101 111. .... 1111 ....", new Composite(new LEUInt(8, 5, 2), new LEUInt(16, 4, 3), new Skip(3))),
                 // (4) BNOT rs, rd (rd, rs)
                 Create(OpCode.BNOT_rr, "1111 1100 0110 1111 .... ....", b3_rs_rd),
-                // BRA.s dsp
+                // (1) BRA.s dsp
                 Create(OpCode.BRA_s, "0000 1 ...", b1_bra_s),
-                // BRA.w dsp
+                // (2) BRA.b dsp
+                Create(OpCode.BRA_b, "0010 1110 .... ....", b2_bra_b),
+                // (3) BRA.w dsp
                 Create(OpCode.BRA_w, "0011 1000 .... .... .... ....", b3_bra_w),
-                // BRA.a dsp
+                // (4) BRA.a dsp
                 Create(OpCode.BRA_a, "0000 0100 .... .... .... .... .... ....", b4_bra_a),
-                // BRA.l rs
+                // (5) BRA.l rs
                 Create(OpCode.BRA_l, "0111 1111 0100 ....", b2_r),
 
                 Create(OpCode.BRK, "0000 0000"),
@@ -546,7 +550,7 @@ namespace RX {
 
                 // SMOVF
                 // RPMA.<bwl>
-                Create(OpCode.SMOVF, "0111 1111 1000 1111"),
+                Create(OpCode.SMOVF, "0111 1111 1000 1111", new Skip(2)),
                 CreateGroup(OpCode.RMPA, "0111 1111 1000 11..", new[] {
                         "0111 1111 1000 1100",
                         "0111 1111 1000 1101",
@@ -571,9 +575,9 @@ namespace RX {
                 // ROUND rs,rd
                 // ROUND dsp[rs],rd
                 Create(OpCode.ROUND, "1111 1100 1001 10 .. .... ....", b3_ld_rd_rs),
-                Create(OpCode.RTE, "0111 1111 1001 0101"),
-                Create(OpCode.RTFI, "0111 1111 1001 0100"),
-                Create(OpCode.RTS, "0000 0010"),
+                Create(OpCode.RTE, "0111 1111 1001 0101", new Skip(2)),
+                Create(OpCode.RTFI, "0111 1111 1001 0100", new Skip(2)),
+                Create(OpCode.RTS, "0000 0010", new Skip(1)),
 
                 // RTSD //imm
                 Create(OpCode.RTSD_i, "0110 0111", b1_imm8),
@@ -620,7 +624,7 @@ namespace RX {
 
                 // SMOVB
                 // SSTR.<bwl>
-                Create(OpCode.SMOVB, "0111 1111 1000 1011"),
+                Create(OpCode.SMOVB, "0111 1111 1000 1011", new Skip(2)),
                 CreateGroup(OpCode.SSTR, "0111 1111 1000 10..", new[] {
                         "0111 1111 1000 1000",
                         "0111 1111 1000 1001",
@@ -644,7 +648,7 @@ namespace RX {
 
                 // SCMPU
                 // SUNTIL.<bwl>
-                Create(OpCode.SCMPU, "0111 1111 1000 0011"),
+                Create(OpCode.SCMPU, "0111 1111 1000 0011", new Skip(2)),
                 CreateGroup(OpCode.SUNTIL, "0111 1111 1000 00..", new[] {
                         "0111 1111 1000 0000",
                         "0111 1111 1000 0001",
@@ -653,7 +657,7 @@ namespace RX {
 
                 // SMOVU
                 // SWHILE.<bwl>
-                Create(OpCode.SMOVU, "0111 1111 1000 0111"),
+                Create(OpCode.SMOVU, "0111 1111 1000 0111", new Skip(2)),
                 CreateGroup(OpCode.SWHILE, "0111 1111 1000 01..", new[] {
                         "0111 1111 1000 0100",
                         "0111 1111 1000 0101",
@@ -668,7 +672,7 @@ namespace RX {
                 // TST dsp[rs], rd
                 Create(OpCode.TST_mr, "0000 0110 ..10 00.. 0000 1100 .... ....", b4_rd_ldmi),
 
-                Create(OpCode.WAIT, "0111 1111 1001 0110"),
+                Create(OpCode.WAIT, "0111 1111 1001 0110", new Skip(2)),
 
                 // XCHG rs, rd (rs, rd, ld[, dsp])
                 // XCHG dsp[rs].ub, rd

@@ -21,7 +21,7 @@ namespace Pheripheral {
         /// 指定されたアドレスに指定された配列をすべて書き込みます。
         /// </summary>
         public void WriteRange(uint beginAddress, byte[] data) {
-            Array.Copy(data, 0L, memory, 0L, data.LongLength);
+            Array.Copy(data, 0L, memory, beginAddress, data.LongLength);
         }
 
         public uint Read(uint address, int size) {

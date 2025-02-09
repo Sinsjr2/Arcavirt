@@ -1,4 +1,5 @@
 using Pheripheral;
+using Util;
 
 namespace RX {
     public class RXv1Core : CPU.ILeveledISRNotify {
@@ -11,29 +12,29 @@ namespace RX {
                     isp = value;
                 }
                 else {
-                    SP = value;
+                    Registers[0] = value;
                 }
             }
-            get => PSW_u ? isp : SP;
+            get => PSW_u ? isp : Registers[0];
         }
 
         uint usp;
         public uint USP {
             set {
                 if (PSW_u) {
-                    SP = value;
+                    Registers[0] = value;
                 }
                 else {
                     usp = value;
                 }
             }
-            get => PSW_u ? SP : usp;
+            get => PSW_u ? Registers[0] : usp;
         }
         public uint INTB;
         public uint EXTB;
         public uint PC;
 
-        uint SP {
+        public uint SP {
             get => Registers[0];
             set => Registers[0] = value;
         }
@@ -53,10 +54,12 @@ namespace RX {
                 }
                 psw_u = value;
                 if (value) {
-                    isp = SP;
+                    isp = Registers[0];
+                    Registers[0] = usp;
                 }
                 else {
-                    usp = SP;
+                    usp = Registers[0];
+                    Registers[0] = isp;
                 }
             }
         }
@@ -173,17 +176,6 @@ namespace RX {
             this.bus = bus;
         }
 
-        // /// <summary>
-        // /// リトルエンディアンで読み出します。
-        // /// </summary>
-        // static uint ReadUInteger(ReadOnlySpan<byte> data, int length) {
-        //     return length switch {
-        //         1 => data[0],
-        //         2 => BinaryPrimitives.ReadUInt16LittleEndian(data),
-        //         4 => BinaryPrimitives.ReadUInt32LittleEndian(data),
-        //     };
-        // }
-
         uint CalcDspAddr(uint dsp, int reg) {
             return Registers[reg] + dsp;
         }
@@ -224,14 +216,11 @@ namespace RX {
         };
 
         /// <summary>
-        /// 下byteを任意のバイト長で取り出します。
+        /// 即値を符号拡張もしくはゼロ拡張します。
         /// </summary>
-        static uint GetLowerBits(uint x, uint byteLength) {
-            if (!(byteLength <= 4)) {
-                throw new ArgumentException($"{nameof(byteLength)} <= 4, actual: {byteLength}", nameof(byteLength));
-            }
-            var shift = (4 - (int)byteLength) * 8;
-            return (x << shift) >> shift;
+        static uint ImmediateValueExpantion(uint sz, uint value) {
+            var memOps = MemOps.Span[(int)sz];
+            return SignExtension(memOps.IsSigned, value, memOps.Size);
         }
 
         /// <summary>
@@ -267,12 +256,19 @@ namespace RX {
             return Registers[rs];
         }
 
-        uint LoadUnsignedSourceOperand(uint sz, uint dsp, uint rs) {
-            return bus.Read(CalcDspAddr(dsp, (int)rs), 1 << (int)sz);
+        uint LoadUnsignedSourceOperand(uint ld, uint sz, ReadOnlySpan<uint> dsp, uint rs) {
+            if (ld == 0) {
+                return bus.Read(Registers[rs], 1 << (int)sz);
+            }
+            if (ld < 3) {
+                var addr = ReadIndexAddr((int)ld, dsp[0], (int)rs);
+                return bus.Read(addr, 1 << (int)sz);
+            }
+            return BitOperation.GetLowerBits(Registers[rs], 1u << (int)sz);
         }
 
-        uint LoadUnsignedSourceOperand(uint sz, ReadOnlySpan<uint> dsp, uint rs) {
-            return bus.Read(CalcDspAddr(0 < dsp.Length ? dsp[0] : 0, (int)rs), 1 << (int)sz);
+        uint LoadUnsignedSourceOperand(uint sz, uint dsp, uint rs) {
+            return bus.Read(CalcDspAddr(dsp, (int)rs), 1 << (int)sz);
         }
 
         uint LoadSourceOperand(uint sz, uint dsp, uint rs) {
@@ -578,9 +574,12 @@ namespace RX {
             return dest & ~(1u << (int)(src & 31));
         }
 
-        void OpBCnd(uint condition, uint src) {
+        void OpBCnd(uint condition, uint src, uint opSize) {
             if (CheckCondition(condition)) {
                 PC += src;
+            }
+            else {
+                PC += opSize;
             }
         }
 
@@ -904,7 +903,7 @@ namespace RX {
 
         void OpPOPM(uint dest, uint dest2) {
             // TODO dest に 0が入った場合を考慮する
-            for (int i = (int)dest;i <= dest; i++) {
+            for (int i = (int)dest;i <= dest2; i++) {
                 uint tmp = bus.Read(SP, 4);
                 SP += 4;
                 Registers[i] = tmp;
@@ -913,7 +912,7 @@ namespace RX {
 
         void OpPUSH(uint size, uint src) {
             var length = 1 << (int)size;
-            SP -= (uint)length;
+            SP -= 4;
             bus.Write(SP, length, src);
         }
 
@@ -1149,23 +1148,19 @@ namespace RX {
             return 0;
         }
 
-        void OpSCMPU() {
-            // TODO この処理を実行中に割り込みを実行できるようにする
-            if (Registers[3] == 0) {
-                return;
-            }
-            byte tmp0 = 0;
-            byte tmp1 = 0;
-            while (Registers[3] != 0) {
-                tmp0 = (byte)bus.Read(Registers[1]++, 1);
-                tmp1 = (byte)bus.Read(Registers[2]++, 1);
+        bool OpSCMPU() {
+            if (Registers[3] != 0) {
+                byte tmp0 = (byte)bus.Read(Registers[1]++, 1);
+                byte tmp1 = (byte)bus.Read(Registers[2]++, 1);
                 Registers[3]--;
-                if (tmp0 != tmp1 || tmp0 == '\0') {
-                    break;
+                PSW_c = tmp0 - tmp1 >= 0;
+                PSW_z = tmp0 == tmp1;
+                if (tmp0 != tmp1 || tmp0 == 0) {
+                    return true;
                 }
+                return Registers[3] == 0;
             }
-            PSW_c = tmp0 >= tmp1;
-            PSW_z = tmp0 != tmp1;
+            return true;
         }
 
         void OpSETPSW(uint dest) {
@@ -1202,49 +1197,54 @@ namespace RX {
             return result;
         }
 
-        void OpSMOVB() {
-            // TODO この処理を実行中に割り込みを実行できるようにする
-            while (Registers[3] != 0) {
+        bool OpSMOVB() {
+            if (Registers[3] != 0) {
                 uint tmp = bus.Read(Registers[2], 1);
                 bus.Write(Registers[1], 1, tmp);
                 Registers[1]--;
                 Registers[2]--;
                 Registers[3]--;
+                return Registers[3] == 0;
             }
+            return true;
         }
 
-        void OpSMOVF() {
-            // TODO この処理を実行中に割り込みを実行できるようにする
-            while (Registers[3] != 0) {
+        bool OpSMOVF() {
+            if (Registers[3] != 0) {
                 uint tmp = bus.Read(Registers[2], 1);
                 bus.Write(Registers[1], 1, tmp);
                 Registers[1]++;
                 Registers[2]++;
                 Registers[3]--;
+                return Registers[3] == 0;
             }
+            return true;
         }
 
-        void OpSMOVU() {
-            // TODO この処理を実行中に割り込みを実行できるようにする
-            while (Registers[3] != 0) {
+        bool OpSMOVU() {
+            if (Registers[3] != 0) {
                 uint tmp = bus.Read(Registers[2], 1);
                 bus.Write(Registers[1], 1, tmp);
                 Registers[1]++;
                 Registers[2]++;
                 Registers[3]--;
                 if (tmp == 0) {
-                    break;
+                    return true;
                 }
+                return Registers[3] == 0;
             }
+            return true;
         }
 
-        void OpSSTR(uint size) {
-            // TODO この処理を実行中に割り込みを実行できるようにする
-            while (Registers[3] != 0) {
-                bus.Write(Registers[1], 1 << (int)size, Registers[2]);
-                Registers[1]++;
+        bool OpSSTR(uint size) {
+            if (Registers[3] != 0) {
+                uint byteLength = 1u << (int)size;
+                bus.Write(Registers[1], (int)byteLength, Registers[2]);
+                Registers[1] += byteLength;
                 Registers[3]--;
+                return Registers[3] == 0;
             }
+            return true;
         }
 
         uint OpSTNZ(uint src, uint dest) {
@@ -1261,27 +1261,36 @@ namespace RX {
             return result;
         }
 
-        void OpSUNTIL(uint size) {
-            // TODO この処理を実行中に割り込みを実行できるようにする
-            while (Registers[3] != 0) {
-                var tmp = bus.Read(Registers[1], 1 << (int)size);
-                Registers[1]++;
+        bool OpSUNTIL(uint size) {
+            if (Registers[3] != 0) {
+                var byteLength = 1u << (int)size;
+                var tmp = bus.Read(Registers[1], (int)byteLength);
+                Registers[1] += byteLength;
                 Registers[3]--;
+                PSW_c = tmp >=  Registers[2];
+                PSW_z = tmp == Registers[2];
                 if (tmp == Registers[2]) {
-                    break;
+                    return true;
                 }
+                return Registers[3] == 0;
             }
+            return true;
         }
 
-        void OpSWHILE(uint size) {
-            while (Registers[3] != 0) {
-                var tmp = bus.Read(Registers[1], 1 << (int)size);
-                Registers[1]++;
+        bool OpSWHILE(uint size) {
+            if (Registers[3] != 0) {
+                var byteLength = 1u << (int)size;
+                var tmp = bus.Read(Registers[1], (int)byteLength);
+                Registers[1] += byteLength;
                 Registers[3]--;
+                PSW_c = tmp >= Registers[2];
+                PSW_z = tmp == Registers[2];
                 if (tmp != Registers[2]) {
-                    break;
+                    return true;
                 }
+                return Registers[3] == 0;
             }
+            return true;
         }
 
         void OpTST(uint src, uint src2) {
@@ -1303,7 +1312,8 @@ namespace RX {
             return result;
         }
 
-        public void ExecuteInstruction(OpCode opCode, ReadOnlySpan<uint> operand) {
+        public void ExecuteInstruction(OpCode opCode, ReadOnlySpan<uint> operand, uint opSize) {
+            var shouldIncrementPC = true;
             switch (opCode) {
                 case OpCode.ABS_rd: {
                     ref var rd = ref Registers[operand[0]];
@@ -1383,11 +1393,11 @@ namespace RX {
                 }
                 case OpCode.BCLR_im:
                     StoreDestOperand((uint)MemEx.B, operand[0], operand[2], operand.Slice(3),
-                                     OpBCLR_m(operand[1], LoadUnsignedSourceOperand((uint)MemEx.B, operand.Slice(3), operand[0])));
+                                     OpBCLR_m(operand[1], LoadUnsignedSourceOperand(operand[2], (uint)MemEx.B, operand.Slice(3), operand[0])));
                     break;
                 case OpCode.BCLR_rm:
                     StoreDestOperand((uint)MemEx.B, operand[0], operand[2], operand.Slice(3),
-                                     OpBCLR_m(Registers[operand[1]], LoadUnsignedSourceOperand((uint)MemEx.B, operand.Slice(3), operand[1])));
+                                     OpBCLR_m(Registers[operand[1]], LoadUnsignedSourceOperand(operand[2], (uint)MemEx.B, operand.Slice(3), operand[1])));
 
                     break;
                 case OpCode.BCLR_ir: {
@@ -1400,26 +1410,38 @@ namespace RX {
                     dest = OpBCLR_r(Registers[operand[1]], dest);
                     break;
                 }
-                case OpCode.BCnd_s:
-                    OpBCnd(operand[0], operand[1]);
+                case OpCode.BCnd_s: {
+                    var src = operand[1] < 3 ? operand[1] + 8 : operand[1];
+                    OpBCnd(operand[0], src, opSize);
+                    shouldIncrementPC = false;
                     break;
+                }
                 case OpCode.BCnd_b:
-                    OpBCnd(operand[0], operand[1]);
-                    break;
                 case OpCode.BCnd_w:
-                    OpBCnd(operand[0], operand[1]);
+                    OpBCnd(operand[0], operand[1], opSize);
+                    shouldIncrementPC = false;
                     break;
-                case OpCode.BRA_s:
-                    OpBRA(operand[0]);
+                case OpCode.BRA_s: {
+                    var src = operand[0] < 3 ? operand[0] + 8 : operand[0];
+                    OpBRA(src);
+                    shouldIncrementPC = false;
                     break;
+                }
                 case OpCode.BRA_b:
                     OpBRA(operand[0]);
+                    shouldIncrementPC = false;
                     break;
                 case OpCode.BRA_w:
                     OpBRA(operand[0]);
+                    shouldIncrementPC = false;
                     break;
                 case OpCode.BRA_a:
                     OpBRA(operand[0]);
+                    shouldIncrementPC = false;
+                    break;
+                case OpCode.BRA_l:
+                    OpBRA(Registers[operand[0]]);
+                    shouldIncrementPC = false;
                     break;
                 case OpCode.BMCnd_im:
                     StoreDestOperand((uint)MemEx.B, operand[1], operand[3], operand.Slice(4), OpBMCnd_m(operand[2], operand[0], LoadSourceOperand(operand[3], 4, operand[1], operand.Slice(4))));
@@ -1449,9 +1471,6 @@ namespace RX {
                     dest = OpBNOT_r(src, dest);
                     break;
                 }
-                case OpCode.BRA_l:
-                    OpBRA(Registers[operand[0]]);
-                    break;
                 case OpCode.BRK:
                     OpBRK();
                     break;
@@ -1478,12 +1497,15 @@ namespace RX {
                 }
                 case OpCode.BSR_w:
                     OpBSR(operand[0], 3);
+                    shouldIncrementPC = false;
                     break;
                 case OpCode.BSR_a:
                     OpBSR(operand[0], 4);
+                    shouldIncrementPC = false;
                     break;
                 case OpCode.BSR_l:
                     OpBSR(Registers[operand[0]], 2);
+                    shouldIncrementPC = false;
                     break;
                 case OpCode.BTST_im:
                     OpBTST_m(operand[1], (byte)LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3)));
@@ -1510,13 +1532,13 @@ namespace RX {
                     break;
                 case OpCode.CMP_ub_rs_mr: {
                     var dest = Registers[operand[1]];
-                    var src = LoadSourceOperand(operand[2], 4, Registers[operand[0]], operand.Slice(3));
+                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
                     OpSUB(src, dest);
                     break;
                 }
                 case OpCode.CMP_mr: {
                     var dest = Registers[operand[2]];
-                    var src = LoadSourceOperand(operand[3], operand[0], Registers[operand[1]], operand.Slice(4));
+                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
                     OpSUB(src, dest);
                     break;
                 }
@@ -1652,9 +1674,11 @@ namespace RX {
                 }
                 case OpCode.JMP:
                     OpJMP(Registers[operand[0]]);
+                    shouldIncrementPC = false;
                     break;
                 case OpCode.JSR:
                     OpJSR(Registers[operand[0]]);
+                    shouldIncrementPC = false;
                     break;
                 case OpCode.MACHI:
                     OpMACHI(Registers[operand[0]], Registers[operand[1]]);
@@ -1700,7 +1724,7 @@ namespace RX {
                     StoreDestOperand(operand[0], operand[1], operand[2], Registers[operand[3]]);
                     break;
                 case OpCode.MOV_mr:
-                    Registers[operand[2]] = LoadSourceOperand(operand[0], operand[1], operand[3]);
+                    Registers[operand[3]] = LoadSourceOperand(operand[0], operand[1], operand[2]);
                     break;
                 case OpCode.MOV_4ir:
                     Registers[operand[1]] = operand[0];
@@ -1715,7 +1739,7 @@ namespace RX {
                     Registers[operand[0]] = operand[2];
                     break;
                 case OpCode.MOV_rr:
-                    Registers[operand[2]] = GetLowerBits(Registers[operand[1]], 1u << (int)operand[0]);
+                    Registers[operand[2]] = BitOperation.GetLowerBits(Registers[operand[1]], 1u << (int)operand[0]);
                     break;
                 case OpCode.MOV_im_p:
                     StoreDestOperand(operand[1], operand[0], operand[2], default, operand[4]);
@@ -1801,10 +1825,10 @@ namespace RX {
                     break;
                 }
                 case OpCode.MOVU_dsp5_mr:
-                    Registers[operand[3]] = LoadUnsignedSourceOperand(operand[0], operand[1], operand[3]);
+                    Registers[operand[3]] = LoadUnsignedSourceOperand(operand[0], operand[1], operand[2]);
                     break;
                 case OpCode.MOVU_mr:
-                    Registers[operand[2]] = LoadUnsignedSourceOperand(operand[0], operand.Slice(4), operand[1]);
+                    Registers[operand[2]] = LoadUnsignedSourceOperand(operand[3], operand[0], operand.Slice(4), operand[1]);
                     break;
                 case OpCode.MOVU_ar:
                     break;
@@ -1942,7 +1966,7 @@ namespace RX {
                     Registers[operand[1]] = OpREVW(Registers[operand[0]]);
                     break;
                 case OpCode.SMOVF:
-                    OpSMOVF();
+                    shouldIncrementPC = OpSMOVF();
                     break;
                 case OpCode.RMPA:
                     OpRMPA(operand[0]);
@@ -1985,18 +2009,23 @@ namespace RX {
                 }
                 case OpCode.RTE:
                     OpRTE();
+                    shouldIncrementPC = false;
                     break;
                 case OpCode.RTFI:
                     OpRTFI();
+                    shouldIncrementPC = false;
                     break;
                 case OpCode.RTS:
                     OpRTS();
+                    shouldIncrementPC = false;
                     break;
                 case OpCode.RTSD_i:
                     OpRTSD(operand[0]);
+                    shouldIncrementPC = false;
                     break;
                 case OpCode.RTSD_irr:
                     OpRTSD(operand[2], operand[0], operand[1]);
+                    shouldIncrementPC = false;
                     break;
                 case OpCode.SAT: {
                     ref var dest = ref Registers[operand[0]];
@@ -2066,10 +2095,10 @@ namespace RX {
                     break;
                 }
                 case OpCode.SMOVB:
-                    OpSMOVB();
+                    shouldIncrementPC = OpSMOVB();
                     break;
                 case OpCode.SSTR:
-                    OpSSTR(operand[0]);
+                    shouldIncrementPC = OpSSTR(operand[0]);
                     break;
                 case OpCode.STNZ: {
                     ref var dest = ref Registers[operand[0]];
@@ -2102,16 +2131,16 @@ namespace RX {
                     Registers[operand[0]] = OpSUB(Registers[operand[1]], Registers[operand[2]]);
                     break;
                 case OpCode.SCMPU:
-                    OpSCMPU();
+                    shouldIncrementPC = OpSCMPU();
                     break;
                 case OpCode.SUNTIL:
-                    OpSUNTIL(operand[0]);
+                    shouldIncrementPC = OpSUNTIL(operand[0]);
                     break;
                 case OpCode.SMOVU:
-                    OpSMOVU();
+                    shouldIncrementPC = OpSMOVU();
                     break;
                 case OpCode.SWHILE:
-                    OpSWHILE(operand[0]);
+                    shouldIncrementPC = OpSWHILE(operand[0]);
                     break;
                 case OpCode.TST_ir:
                     OpTST(operand[2], Registers[operand[0]]);
@@ -2165,6 +2194,9 @@ namespace RX {
                 }
                 default:
                     break;
+            }
+            if (shouldIncrementPC) {
+                PC += opSize;
             }
         }
     }

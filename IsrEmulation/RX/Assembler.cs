@@ -161,7 +161,7 @@ namespace RX {
         public readonly Reg TargetReg;
 
         public RegAddressing5(byte displacement, Reg targetReg) {
-            if ((Reg.R0 <= targetReg && targetReg <= Reg.R7)) {
+            if (!(Reg.R0 <= targetReg && targetReg <= Reg.R7)) {
                 throw new ArgumentException($"actual: {targetReg}");
             }
             if (!(0 <= displacement && displacement <= 31)) {
@@ -376,7 +376,7 @@ namespace RX {
             if (!(condition is Cnd.EQ or Cnd.NE)) {
                 throw new ArgumentException($"actual: {condition}", nameof(condition));
             }
-            return Create(OpCode.BCnd_s, (uint)condition, (uint)(src + 3) % 8);
+            return Create(OpCode.BCnd_s, (uint)condition, src % 8u);
         }
 
         public static Instruction32 BC_B(Cnd condition, byte src) =>
@@ -389,18 +389,24 @@ namespace RX {
             return Create(OpCode.BCnd_w, (uint)condition, src);
         }
 
-        public static Instruction32 BMC(Cnd condition, UInt3 src, StdRegAddressing dest) {
-            if (!(condition is Cnd.RA_B)) {
+        public static Instruction32 BMC(Cnd condition, byte src, StdRegAddressing dest) {
+            if (condition is Cnd.RA_B) {
                 throw new ArgumentException($"actual: {condition}", nameof(condition));
             }
             if (dest.Memex.HasValue) {
                 if (dest.Memex != MemEx.B) {
                     throw new ArgumentException($"actual: {dest.Memex}");
                 }
-                return Create(OpCode.BMCnd_im, (uint)src.Value, (uint)dest.TargetReg, (uint)condition, (uint)dest.LD, dest.Displacement);
+                if (8 <= src) {
+                    throw new ArgumentOutOfRangeException($"src <= 7 actual: {src}", nameof(src));
+                }
+                return Create(OpCode.BMCnd_im, src, (uint)dest.TargetReg, (uint)condition, (uint)dest.LD, dest.Displacement);
             }
 
-            return Create(OpCode.BMCnd_ir, src.Value, (uint)condition, (uint)dest.TargetReg);
+            if (32 <= src) {
+                throw new ArgumentOutOfRangeException($"src <= 31 actual: {src}", nameof(src));
+            }
+            return Create(OpCode.BMCnd_ir, src, (uint)condition, (uint)dest.TargetReg);
         }
 
         public static Instruction32 BNOT(UInt3 src, StdRegAddressing dest) {
@@ -430,7 +436,7 @@ namespace RX {
             if (!(3 <= src && src <= 10)) {
                 throw new ArgumentOutOfRangeException($"3 <= src && src <= 10 actual: {src}", nameof(src));
             }
-            return Create(OpCode.BRA_s, (uint)((src + 3) % 3));
+            return Create(OpCode.BRA_s, src % 8u);
         }
 
         public static Instruction32 BRA_B(sbyte src) {
@@ -691,7 +697,7 @@ namespace RX {
 
         public static Instruction32 MOV(MemEx sz, byte src, RegAddressing5 dest) {
             AssertSizeBWL(sz);
-            return Create(OpCode.MOV_im, (uint)sz, dest.Displacement, (uint)dest.TargetReg);
+            return Create(OpCode.MOV_im, (uint)sz, dest.Displacement, (uint)dest.TargetReg, src);
         }
 
         public static Instruction32 MOV(byte src, Reg dest) =>
@@ -761,7 +767,7 @@ namespace RX {
 
         public static Instruction32 MOVU(MemEx sz, StdRegAddressing src, Reg dest) {
             AssertSizeBW(sz);
-            return Create(OpCode.MOVU_mr, (uint)sz, (uint)src.LD, (uint)src.TargetReg, (uint)dest, src.Displacement);
+            return Create(OpCode.MOVU_mr, (uint)sz, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement);
         }
 
         public static Instruction32 MOVU_indexed(MemEx sz, UInt4 ni, Reg rb, Reg dest) {

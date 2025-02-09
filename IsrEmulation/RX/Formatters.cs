@@ -10,11 +10,11 @@ namespace RX {
     public ref struct Reader {
 
         readonly IBus32 bus;
-        uint pos;
+        public uint Position { private set; get; }
 
         public Reader(IBus32 bus, uint pos) {
             this.bus = bus;
-            this.pos = pos;
+            this.Position = pos;
         }
 
         public sbyte ReadI8() {
@@ -22,13 +22,13 @@ namespace RX {
         }
 
         public byte ReadU8() {
-            var result = (byte)bus.Read(pos, 1);
-            pos++;
+            var result = (byte)bus.Read(Position, 1);
+            Position++;
             return result;
         }
 
         public byte FetchU8() {
-            return (byte)bus.Read(pos, 1);
+            return (byte)bus.Read(Position, 1);
         }
 
         public short ReadI16() {
@@ -36,13 +36,13 @@ namespace RX {
         }
 
         public ushort ReadU16() {
-            var result = (ushort)bus.Read(pos, 2);
-            pos += 2;
+            var result = (ushort)bus.Read(Position, 2);
+            Position += 2;
             return result;
         }
 
         public ushort FetchU16() {
-            return (ushort)bus.Read(pos, 2);
+            return (ushort)bus.Read(Position, 2);
         }
 
         public int ReadI32() {
@@ -50,13 +50,13 @@ namespace RX {
         }
 
         public uint ReadU32() {
-            var result = bus.Read(pos, 4);
-            pos += 4;
+            var result = bus.Read(Position, 4);
+            Position += 4;
             return result;
         }
 
         public uint FetchU32() {
-            return bus.Read(pos, 4);
+            return bus.Read(Position, 4);
         }
 
         /// <summary>
@@ -121,9 +121,7 @@ namespace RX {
                     return (uint)immediate;
                 }
                 case 3: {
-                    var prevPos = pos;
-                    uint immediate = bus.Read(pos, 1) | (bus.Read(pos + 1, 1) << 8) | (bus.Read(pos + 2, 1) << 16);
-                    pos = prevPos;
+                    uint immediate = bus.Read(Position, 1) | (bus.Read(Position + 1, 1) << 8) | (bus.Read(Position + 2, 1) << 16);
                     return (uint)immediate;
                 }
                 case 4: {
@@ -133,6 +131,28 @@ namespace RX {
                     throw new InvalidOperationException($"size is not supported. {size}");
             }
         }
+
+        public int FetchInteger(int size) {
+            switch (size) {
+                case 1: {
+                    return (byte)bus.Read(Position, 1);
+                }
+                case 2: {
+                    return (short)bus.Read(Position, 2);
+                }
+                case 3: {
+                    int top = (byte)bus.Read(Position + 2, 1);
+                    uint immediate = bus.Read(Position, 1) | (bus.Read(Position + 1, 1) << 8) | (((uint)top) << 16);
+                    return (int)immediate;
+                }
+                case 4: {
+                    return (int)bus.Read(Position, 4);
+                }
+                default:
+                    throw new InvalidOperationException($"size is not supported. {size}");
+            }
+        }
+
     }
 
     public ref struct AssemblyWriter {
@@ -530,6 +550,46 @@ namespace RX {
     }
 
     /// <summary>
+    /// 32ビット以下の符号あり整数として操作します。
+    /// 読み進めません。
+    /// リトルエンディアンとして扱います。
+    /// LE: Little Endian
+    /// </summary>
+    public class LEIntegerFormatter : IAssemblyCode32Formatter {
+        readonly uint mask;
+        readonly byte shift;
+        readonly byte byteLength;
+        readonly byte bitLength;
+
+        public LEIntegerFormatter(int shift, int bitLength, int byteLength) {
+            if (byteLength is < 0 or > 4) {
+                throw new ArgumentException($"actual: {byteLength}", nameof(byteLength));
+            }
+            if (bitLength is > 32) {
+                throw new ArgumentException($"actual: {bitLength}", nameof(bitLength));
+            }
+            if (shift is < 0 or > 32) {
+                throw new ArgumentException($"actual: {shift}", nameof(shift));
+            }
+            this.bitLength = (byte)bitLength;
+            this.shift = (byte)shift;
+            this.byteLength = (byte)byteLength;
+            this.mask = ((~0u) << (32 - bitLength)) >> (32 - bitLength);
+        }
+
+        public void Serialize(Queue<uint> result, ref AssemblyWriter writer) {
+            var value = result.Dequeue();
+            writer.SetMaskedUInteger(byteLength, mask << shift, value << shift);
+        }
+
+        public void Deserialize(ref Reader reader, Queue<uint> result) {
+            int integer = (int)reader.FetchUInteger(byteLength);
+            var masked = (integer << (32 - (shift + bitLength))) >> (32 - bitLength);
+            result.Enqueue((uint)masked);
+        }
+    }
+
+    /// <summary>
     /// 32ビット以下の符号なし整数として操作します。
     /// 読み進めません。
     /// ビックエンディアンとして扱います。
@@ -645,7 +705,7 @@ namespace RX {
         /// </summary>
         readonly int readLength;
 
-        readonly ReadOnlyMemory<(int shift, uint mask)> calcPatterns;
+        readonly ReadOnlyMemory<(int bitLength, int shift, uint mask)> calcPatterns;
 
         public BEUBitConnectionFormatter(
             int readLength,
@@ -654,7 +714,7 @@ namespace RX {
             this.readLength = readLength;
             this.calcPatterns = calcPatterns
                 // ビットの長さ分ビットを立てる
-                .Select(t => (t.shift, ((~0u) >> (32 - t.bitLength)) << t.shift))
+                .Select(t => (t.bitLength, t.shift, ((0xFFFF_FFFF) >> (32 - t.bitLength)) << t.shift))
                 .ToArray();
         }
 
@@ -662,8 +722,10 @@ namespace RX {
             var x = BinaryPrimitives.ReverseEndianness(reader.FetchUInteger(readLength)) >>
                 ((4 - readLength) * 8);
             uint shifted = 0;
+            int pos = 0;
             foreach (var pattern in calcPatterns.Span) {
-                shifted |= (x & pattern.mask) >> pattern.shift;
+                shifted |= ((x & pattern.mask) >> pattern.shift) << pos;
+                pos += pattern.bitLength;
             }
             result.Enqueue(shifted);
         }
@@ -672,11 +734,13 @@ namespace RX {
             var x = result.Dequeue();
             uint mask = 0;
             uint expanded = 0;
+            int pos = 0;
             foreach (var pattern in calcPatterns.Span) {
-                expanded |= (x << pattern.shift) & pattern.mask;
+                expanded |= ((x >> pos) << pattern.shift) & pattern.mask;
                 mask |= pattern.mask;
+                pos += pattern.bitLength;
             }
-            writer.WriteMaskedUInteger(
+            writer.SetMaskedUInteger(
                 readLength,
                 BinaryPrimitives.ReverseEndianness(mask) >> ((4 - readLength) * 8),
                 BinaryPrimitives.ReverseEndianness(expanded) >> ((4 - readLength) * 8));
