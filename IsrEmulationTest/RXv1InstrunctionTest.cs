@@ -7,19 +7,118 @@ using Pheripheral;
 using System.Buffers;
 using System;
 using Peripheral.Renesas;
+using Util;
 
 namespace IsrEmulationTest;
 public class RXv1InstrunctionTest {
     RXv1Core cpu;
     RAM32Bit memory;
     RAM32Bit rom;
+    BusManager busManager;
 
     // 毎回インスタンスを作ると重いため
     static readonly Translate rxv1Translate = new();
 
-    uint romEndAddress;
+    uint ramBeginAddress;
+    uint ramEndAddress;
     uint romBeginAddress;
-    public  Random random_generate = new Random();
+    uint romEndAddress;
+
+    static uint GetSize(MemEx size) =>
+        size switch {
+        MemEx.B => 1,
+        MemEx.W or MemEx.UW => 2,
+        MemEx.L => 4,
+        _ => throw new NotSupportedException(size.ToString())
+    };
+
+
+    static uint CalcDspAddr(uint[] registers, uint dsp, int reg) {
+        return registers[reg] + dsp;
+    }
+
+
+    static uint ReadIndexAddr(uint[] registers, LengthOfDisplacement ld, uint? dsp, int reg) {
+        switch (ld) {
+            case LengthOfDisplacement.RefReg:
+                return registers[reg];
+            case LengthOfDisplacement.DSP8Reg:
+            case LengthOfDisplacement.DSP16Reg:
+                return CalcDspAddr(registers, dsp!.Value, reg);
+        }
+        throw new ArgumentException($"expected: 0 <= && ld < 3 actual: {ld}");
+    }
+
+    static void StoreDestOperand(uint[] registers, IBus32 bus, MemEx sz, Reg rd, LengthOfDisplacement ld, uint? dsp, uint value) {
+        var size = sz switch {
+            MemEx.B => 1,
+            MemEx.W => 2,
+            MemEx.L => 4,
+            MemEx.UW => 2,
+            _ => throw new ArgumentException($"not supported sz. actual: {sz}")
+        };
+        if (ld == 0) {
+            bus.Write(registers[(int)rd], size, value);
+            return;
+        }
+        if ((int)ld < 3) {
+            var addr = ReadIndexAddr(registers, ld, dsp!.Value, (int)rd);
+            bus.Write(addr, size, value);
+            return;
+        }
+        registers[(int)rd] = value;
+    }
+
+    static uint LoadData(uint[] registers, IBus32 bus, LengthOfDisplacement ld, uint sz, uint? dsp, Reg rs) {
+        if (ld == 0) {
+            return bus.Read(registers[(int)rs], 1 << (int)sz);
+        }
+        if ((int)ld < 3) {
+            var addr = ReadIndexAddr(registers, ld, dsp!.Value, (int)rs);
+            return bus.Read(addr, 1 << (int)sz);
+        }
+        return BitOperation.GetLowerBits(registers[(int)rs], 1u << (int)sz);
+    }
+
+    /// <summary>
+    /// ランダムなアドレスに対してデータを書き込みます。
+    /// 間接参照の場合はレジスターに設定するメモリの範囲を指定する必要があります。
+    /// </summary>
+    void StoreRandomDest(StdRegAddressing dest, uint addrBegin, uint addrEnd, uint value) {
+        var random = TestContext.CurrentContext.Random;
+        switch (dest.LD) {
+            case LengthOfDisplacement.RefReg:
+            case LengthOfDisplacement.DSP8Reg:
+            case LengthOfDisplacement.DSP16Reg: {
+                // メモリにデータを書き込めるように範囲を制限する (最大4バイト)
+                var addr = random.NextUInt(addrBegin, addrEnd - 4);
+                cpu.Registers[(int)dest.TargetReg] = addr;
+                break;
+            }
+        }
+        StoreDestOperand(cpu.Registers, busManager, MemEx.L, dest.TargetReg, dest.LD, dest.Displacement, value);
+    }
+
+    static StdRegAddressing GetRandomStdRegAddressing(MemEx size, LengthOfDisplacement ld) {
+        var random = TestContext.CurrentContext.Random;
+        var reg = random.Next(1, 15);
+        switch (ld) {
+            case LengthOfDisplacement.Reg:
+                return (Reg)reg;
+            case LengthOfDisplacement.RefReg:
+                return new RegRef((Reg)reg, size);
+            case LengthOfDisplacement.DSP8Reg: {
+                var dsp = random.NextByte();
+                return new RelRef8(dsp, (Reg)reg, size);
+            }
+            case LengthOfDisplacement.DSP16Reg: {
+                var dsp = random.NextUShort(0, 300);
+                return new RelRef16(dsp, (Reg)reg, size);
+            }
+            default:
+                throw new ArgumentException($"{ld} not supported");
+        }
+    }
 
     public RXv1InstrunctionTest() {
         Setup();
@@ -87,36 +186,36 @@ public class RXv1InstrunctionTest {
 
     [SetUp]
     public void Setup() {
-        memory = new RAM32Bit("sram", 256);
+        memory = new RAM32Bit("sram", 512_000);
         rom = new RAM32Bit("rom", 1024);
-        var busManager = new BusManager();
-        busManager.AddRangedAddressMapping(0, 0u + memory.MemorySize, memory);
+        busManager = new BusManager();
+        ramBeginAddress = 0;
+        ramEndAddress = ramBeginAddress + memory.MemorySize;
+        busManager.AddRangedAddressMapping(ramBeginAddress, ramEndAddress, memory);
         romEndAddress = 0xFFFFFFFF;
         romBeginAddress = romEndAddress - rom.MemorySize;
         busManager.AddRangedAddressMapping(romBeginAddress, romEndAddress, rom);
         cpu = new RXv1Core(busManager);
-        cpu.PC = romBeginAddress;
+        //cpu.PC = romBeginAddress;
+        cpu.PC = 0;
+        cpu.SP = ramEndAddress;
     }
 
-    void RunOpcode(params Instruction32[] instructions) {
+    void RunOpcode(Instruction32 instruction) {
         var writer = new ArrayBufferWriter<byte>();
         var asmWriter = new AssemblyWriter(writer);
-        foreach (var inst in instructions) {
-            writer.Clear();
-            rxv1Translate.CreateBinary(inst, ref asmWriter);
-            var instData = new RAM32Bit("", 10);
-            instData.WriteRange(0, writer.WrittenMemory.ToArray());
-            var reader = new Reader(instData, 0);
-            var queue = new Queue<uint>();
-            rxv1Translate.ParseAssembly(ref reader, queue);
+        rxv1Translate.CreateBinary(instruction, ref asmWriter);
+        var instData = new RAM32Bit("", 10);
+        instData.WriteRange(0, writer.WrittenMemory.ToArray());
+        var reader = new Reader(instData, cpu.PC);
+        var prevPos = reader.Position;
+        var queue = new Queue<uint>();
+        rxv1Translate.ParseAssembly(ref reader, queue);
+        var afterPos = reader.Position;
+        var opSize = afterPos - prevPos;
 
-            var instArgs = queue.ToArray();
-            cpu.ExecuteInstruction((OpCode)instArgs[0], instArgs.AsSpan(1));
-        }
-        // rom.WriteRange(0, writer.WrittenMemory.ToArray());
-        // foreach(var inst in instructions) {
-        //     cpu.ExecuteInstruction((OpCode)inst.OpcodeKind, inst.Operands.ToArray());
-        // }
+        var instArgs = queue.ToArray();
+        cpu.ExecuteInstruction((OpCode)instArgs[0], instArgs.AsSpan(1), opSize);
     }
 
     [Test]
@@ -222,18 +321,240 @@ public class RXv1InstrunctionTest {
         cpu.Registers[2].Is(result);
     }
 
-    // [Test]
-    public void BCnd_Test() {
-        throw new NotImplementedException();
-        // TODO 実装する
-        // RunOpcode(BC_S(Cnd.EQ, ));
-        // cpu.Registers[1].Is(0xFFFFFFDu);
+    [Test]
+    [TestCase(false, false, false, false,  3, Cnd.EQ, false)]
+    [TestCase(false, false, false, false, 10, Cnd.EQ, false)]
+    [TestCase(false,  true, false, false,  3, Cnd.EQ, true)]
+    [TestCase(false,  true, false, false,  7, Cnd.EQ, true)]
+    [TestCase(false,  true, false, false, 10, Cnd.EQ, true)]
+    [TestCase(false, false, false, false,  8, Cnd.NE, true)]
+    [TestCase(false,  true, false, false,  8, Cnd.NE, false)]
+    [TestCase(false,  true, false, false,  4, Cnd.NE, false)]
+    [TestCase(false, false, false, false,  4, Cnd.NE,  true)]
+    public void BCndS_Test(
+        bool psw_c, bool psw_z, bool psw_s, bool psw_o,
+        int src, Cnd condition,
+        bool shouldJump
+    ) {
+        var beforePC = cpu.PC;
+        cpu.PSW_c = psw_c;
+        cpu.PSW_z = psw_z;
+        cpu.PSW_s = psw_s;
+        cpu.PSW_o = psw_o;
+        RunOpcode(BC_S(condition, (byte)src));
+
+        if (shouldJump) {
+            cpu.PC.Is(beforePC + (byte)src);
+        }
+        else {
+            cpu.PC.Is(beforePC + 1);
+        }
     }
 
-    // [Test]
-    public void BMCnd_Test() {
-        throw new NotImplementedException();
-        // TODO 実装する
+    [Test]
+    [TestCase(false, false, false, false,   4, Cnd.GEU, false)]
+    [TestCase( true, false, false, false,   4, Cnd.GEU,  true)]
+    [TestCase( true, false, false, false, 100, Cnd.GEU,  true)]
+    [TestCase(false, false, false, false, 100, Cnd.GEU, false)]
+    [TestCase(false, false, false, false,  20, Cnd. EQ, false)]
+    [TestCase(false,  true, false, false,  20, Cnd. EQ,  true)]
+    [TestCase(false, false, false, false,  50, Cnd.GTU, false)]
+    [TestCase(false,  true, false, false,  50, Cnd.GTU, false)]
+    [TestCase( true,  true, false, false,  50, Cnd.GTU, false)]
+    [TestCase( true, false, false, false,  50, Cnd.GTU,  true)]
+    [TestCase(false, false, false, false,  70, Cnd. PZ,  true)]
+    [TestCase(false, false,  true, false,  70, Cnd. PZ, false)]
+    [TestCase(false, false, false, false,  90, Cnd. GE,  true)]
+    [TestCase(false, false,  true, false,  90, Cnd. GE, false)]
+    [TestCase(false, false, false,  true,  90, Cnd. GE, false)]
+    [TestCase(false, false,  true,  true,  90, Cnd. GE,  true)]
+    [TestCase(false, false, false, false, 110, Cnd. GT,  true)]
+    [TestCase(false,  true, false, false, 110, Cnd. GT, false)]
+    [TestCase(false, false,  true, false, 110, Cnd. GT, false)]
+    [TestCase(false, false, false,  true, 110, Cnd. GT, false)]
+    [TestCase(false,  true,  true, false, 110, Cnd. GT, false)]
+    [TestCase(false, false,  true,  true, 110, Cnd. GT,  true)]
+    [TestCase(false,  true, false,  true, 110, Cnd. GT, false)]
+    [TestCase(false,  true,  true,  true, 110, Cnd. GT, false)]
+    [TestCase(false, false, false, false, 130, Cnd. O,  false)]
+    [TestCase(false, false, false,  true, 130, Cnd. O,   true)]
+
+    [TestCase(false, false, false, false,   5, Cnd.LTU,  true)]
+    [TestCase( true, false, false, false,   5, Cnd.LTU, false)]
+    [TestCase( true, false, false, false,  15, Cnd.LTU, false)]
+    [TestCase(false, false, false, false,  15, Cnd.LTU,  true)]
+    [TestCase(false, false, false, false,  30, Cnd. NE,  true)]
+    [TestCase(false,  true, false, false,  30, Cnd. NE, false)]
+    [TestCase(false, false, false, false,  40, Cnd.LEU,  true)]
+    [TestCase(false,  true, false, false,  40, Cnd.LEU,  true)]
+    [TestCase( true,  true, false, false,  40, Cnd.LEU,  true)]
+    [TestCase( true, false, false, false,  40, Cnd.LEU, false)]
+    [TestCase(false, false, false, false,  60, Cnd.  N, false)]
+    [TestCase(false, false,  true, false,  60, Cnd.  N,  true)]
+    [TestCase(false, false, false, false,  99, Cnd. LE, false)]
+    [TestCase(false, false,  true, false,  99, Cnd. LE,  true)]
+    [TestCase(false, false, false,  true,  99, Cnd. LE,  true)]
+    [TestCase(false, false,  true,  true,  99, Cnd. LE, false)]
+    [TestCase(false,  true, false, false,  99, Cnd. LE,  true)]
+    [TestCase(false,  true,  true, false,  99, Cnd. LE,  true)]
+    [TestCase(false,  true, false,  true,  99, Cnd. LE,  true)]
+    [TestCase(false,  true,  true,  true,  99, Cnd. LE,  true)]
+    [TestCase(false, false, false, false, 111, Cnd. LT, false)]
+    [TestCase(false, false,  true, false, 111, Cnd. LT,  true)]
+    [TestCase(false, false, false,  true, 111, Cnd. LT,  true)]
+    [TestCase(false, false,  true,  true, 111, Cnd. LT, false)]
+    [TestCase(false, false, false, false, 255, Cnd. NO,  true)]
+    [TestCase(false, false, false,  true, 255, Cnd. NO, false)]
+
+    public void BCndB_Test(
+        bool psw_c, bool psw_z, bool psw_s, bool psw_o,
+        int src, Cnd condition,
+        bool shouldJump
+    ) {
+        var beforePC = cpu.PC;
+        cpu.PSW_c = psw_c;
+        cpu.PSW_z = psw_z;
+        cpu.PSW_s = psw_s;
+        cpu.PSW_o = psw_o;
+        RunOpcode(BC_B(condition, (byte)src));
+
+        if (shouldJump) {
+            cpu.PC.Is(beforePC + (byte)src);
+        }
+        else {
+            cpu.PC.Is(beforePC + 2);
+        }
+    }
+
+    [TestCase(false, false, false, false,  2999, Cnd. EQ, false)]
+    [TestCase(false,  true, false, false,  2999, Cnd. EQ,  true)]
+    [TestCase(false, false, false, false, 66666, Cnd. NE,  true)]
+    [TestCase(false,  true, false, false, 66666, Cnd. NE, false)]
+    public void BCndW_Test(
+        bool psw_c, bool psw_z, bool psw_s, bool psw_o,
+        int src, Cnd condition,
+        bool shouldJump
+    ) {
+        var beforePC = cpu.PC;
+        cpu.PSW_c = psw_c;
+        cpu.PSW_z = psw_z;
+        cpu.PSW_s = psw_s;
+        cpu.PSW_o = psw_o;
+        RunOpcode(BC_W(condition, (ushort)src));
+
+        if (shouldJump) {
+            cpu.PC.Is(beforePC + (ushort)src);
+        }
+        else {
+            cpu.PC.Is(beforePC + 3);
+        }
+    }
+
+    static object[][] GetBMCndTestData() {
+        return new object[][] {
+            new object[] { false, false, false, false, Cnd.GEU, false },
+            new object[] {  true, false, false, false, Cnd.GEU,  true },
+            new object[] {  true, false, false, false, Cnd.GEU,  true },
+            new object[] { false, false, false, false, Cnd.GEU, false },
+            new object[] { false, false, false, false, Cnd. EQ, false },
+            new object[] { false,  true, false, false, Cnd. EQ,  true },
+            new object[] { false, false, false, false, Cnd.GTU, false },
+            new object[] { false,  true, false, false, Cnd.GTU, false },
+            new object[] {  true,  true, false, false, Cnd.GTU, false },
+            new object[] {  true, false, false, false, Cnd.GTU,  true },
+            new object[] { false, false, false, false, Cnd. PZ,  true },
+            new object[] { false, false,  true, false, Cnd. PZ, false },
+            new object[] { false, false, false, false, Cnd. GE,  true },
+            new object[] { false, false,  true, false, Cnd. GE, false },
+            new object[] { false, false, false,  true, Cnd. GE, false },
+            new object[] { false, false,  true,  true, Cnd. GE,  true },
+            new object[] { false, false, false, false, Cnd. GT,  true },
+            new object[] { false,  true, false, false, Cnd. GT, false },
+            new object[] { false, false,  true, false, Cnd. GT, false },
+            new object[] { false, false, false,  true, Cnd. GT, false },
+            new object[] { false,  true,  true, false, Cnd. GT, false },
+            new object[] { false, false,  true,  true, Cnd. GT,  true },
+            new object[] { false,  true, false,  true, Cnd. GT, false },
+            new object[] { false,  true,  true,  true, Cnd. GT, false },
+            new object[] { false, false, false, false, Cnd. O,  false },
+            new object[] { false, false, false,  true, Cnd. O,   true },
+
+            new object[] { false, false, false, false, Cnd.LTU,  true },
+            new object[] {  true, false, false, false, Cnd.LTU, false },
+            new object[] {  true, false, false, false, Cnd.LTU, false },
+            new object[] { false, false, false, false, Cnd.LTU,  true },
+            new object[] { false, false, false, false, Cnd. NE,  true },
+            new object[] { false,  true, false, false, Cnd. NE, false },
+            new object[] { false, false, false, false, Cnd.LEU,  true },
+            new object[] { false,  true, false, false, Cnd.LEU,  true },
+            new object[] {  true,  true, false, false, Cnd.LEU,  true },
+            new object[] {  true, false, false, false, Cnd.LEU, false },
+            new object[] { false, false, false, false, Cnd.  N, false },
+            new object[] { false, false,  true, false, Cnd.  N,  true },
+            new object[] { false, false, false, false, Cnd. LE, false },
+            new object[] { false, false,  true, false, Cnd. LE,  true },
+            new object[] { false, false, false,  true, Cnd. LE,  true },
+            new object[] { false, false,  true,  true, Cnd. LE, false },
+            new object[] { false,  true, false, false, Cnd. LE,  true },
+            new object[] { false,  true,  true, false, Cnd. LE,  true },
+            new object[] { false,  true, false,  true, Cnd. LE,  true },
+            new object[] { false,  true,  true,  true, Cnd. LE,  true },
+            new object[] { false, false, false, false, Cnd. LT, false },
+            new object[] { false, false,  true, false, Cnd. LT,  true },
+            new object[] { false, false, false,  true, Cnd. LT,  true },
+            new object[] { false, false,  true,  true, Cnd. LT, false },
+            new object[] { false, false, false, false, Cnd. NO,  true },
+            new object[] { false, false, false,  true, Cnd. NO, false },
+        };
+    }
+
+
+    [Test]
+    [TestCaseSource(nameof(GetBMCndTestData))]
+    public void BMCnd_reg_Test(
+        bool psw_c, bool psw_z, bool psw_s, bool psw_o,
+        Cnd condition, bool sets) {
+        var random = TestContext.CurrentContext.Random;
+        var value = random.NextUInt();
+        byte src = (byte)random.Next(0, 31);
+        var reg = random.Next(1, 15);
+        cpu.PSW_c = psw_c;
+        cpu.PSW_z = psw_z;
+        cpu.PSW_s = psw_s;
+        cpu.PSW_o = psw_o;
+        cpu.Registers[reg] = value;
+        RunOpcode(BMC(condition, src, (Reg)reg));
+        if (sets) {
+            cpu.Registers[reg].Is(value | (1u << src));
+        }
+        else {
+            cpu.Registers[reg].Is(value & ~(1u << src));
+        }
+    }
+
+    [Test]
+    [TestCaseSource(nameof(GetBMCndTestData))]
+    public void BMCnd_mem_Test(
+        bool psw_c, bool psw_z, bool psw_s, bool psw_o,
+        Cnd condition, bool sets) {
+        var random = TestContext.CurrentContext.Random;
+        var value = random.NextByte();
+        byte src = (byte)random.Next(0, 8);
+        var reg = random.Next(1, 15);
+        var addr = 0x10u;
+        memory.Write(addr, 1, value);
+        cpu.PSW_c = psw_c;
+        cpu.PSW_z = psw_z;
+        cpu.PSW_s = psw_s;
+        cpu.PSW_o = psw_o;
+        cpu.Registers[reg] = addr;
+        RunOpcode(BMC(condition, src, new RegRef((Reg)reg, MemEx.B)));
+        if (sets) {
+            memory.Read(addr, 1).Is(value | (1u << src));
+        }
+        else {
+            memory.Read(addr, 1).Is(value & ~(1u << src));
+        }
     }
 
     [Test]
@@ -257,11 +578,41 @@ public class RXv1InstrunctionTest {
         cpu.Registers[2].Is(result);
     }
 
-    // [Test]
-    public void BRA_Test() {
-        throw new NotImplementedException();
-        // TODO 実装する
-    }  
+    [Test]
+    public void BRA_S_Test([Range(3, 10)] byte src) {
+        var prevPC = cpu.PC;
+        RunOpcode(BRA_S(src));
+        cpu.PC.Is(prevPC + src);
+    }
+
+    [Test]
+    public void BRA_B_Test([Random(-128, 127, 4)] sbyte src) {
+        var prevPC = cpu.PC;
+        RunOpcode(BRA_B(src));
+        cpu.PC.Is((uint)(prevPC + src));
+    }
+
+    [Test]
+    public void BRA_W_Test([Random(-32768, 32767, 4)] short src) {
+        var prevPC = cpu.PC;
+        RunOpcode(BRA_W(src));
+        cpu.PC.Is((uint)(prevPC + src));
+    }
+
+    [Test]
+    public void BRA_A_Test([Random(-8388608, 8388607, 4)] int src) {
+        var prevPC = cpu.PC;
+        RunOpcode(BRA_A(new Int24(src)));
+        cpu.PC.Is((uint)(prevPC + src));
+    }
+
+    [Test]
+    public void BRA_L_Test([Random(-2147483648, 2147483647, 50)] int src, [Random(1, 15, 3)] byte reg) {
+        var prevPC = cpu.PC;
+        cpu.Registers[reg] = (uint)src;
+        RunOpcode(BRA_L((Reg)reg));
+        cpu.PC.Is((uint)(prevPC + src));
+    }
 
     // [Test]
     public void BRK_Test() {
@@ -290,11 +641,30 @@ public class RXv1InstrunctionTest {
         cpu.Registers[2].Is(result);
     }
 
-    // [Test]
-    // public void BSR_Test() {
-    //     throw new NotImplementedException();
-    //     // TODO 実装する
-    // }
+    [Test]
+    public void BSR_W_Test([Random(10)]short src) {
+        var prevPC = cpu.PC;
+        RunOpcode(BSR_W(src));
+        memory.Read(cpu.SP, 4).Is(prevPC + 3);
+        cpu.PC.Is((uint)(prevPC + src));
+    }
+
+    [Test]
+    public void BSR_A_Test([Random(-8388608, 8388607, 10)]int src) {
+        var prevPC = cpu.PC;
+        RunOpcode(BSR_A(new Int24(src)));
+        memory.Read(cpu.SP, 4).Is(prevPC + 4);
+        cpu.PC.Is((uint)(prevPC + src));
+    }
+
+    [Test]
+    public void BSR_L_Test([Random(10)]int src, [Random(1, 15, 5)] byte reg) {
+        var prevPC = cpu.PC;
+        cpu.Registers[reg] = (uint)src;
+        RunOpcode(BSR_L((Reg)reg));
+        memory.Read(cpu.SP, 4).Is(prevPC + 2);
+        cpu.PC.Is((uint)(prevPC + src));
+    }
 
     [Test]
     [TestCase(1 ,    0xFFu,  true, false)]
@@ -338,7 +708,7 @@ public class RXv1InstrunctionTest {
 
     [Test]
     [TestCase(0u, 0u, true,  true, false, false)]
-    [TestCase(5u, 1u, true, false, false, false)]
+    [TestCase(1u, 5u, true, false, false, false)]
     public void CMP_Test(uint a, uint b,
                          bool expC, bool expZ, bool expS, bool expO) {
         cpu.Registers[1] = a;
@@ -484,14 +854,20 @@ public class RXv1InstrunctionTest {
         cpu.Registers[2].Is(BitConverter.SingleToUInt32Bits(result));
     }
 
-    //[Test]
-    public void JMP_Test() {
-        throw new NotImplementedException();
+    [Test]
+    public void JMP_Test([Range(1, 15)] byte reg, [Random(10)] uint address) {
+        cpu.Registers[reg] = address;
+        RunOpcode(JMP((Reg)reg));
+        cpu.PC.Is(address);
     }
 
-    //[Test]
-    public void JSR_Test() {
-        throw new NotImplementedException();
+    [Test]
+    public void JSR_Test([Range(1, 15)] byte reg, [Random(10)] uint address) {
+        uint prevPC = cpu.PC;
+        cpu.Registers[reg] = address;
+        RunOpcode(JSR((Reg)reg));
+        cpu.PC.Is(address);
+        memory.Read(cpu.SP, 4).Is(prevPC + 2);
     }
 
     [Test]
@@ -535,7 +911,98 @@ public class RXv1InstrunctionTest {
         cpu.Registers[2] = unchecked((uint)b);
         RunOpcode(MIN(R1, R2));
         cpu.Registers[2].Is(unchecked((uint)result));
+    }
 
+    [Test]
+    [TestCase(0xFFu, 0xFFu, MemEx.L)]
+    [TestCase(0xAABBCCDDu, 0xAABBCCDDu, MemEx.L)]
+    [TestCase(0x11223344u, 0x3344u, MemEx.W)]
+    [TestCase(0x11223344u, 0x44u, MemEx.B)]
+    public void MOV_rm_Test(
+        uint value,
+        uint expected,
+        MemEx sz) {
+        var random = TestContext.CurrentContext.Random;
+        var rs = random.NextByte(1, 6);
+        var rd = random.NextByte((byte)(rs + 1), 7);
+        var dspOffset = random.NextByte(0, 31);
+        var dsp = new RegAddressing5(dspOffset, (Reg)rd);
+        cpu.Registers[rs] = value;
+        RunOpcode(MOV(sz, (Reg)rs, dsp));
+        LoadData(cpu.Registers, busManager, LengthOfDisplacement.DSP8Reg, (uint)MemEx.L, dsp.Displacement, dsp.TargetReg)
+            .Is(expected);
+    }
+
+    [Test]
+    [TestCase(0x11u, 0x11u, MemEx.L)]
+    [TestCase(0xAABBCCDDu, 0xAABBCCDDu, MemEx.L)]
+    [TestCase(0xFFFFu, 0xFFFFFFFFu, MemEx.W)]
+    [TestCase(0x12347FFFu, 0x7FFFu, MemEx.W)]
+    [TestCase(0xFFu, 0xFFFFFFFFu, MemEx.B)]
+    [TestCase(0xFFFFFF7Fu, 0x7Fu, MemEx.B)]
+    [TestCase(0x34u, 0x34u, MemEx.B)]
+    public void MOV_mr_Test(
+        uint value,
+        uint expected,
+        MemEx sz) {
+        var random = TestContext.CurrentContext.Random;
+        var rs = random.NextByte(1, 7);
+        var rd = random.NextByte(1, 7);
+        var dspOffset = random.NextByte(0, 31);
+        var dsp = new RegAddressing5(dspOffset, (Reg)rs);
+        StoreRandomDest(new RelRef8(dsp.Displacement, dsp.TargetReg, MemEx.L), 0, 300, value);
+        RunOpcode(MOV(sz, dsp, (Reg)rd));
+        cpu.Registers[rd].Is(expected);
+    }
+
+    [Test]
+    public void MOV_imm4_reg_Test(
+        [Random((byte)0, (byte)15, 5)]byte imm,
+        [Random((byte)1, (byte)15, 5)]byte reg) {
+        RunOpcode(MOV(new UInt4(imm), (Reg)reg));
+        cpu.Registers[reg].Is(imm);
+    }
+
+    [Test]
+    [TestCase(MemEx.B, (byte)0xFFu, 0xFFu)]
+    [TestCase(MemEx.B, (byte)0x7Fu, 0x7Fu)]
+    [TestCase(MemEx.W, (byte)0xFFu, 0xFFu)]
+    [TestCase(MemEx.L, (byte)0xF3u, 0xF3u)]
+    public void MOV_im_Test(MemEx sz, byte src, uint expected) {
+        var random = TestContext.CurrentContext.Random;
+        var rd = random.NextByte(1, 7);
+        var dspOffset = random.NextByte(0, 31);
+        var dsp = new RegAddressing5(dspOffset, (Reg)rd);
+        RunOpcode(MOV(sz, src, dsp));
+        LoadData(cpu.Registers, busManager, LengthOfDisplacement.DSP8Reg, (uint)MemEx.L, dsp.Displacement, dsp.TargetReg)
+        .Is(expected);
+    }
+
+    [Test]
+    public void MOVU_dsp5_reg_Test(
+        [Values(MemEx.B, MemEx.W)] MemEx size,
+        [Random((uint)ushort.MinValue, (uint)ushort.MaxValue, 3)] uint value,
+        [Random(0u, 260_000u, 2)] uint addr,
+        [Random((byte)0, (byte)31, 3)]byte dsp_offset,
+        [Random(1, 7, 3)]int dsp_reg,
+        [Random(1, 7, 2)]int rd) {
+        var dsp = new RegAddressing5(dsp_offset, (Reg)dsp_reg);
+        cpu.Registers[(int)dsp.TargetReg] = addr;
+        StoreDestOperand(cpu.Registers, busManager, MemEx.L, dsp.TargetReg, LengthOfDisplacement.DSP8Reg, dsp.Displacement, value);
+        RunOpcode(MOVU(size, dsp, (Reg)rd));
+        cpu.Registers[rd].Is(BitOperation.GetLowerBits(value, GetSize(size)));
+    }
+
+    [Test]
+    public void MOVU_stdAddr_reg_Test(
+        [Values(MemEx.B, MemEx.W)] MemEx size,
+        [Random((uint)ushort.MinValue, (uint)ushort.MaxValue, 3)] uint value,
+        [Range(0, 3)]int ld,
+        [Random(1, 7, 2)]int rd) {
+        var dsp = GetRandomStdRegAddressing(size, (LengthOfDisplacement)ld);
+        StoreRandomDest(dsp, 0, 300, value);
+        RunOpcode(MOVU(size, dsp, (Reg)rd));
+        cpu.Registers[rd].Is(BitOperation.GetLowerBits(value, GetSize(size)));
     }
 
     [Test]
@@ -695,7 +1162,9 @@ public class RXv1InstrunctionTest {
 
     [Test]
     public void NOP_Test() {
+        var prevPC = cpu.PC;
         RunOpcode(NOP);
+        cpu.PC.Is(prevPC + 1);
     }
 
     [Test]
@@ -725,10 +1194,165 @@ public class RXv1InstrunctionTest {
         cpu.PSW_s.Is(expS);
     }
 
-    // [Test]
-    // public void POP_Test() {
-    //     throw new NotImplementedException();
-    // }
+    [Test]
+    public void POP_Test([Range(1, 15)]byte src, [Random(10)]uint value) {
+        var prevSP = cpu.SP;
+        cpu.SP -= 4;
+        busManager.Write(cpu.SP, 4, value);
+        RunOpcode(POP((Reg)src));
+        cpu.Registers[src].Is(value);
+        cpu.SP.Is(prevSP);
+    }
+
+    [Test]
+    [TestCase(1u, ControlReg.PSW  , 1u)]
+    [TestCase(2u, ControlReg.USP  , 2u)]
+    [TestCase(3u, ControlReg.FPSW , 3u)]
+    [TestCase(4u, ControlReg.BPSW , 4u)]
+    [TestCase(5u, ControlReg.BPC  , 5u)]
+    [TestCase(6u, ControlReg.ISP  , 6u)]
+    [TestCase(7u, ControlReg.FINTV, 7u)]
+    [TestCase(8u, ControlReg.INTB , 8u)]
+    public void POPC_Test(uint value, ControlReg src, uint result) {
+        switch (src)
+        {
+            case ControlReg.ISP:
+                cpu.PSW_u = false;
+                break;
+            case ControlReg.USP:
+                cpu.PSW_u = true;
+                break;
+        }
+        cpu.SP = ramEndAddress;
+        var prevSP = cpu.SP;
+        cpu.SP -= 4;
+        busManager.Write(cpu.SP, 4, value);
+        RunOpcode(POPC(src));
+        var regValue = src switch
+        {
+            ControlReg.PSW => cpu.PSW,
+            ControlReg.USP => cpu.USP,
+            ControlReg.FPSW => cpu.FPSW,
+            ControlReg.BPSW => cpu.BPSW,
+            ControlReg.BPC => cpu.BPC,
+            ControlReg.ISP => cpu.ISP,
+            ControlReg.FINTV => cpu.FINTV,
+            ControlReg.INTB => cpu.INTB,
+            _ => throw new ArgumentException(src.ToString())
+        };
+        regValue.Is(result);
+        switch (src) {
+            case ControlReg.ISP:
+            case ControlReg.USP:
+                cpu.SP.Is(value);
+                break;
+            default:
+                cpu.SP.Is(prevSP);
+                break;
+        }
+    }
+
+    [Test]
+    public void POPM_Test([Random(1, 15, 5)] byte regBegin, [Random(1, 14, 5)] byte length) {
+        var regEnd = Math.Min(15, regBegin + length);
+        var randomValues = new uint[16];
+        for (int i = regBegin; i <= regEnd; i++) {
+            randomValues[i] = TestContext.CurrentContext.Random.NextUInt();
+        }
+        for (int i = regEnd; regBegin <= i; i--) {
+            cpu.SP -= 4;
+            busManager.Write(cpu.SP, 4, randomValues[i]);
+        }
+        RunOpcode(POPM((Reg)regBegin, (Reg)regEnd));
+        cpu.Registers.Skip(1).Is(randomValues.Skip(1));
+    }
+
+    [Test]
+    public void PUSH_r_Test([Random(0, 2, 2)]byte size, [Random(1, 15, 5)]byte reg, [Random(5)] uint value) {
+        value = size switch {
+            0 => value & 0xFF,
+            1 => value & 0XFFFF,
+            _ => value
+        };
+        cpu.Registers[reg] = value;
+        var prevSP = cpu.SP;
+        RunOpcode(PUSH((MemEx)size, (Reg)reg));
+        cpu.SP.Is((uint)(prevSP - 4));
+        busManager.Read(cpu.SP, 1 << size).Is(value);
+    }
+
+    [Test]
+    [TestCase(1u, ControlReg.PSW  , 1u)]
+    [TestCase(100u, ControlReg.USP  , 100u)]
+    [TestCase(3u, ControlReg.FPSW , 3u)]
+    [TestCase(4u, ControlReg.BPSW , 4u)]
+    [TestCase(5u, ControlReg.BPC  , 5u)]
+    [TestCase(6u, ControlReg.ISP  , 6u)]
+    [TestCase(7u, ControlReg.FINTV, 7u)]
+    [TestCase(8u, ControlReg.INTB , 8u)]
+    public void PUSHC_Test(uint value, ControlReg src, uint result) {
+        switch (src)
+        {
+            case ControlReg.ISP:
+                cpu.PSW_u = false;
+                break;
+            case ControlReg.USP:
+                cpu.PSW_u = true;
+                break;
+        }
+        switch (src) {
+            case ControlReg.PSW:
+                cpu.PSW = value;
+                break;
+            case ControlReg.USP:
+                cpu.USP = value;
+                break;
+            case ControlReg.FPSW:
+                cpu.FPSW = value;
+                break;
+            case ControlReg.BPSW:
+                cpu.BPSW  = value;
+                break;
+            case ControlReg.BPC:
+                cpu.BPC = value;
+                break;
+            case ControlReg.ISP:
+                cpu.ISP = value;
+                break;
+            case ControlReg.FINTV:
+                cpu.FINTV = value;
+                break;
+            case ControlReg.INTB:
+                cpu.INTB = value;
+                break;
+            default:
+                throw new ArgumentException(src.ToString());
+        };
+        var prevSP = cpu.SP;
+        RunOpcode(PUSHC(src));
+        cpu.SP.Is(prevSP - 4);
+        busManager.Read(cpu.SP, 4).Is(result);
+    }
+
+    [Test]
+    public void PUSHM_Test([Random(1, 15, 5)] byte regBegin, [Random(1, 14, 5)] byte length) {
+        var regEnd = Math.Min(15, regBegin + length);
+        var range = (regEnd - regBegin) + 1;
+        cpu.Registers.AsSpan(1).Clear();
+        var randomValues = new uint[16];
+        for (int i = regBegin; i <= regEnd; i++) {
+            var randomValue = TestContext.CurrentContext.Random.NextUInt();
+            randomValues[i] = randomValue;
+            cpu.Registers[i] = randomValue;
+        }
+        var prevSP = cpu.SP;
+        RunOpcode(PUSHM((Reg)regBegin, (Reg)regEnd));
+        cpu.SP.Is((uint)(prevSP - 4 * range));
+        var sp = cpu.SP;
+        for (int i = regBegin; i <= regEnd; i++, sp += 4) {
+            busManager.Read(sp, 4).Is(randomValues[i]);
+        }
+    }
 
     [Test]
     [TestCase(0x0000_3FFF_4000_0000u, 1, 0x0000_7FFF_0000_0000u)]
@@ -850,6 +1474,73 @@ public class RXv1InstrunctionTest {
         cpu.FPSW_co.Is(false);
         cpu.FPSW_cz.Is(false);
         cpu.FPSW_cu.Is(false);
+    }
+
+    [Test]
+    public void RTE_Test([Random(5)]uint pc, [Values(1u, 2u)] uint psw) {
+        cpu.SP -= 4;
+        busManager.Write(cpu.SP, 4, psw);
+        cpu.SP -= 4;
+        busManager.Write(cpu.SP, 4, pc);
+        RunOpcode(RTE);
+        cpu.PC.Is(pc);
+        cpu.PSW.Is(psw);
+    }
+
+    [Test]
+    public void RTFI_Test([Random(5)]uint pc, [Values(1u, 2u)] uint psw) {
+        cpu.BPSW = psw;
+        cpu.BPC = pc;
+        RunOpcode(RTFI);
+        cpu.PC.Is(pc);
+        cpu.PSW.Is(psw);
+    }
+
+    [Test]
+    public void RTS_Test([Random(5)]uint pc) {
+        cpu.SP -= 4;
+        busManager.Write(cpu.SP, 4, pc);
+        RunOpcode(RTS);
+        cpu.PC.Is(pc);
+    }
+
+    [Test]
+    public void RTSD_imm_Test([Random(5)]byte src, [Random(5)] uint pc) {
+        cpu.SP -= 4;
+        busManager.Write(cpu.SP, 4, pc);
+        cpu.SP -= src;
+        RunOpcode(RTSD(src));
+        cpu.PC.Is(pc);
+    }
+
+    [Test]
+    public void RTSD_range_Test(
+        [Random(5)] uint pc,
+        [Random(60, 255, 5)]byte src,
+        [Random(1, 15, 5)] byte regBegin,
+        [Random(1, 14, 5)] byte length
+        ) {
+        var regEnd = Math.Min(15, regBegin + length);
+
+        cpu.SP -= 4;
+        busManager.Write(cpu.SP, 4, pc);
+
+        cpu.Registers.AsSpan(1).Clear();
+        var randomValues = new uint[16];
+        for (int i = regBegin; i <= regEnd; i++) {
+            var randomValue = TestContext.CurrentContext.Random.NextUInt();
+            randomValues[i] = randomValue;
+        }
+        var sp = cpu.SP;
+        for (int i = regEnd; regBegin <= i; i--) {
+            sp -= 4;
+            busManager.Write(sp, 4, randomValues[i]);
+        }
+
+        cpu.SP -= src;
+        RunOpcode(RTSD(src, (Reg)regBegin, (Reg)regEnd));
+        cpu.PC.Is(pc);
+        cpu.Registers.AsSpan(1).ToArray().Is(randomValues.AsSpan(1).ToArray());
     }
 
     [Test]
@@ -985,6 +1676,228 @@ public class RXv1InstrunctionTest {
         cpu.Registers[1] = 0xFF;
         RunOpcode(SCC(condition, R1));
         cpu.Registers[1].Is(result);
+    }
+
+    [Test]
+    public void SCMPU_Equal_Test([Random(1, 20, 5)]int length) {
+        var random = TestContext.CurrentContext.Random;
+        var datas = Enumerable.Range(0, (int)length)
+            .Select(_ => random.NextByte(1, 0xFF))
+            .ToArray();
+        var pos1 = 0u;
+        var pos2 = 50u;
+        memory.WriteRange(pos1, datas);
+        memory.WriteRange(pos2, datas);
+        var ramPos1 = ramBeginAddress + pos1;
+        var ramPos2 = ramBeginAddress + pos2;
+        cpu.Registers[1] = ramPos1;
+        cpu.Registers[2] = ramPos2;
+        cpu.Registers[3] = (uint)length;
+        // フラグが変化することを確認するために逆の値を代入
+        cpu.PSW_c = false;
+        cpu.PSW_z = false;
+        var prevPC = cpu.PC;
+        for (int i = 0; i < length - 1; i++) {
+            RunOpcode(SCMPU);
+            // 最後まで検索するまでプログラムカウンタはインクリメントされないことを確認する
+            cpu.PC.Is(prevPC);
+            // 比較している位置がインクリメントされていることを確認する
+            cpu.Registers[1].Is(ramPos1 + (uint)i + 1);
+            cpu.Registers[2].Is(ramPos2 + (uint)i + 1);
+
+            cpu.PSW_c.Is(true);
+            cpu.PSW_z.Is(true);
+        }
+        RunOpcode(SCMPU);
+        cpu.PC.Is(prevPC + 2);
+        cpu.Registers[1].Is((uint)(ramPos1 + length));
+        cpu.Registers[2].Is((uint)(ramPos2 + length));
+        cpu.Registers[3].Is(0u);
+        cpu.PSW_c.Is(true);
+        cpu.PSW_z.Is(true);
+    }
+
+    [Test]
+    public void SMOVB_Test([Random(0, 20, 5)]int length) {
+        var random = TestContext.CurrentContext.Random;
+        var datas = Enumerable.Range(0, (int)length)
+            .Select(_ => random.NextByte(0, 0xFF))
+            .ToArray();
+        var pos1 = 50u;
+        var pos2 = 1u;
+        memory.WriteRange(pos2, datas.ToArray());
+        var ramPos1Begin = ramBeginAddress + pos1;
+        var ramPos2Begin = ramBeginAddress + pos2;
+        var ramPos1End = ramPos1Begin + datas.Length;
+        var ramPos2End = ramPos2Begin + datas.Length;
+        cpu.Registers[1] = (uint)ramPos1End - 1;
+        cpu.Registers[2] = (uint)ramPos2End - 1;
+        cpu.Registers[3] = (uint)length;
+        var prevPC = cpu.PC;
+        for (int i = 0; i < length - 1; i++) {
+            RunOpcode(SMOVB);
+            // 最後まで転送するまでプログラムカウンタはインクリメントされないことを確認する
+            cpu.PC.Is(prevPC);
+            // 位置がデクリメントされていることを確認する
+            cpu.Registers[1].Is((uint)(ramPos1End - (i + 2)));
+            cpu.Registers[2].Is((uint)(ramPos2End - (i + 2)));
+        }
+        RunOpcode(SMOVB);
+        cpu.PC.Is(prevPC + 2);
+        cpu.Registers[1].Is(ramPos1Begin - 1);
+        cpu.Registers[2].Is(ramPos2Begin - 1);
+        cpu.Registers[3].Is(0u);
+        Enumerable.Range((int)ramPos1Begin, length)
+            .Select(addr => (byte)memory.Read((uint)addr, 1))
+            .ToArray()
+            .Is(datas);
+    }
+
+    [Test]
+    public void SMOVF_Test([Random(0, 20, 5)]int length) {
+        var random = TestContext.CurrentContext.Random;
+        var datas = Enumerable.Range(0, (int)length)
+            .Select(_ => random.NextByte(0, 0xFF))
+            .ToArray();
+        var pos1 = 50u;
+        var pos2 = 1u;
+        memory.WriteRange(pos2, datas);
+        var ramPos1Begin = ramBeginAddress + pos1;
+        var ramPos2Begin = ramBeginAddress + pos2;
+        var ramPos1End = (uint)(ramPos1Begin + datas.Length);
+        var ramPos2End = (uint)(ramPos2Begin + datas.Length);
+        cpu.Registers[1] = (uint)ramPos1Begin;
+        cpu.Registers[2] = (uint)ramPos2Begin;
+        cpu.Registers[3] = (uint)length;
+        var prevPC = cpu.PC;
+        for (int i = 0; i < length - 1; i++) {
+            RunOpcode(SMOVF);
+            // 最後まで転送するまでプログラムカウンタはインクリメントされないことを確認する
+            cpu.PC.Is(prevPC);
+            // 位置がインクリメントされていることを確認する
+            cpu.Registers[1].Is((uint)(ramPos1Begin + i + 1));
+            cpu.Registers[2].Is((uint)(ramPos2Begin + i + 1));
+        }
+        RunOpcode(SMOVF);
+        cpu.PC.Is(prevPC + 2);
+        cpu.Registers[1].Is(ramPos1End);
+        cpu.Registers[2].Is(ramPos2End);
+        cpu.Registers[3].Is(0u);
+        Enumerable.Range((int)ramPos1Begin, length)
+            .Select(addr => (byte)memory.Read((uint)addr, 1))
+            .ToArray()
+            .Is(datas);
+    }
+
+    [Test]
+    public void SMOVU_Test([Random(1, 20, 5)]int length) {
+        var random = TestContext.CurrentContext.Random;
+        var datas = Enumerable.Range(0, (int)length)
+            .Select(_ => random.NextByte(1, 0xFF))
+            .ToArray();
+        var pos1 = 0u;
+        var pos2 = 50u;
+        memory.WriteRange(pos2, datas);
+        var ramPos1 = ramBeginAddress + pos1;
+        var ramPos2 = ramBeginAddress + pos2;
+        cpu.Registers[1] = ramPos1;
+        cpu.Registers[2] = ramPos2;
+        cpu.Registers[3] = (uint)length;
+        var prevPC = cpu.PC;
+        for (int i = 0; i < length - 1; i++) {
+            RunOpcode(SMOVU);
+            // 最後まで検索転送するまでプログラムカウンタはインクリメントされないことを確認する
+            cpu.PC.Is(prevPC);
+            // 転送している位置がインクリメントされていることを確認する
+            cpu.Registers[1].Is(ramPos1 + (uint)i + 1);
+            cpu.Registers[2].Is(ramPos2 + (uint)i + 1);
+        }
+        RunOpcode(SMOVU);
+        cpu.PC.Is(prevPC + 2);
+        cpu.Registers[1].Is(ramPos1 + (uint)length);
+        cpu.Registers[2].Is(ramPos2 + (uint)length);
+        cpu.Registers[3].Is(0u);
+    }
+
+    [Test]
+    public void SMOVU_Contains0_Test([Random(1, 20, 5)]int length) {
+        var random = TestContext.CurrentContext.Random;
+        var datas = Enumerable.Range(0, (int)length - 1)
+            .Select(_ => random.NextByte(0, 0xFF))
+            .TakeWhile(x => x != 0)
+            .Append((byte)0)
+            .ToArray();
+        var zeroPos = Array.IndexOf<byte>(datas, 0);
+        var pos1 = 0u;
+        var pos2 = 50u;
+        memory.WriteRange(pos2, datas);
+        var ramPos1 = ramBeginAddress + pos1;
+        var ramPos2 = ramBeginAddress + pos2;
+        cpu.Registers[1] = ramPos1;
+        cpu.Registers[2] = ramPos2;
+        cpu.Registers[3] = (uint)length;
+        var prevPC = cpu.PC;
+        for (int i = 0; i < zeroPos; i++) {
+            RunOpcode(SMOVU);
+            // 最後まで転送するまでプログラムカウンタはインクリメントされないことを確認する
+            cpu.PC.Is(prevPC);
+            // 転送している位置がインクリメントされていることを確認する
+            cpu.Registers[1].Is(ramPos1 + (uint)i + 1);
+            cpu.Registers[2].Is(ramPos2 + (uint)i + 1);
+        }
+        RunOpcode(SMOVU);
+        cpu.PC.Is(prevPC + 2);
+        cpu.Registers[1].Is((uint)(ramPos1 + zeroPos + 1));
+        cpu.Registers[2].Is((uint)(ramPos2 + zeroPos + 1));
+        cpu.Registers[3].Is((uint)(length - zeroPos - 1));
+    }
+
+    [Test]
+    public void SSTR_Test(
+        [Values(MemEx.B, MemEx.W, MemEx.L)]MemEx size,
+        [Random(1u, 20u, 5)]uint length,
+        [Random(uint.MinValue, uint.MaxValue, 5)]uint value) {
+        var random = TestContext.CurrentContext.Random;
+        var byteLength = size switch {
+            MemEx.B => 1,
+            MemEx.W => 2,
+            MemEx.L => 4,
+            _ => throw new NotSupportedException(size.ToString())
+        };
+        var expectedValue = size switch {
+            MemEx.B => (byte)value,
+            MemEx.W => (ushort)value,
+            MemEx.L => value,
+            _ => throw new NotSupportedException(size.ToString())
+        };
+        var datas = Enumerable.Range(0, (int)length * byteLength)
+            .Select(_ => random.NextByte(0, 0xFF))
+            .ToArray();
+        var pos1 = 0u;
+        memory.WriteRange(pos1, datas);
+        var ramPos1 = ramBeginAddress + pos1;
+        cpu.Registers[1] = ramPos1;
+        cpu.Registers[2] = value;
+        cpu.Registers[3] = length;
+        var prevPC = cpu.PC;
+        for (int i = 0; i < length - 1; i++) {
+            RunOpcode(SSTR(size));
+            // 最後まで転送するまでプログラムカウンタはインクリメントされないことを確認する
+            cpu.PC.Is(prevPC);
+            // 転送している位置がインクリメントされていることを確認する
+            cpu.Registers[1].Is(ramPos1 + (uint)((i + 1) * byteLength));
+            // 変化していないことを確認する
+            cpu.Registers[2].Is(value);
+        }
+        RunOpcode(SSTR(size));
+        cpu.PC.Is(prevPC + 2);
+        cpu.Registers[1].Is(ramPos1 + (uint)(length * byteLength));
+        cpu.Registers[2].Is(value);
+        cpu.Registers[3].Is(0u);
+        Enumerable.Range(0, (int)length)
+            .Select(i => memory.Read((uint)(ramPos1 + byteLength * i), byteLength))
+            .ToArray()
+            .Is(Enumerable.Repeat(expectedValue, (int)length));
     }
 
     [Test]
@@ -1129,7 +2042,6 @@ public class RXv1InstrunctionTest {
         cpu.PSW_s.Is(expS);
     }
 
-
     [Test]
     [TestCase( true, 6u, unchecked((int)0xFF1122EE), 6u)]
     [TestCase(false, 6u, unchecked((int)0xFF1122EE), 0xFF1122EEu)]
@@ -1169,47 +2081,118 @@ public class RXv1InstrunctionTest {
         cpu.PSW_o.Is(expO);
     }
 
-
-    /*
-    TST のテスト　RS
-        var address = 0x10u;  //アドレスは1~10までのランダム
-        var a = 0xCCDDEEFFu;  //
-        var b = 0x11223344u;
-        memory.Write(address, 4, a);//size 指定乱数作成でいけるかも？
-        cpu.Registers[1] = address;
-        cpu.Registers[2] = b;
-        RunOpcode(XCHG(new RegRef(R1, MemEx.L), R2));
-        cpu.Registers[2].Is(a);
-        memory.Read(address, 4).Is(b);
-    */
     [Test]
-    public void TSTRS_Test()
-    {
-        /*
-        //addr指定
-        uint addrA = Convert.ToUInt32(random_generate.NextInt64(1,10));
-        uint addrB;
-        do
-        {
-            addrB = Convert.ToUInt32(random_generate.NextInt64(1,10));
-        }while(addrA == addrB);
-        */
-        //ランダムネーム
-        var address = 0x3u;
-        var a = 0xCCDDEEFFu;
-        var b = 0x11223344u;
-        memory.Write(address, 4, a);
-        cpu.Registers[1] = address;
-        cpu.Registers[2] = b;
-        //Reg reg = (Reg)Enum.ToObject(typeof(Reg), 2);
-        
-        RunOpcode(XCHG (new RelRef8(displacement:8,R1,MemEx.B), R2));
-        //cpu.Registers[2].Is(a&b);
-        memory.Read(address, 4).Is(b);
-
-
+    public void SUNTIL_Test(
+        [Values(MemEx.B, MemEx.W, MemEx.L)]MemEx size,
+        [Random(uint.MinValue, uint.MaxValue, 5)] uint value,
+        [Random(1u, 20u, 5)] uint length) {
+        var random = TestContext.CurrentContext.Random;
+        var byteLength = size switch {
+            MemEx.B => 1,
+            MemEx.W => 2,
+            MemEx.L => 4,
+            _ => throw new NotSupportedException(size.ToString())
+        };
+        var expectedValue = size switch {
+            MemEx.B => (byte)value,
+            MemEx.W => (ushort)value,
+            MemEx.L => value,
+            _ => throw new NotSupportedException(size.ToString())
+        };
+        var maxValue = (uint)((1L << (8 * byteLength)) - 1);
+        var datas = random.NextBool()
+            ? Enumerable.Range(0, (int)(length - 1))
+            .Select(_ => random.NextUInt(0, maxValue))
+            .Append(expectedValue)
+            .ToArray()
+            : Enumerable.Range(0, (int)length)
+            .Select(_ => random.NextUInt(0, maxValue))
+            .ToArray();
+        var pos1 = 0u;
+        for (int i = 0; i < datas.Length; i++) {
+            memory.Write((uint)(pos1 + (byteLength * i)), byteLength, datas[i]);
+        }
+        var ramPos1 = ramBeginAddress + pos1;
+        cpu.Registers[1] = ramPos1;
+        cpu.Registers[2] = expectedValue;
+        cpu.Registers[3] = length;
+        var prevPC = cpu.PC;
+        int count;
+        for (count = 0; count < length - 1 && datas[count] != expectedValue; count++) {
+            RunOpcode(SUNTIL(size));
+            // 異なる値が見つかるもしくは最後まで探索するまでプログラムカウンタはインクリメントされないことを確認する
+            cpu.PC.Is(prevPC);
+            // 比較している位置がインクリメントされていることを確認する
+            cpu.Registers[1].Is(ramPos1 + (uint)((count + 1) * byteLength));
+            // 変化していないことを確認する
+            cpu.Registers[2].Is(expectedValue);
+            cpu.PSW_z.Is(false);
+            // TODO Cフラグがどの様に変化するのが正しいのかを確認する
+            // cpu.PSW_c.Is();
+        }
+        RunOpcode(SUNTIL(size));
+        cpu.PC.Is(prevPC + 2);
+        cpu.Registers[1].Is(ramPos1 + (uint)((count + 1) * byteLength));
+        cpu.Registers[2].Is(expectedValue);
+        cpu.Registers[3].Is((uint)(length - count - 1));
+        cpu.PSW_z.Is(datas[count] == expectedValue);
     }
 
+    [Test]
+    public void SWHILE_Test(
+        [Values(MemEx.B, MemEx.W, MemEx.L)]MemEx size,
+        [Random(uint.MinValue, uint.MaxValue, 5)] uint value,
+        [Random(1u, 20u, 5)] uint length) {
+        var random = TestContext.CurrentContext.Random;
+        var byteLength = size switch {
+            MemEx.B => 1,
+            MemEx.W => 2,
+            MemEx.L => 4,
+            _ => throw new NotSupportedException(size.ToString())
+        };
+        var expectedValue = size switch {
+            MemEx.B => (byte)value,
+            MemEx.W => (ushort)value,
+            MemEx.L => value,
+            _ => throw new NotSupportedException(size.ToString())
+        };
+        var maxValue = (uint)((1L << (8 * byteLength)) - 1);
+        var datas = random.NextBool()
+            // 異なる値を含む場合
+            ? Enumerable.Repeat(expectedValue, (int)(length - 1))
+            .Append(~expectedValue)
+            .ToArray()
+            // 同じ値だけの場合
+            : Enumerable.Repeat(expectedValue, (int)length)
+            .ToArray();
+        var pos1 = 0u;
+        for (int i = 0; i < datas.Length; i++) {
+            memory.Write((uint)(pos1 + (byteLength * i)), byteLength, datas[i]);
+        }
+        var ramPos1 = ramBeginAddress + pos1;
+        cpu.Registers[1] = ramPos1;
+        cpu.Registers[2] = expectedValue;
+        cpu.Registers[3] = length;
+        var prevPC = cpu.PC;
+        int count;
+        for (count = 0; count < length - 1 && datas[count] == expectedValue; count++) {
+            RunOpcode(SWHILE(size));
+            cpu.PC.Is(prevPC);
+            // 比較している位置がインクリメントされていることを確認する
+            cpu.Registers[1].Is(ramPos1 + (uint)((count + 1) * byteLength));
+            // 変化していないことを確認する
+            cpu.Registers[2].Is(expectedValue);
+            cpu.PSW_z.Is(true);
+            // TODO Cフラグがどの様に変化するのが正しいのかを確認する
+            // cpu.PSW_c.Is();
+        }
+        RunOpcode(SWHILE(size));
+        cpu.PC.Is(prevPC + 2);
+        cpu.Registers[1].Is(ramPos1 + (uint)((count + 1) * byteLength));
+        cpu.Registers[2].Is(expectedValue);
+        cpu.Registers[3].Is((uint)(length - count - 1));
+        cpu.PSW_z.Is(datas[count] == expectedValue);
+    }
 
 
     [Test]
