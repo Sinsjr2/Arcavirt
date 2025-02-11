@@ -1739,7 +1739,7 @@ namespace RX {
                     Registers[operand[0]] = operand[2];
                     break;
                 case OpCode.MOV_rr:
-                    Registers[operand[2]] = BitOperation.GetLowerBits(Registers[operand[1]], 1u << (int)operand[0]);
+                    Registers[operand[2]] = SignExtension(true, BitOperation.GetLowerBits(Registers[operand[1]], 1u << (int)operand[0]), (int)operand[0]);
                     break;
                 case OpCode.MOV_im_p:
                     StoreDestOperand(operand[1], operand[0], operand[2], default, operand[4]);

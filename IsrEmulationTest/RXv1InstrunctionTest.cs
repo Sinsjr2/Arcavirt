@@ -98,21 +98,20 @@ public class RXv1InstrunctionTest {
         StoreDestOperand(cpu.Registers, busManager, MemEx.L, dest.TargetReg, dest.LD, dest.Displacement, value);
     }
 
-    static StdRegAddressing GetRandomStdRegAddressing(MemEx size, LengthOfDisplacement ld) {
+    static StdRegAddressing GetRandomStdRegAddressing(Reg reg, MemEx size, LengthOfDisplacement ld) {
         var random = TestContext.CurrentContext.Random;
-        var reg = random.Next(1, 15);
         switch (ld) {
             case LengthOfDisplacement.Reg:
-                return (Reg)reg;
+                return reg;
             case LengthOfDisplacement.RefReg:
-                return new RegRef((Reg)reg, size);
+                return new RegRef(reg, size);
             case LengthOfDisplacement.DSP8Reg: {
                 var dsp = random.NextByte();
-                return new RelRef8(dsp, (Reg)reg, size);
+                return new RelRef8(dsp, reg, size);
             }
             case LengthOfDisplacement.DSP16Reg: {
                 var dsp = random.NextUShort(0, 300);
-                return new RelRef16(dsp, (Reg)reg, size);
+                return new RelRef16(dsp, reg, size);
             }
             default:
                 throw new ArgumentException($"{ld} not supported");
@@ -921,6 +920,94 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
+    public void MOV_u8ir_Test([Random(byte.MinValue, byte.MaxValue, 5)]byte src) {
+        var random = TestContext.CurrentContext.Random;
+        var rd = random.NextByte(1, 15);
+        // 上書きされることを確認するために適当な値で埋める
+        cpu.Registers[rd] = random.NextUInt();
+        RunOpcode(MOV(src, (Reg)rd));
+        cpu.Registers[rd].Is(src);
+    }
+
+    [Test]
+    [TestCase(LengthOfImmediate.SIMM8, 0xFFu, 0xFFFF_FFFFu)]
+    [TestCase(LengthOfImmediate.SIMM8, 0x7Fu, 0x7Fu)]
+    [TestCase(LengthOfImmediate.SIMM16, 0xF567u, 0xFFFF_F567u)]
+    [TestCase(LengthOfImmediate.SIMM16, 0x7123u, 0x7123u)]
+    [TestCase(LengthOfImmediate.SIMM24, 0x80_1234u, 0xFF80_1234u)]
+    [TestCase(LengthOfImmediate.SIMM24, 0x71_2345u, 0x71_2345u)]
+    [TestCase(LengthOfImmediate.IMM32, 0xFF71_2345u, 0xFF71_2345u)]
+    [TestCase(LengthOfImmediate.IMM32, 0x7065_4321u, 0x7065_4321u)]
+    public void MOV_ir_Test(LengthOfImmediate li, uint src, uint expected) {
+        var random = TestContext.CurrentContext.Random;
+        var rd = random.NextByte(1, 15);
+        // 上書きされることを確認するために適当な値で埋める
+        cpu.Registers[rd] = random.NextUInt();
+        var imm = new StdImmValue(li, src);
+        RunOpcode(MOV(imm, (Reg)rd));
+        cpu.Registers[rd].Is(expected);
+    }
+
+    [Test]
+    [TestCase(MemEx.B, 0xFFFF_FF00u, 0x0u)]
+    [TestCase(MemEx.B, 0xFFu, 0xFFFF_FFFFu)]
+    [TestCase(MemEx.B, 0x7Fu, 0x7Fu)]
+    [TestCase(MemEx.B, 0x80u, 0xFFFF_FF80u)]
+    [TestCase(MemEx.B, 0x1234_5678u, 0x78u)]
+    [TestCase(MemEx.W, 0xFFFFu, 0xFFFF_FFFFu)]
+    [TestCase(MemEx.W, 0x7FFFu, 0x7FFFu)]
+    [TestCase(MemEx.W, 0x8000u, 0xFFFF_8000u)]
+    [TestCase(MemEx.W, 0xFFFF_0000u, 0x0u)]
+    [TestCase(MemEx.W, 0x1234_5678u, 0x5678u)]
+    [TestCase(MemEx.L, 0xFFFF_FFFFu, 0xFFFF_FFFFu)]
+    [TestCase(MemEx.L, 0x0u, 0x0u)]
+    [TestCase(MemEx.L, 0x1234_5678u, 0x1234_5678u)]
+    public void MOV_rr_Test(MemEx size, uint src, uint expected) {
+        var random = TestContext.CurrentContext.Random;
+        var rs = random.NextByte(1, 14);
+        var rd = random.NextByte((byte)(rs + 1), 15);
+        cpu.Registers[rs] = src;
+        // 上書きされることを確認するために適当な値で埋める
+        cpu.Registers[rd] = random.NextUInt();
+        RunOpcode(MOV(size, (Reg)rs, (Reg)rd));
+        cpu.Registers[rd].Is(expected);
+    }
+
+    [Test]
+    [TestCase(MemEx.B, 0x00u, LengthOfImmediate.SIMM8, 0xFFu, 0xFFu)]
+    [TestCase(MemEx.B, 0x00u, LengthOfImmediate.SIMM8, 0x80u, 0x80u)]
+    [TestCase(MemEx.B, 0x1234_5678u, LengthOfImmediate.SIMM8, 0xFFu, 0x1234_56FFu)]
+    [TestCase(MemEx.W, 0x00u, LengthOfImmediate.SIMM8, 0xF1u, 0xFFF1u)]
+    [TestCase(MemEx.W, 0x00u, LengthOfImmediate.SIMM8, 0x71u, 0x71u)]
+    [TestCase(MemEx.W, 0xFFFF_FFFFu, LengthOfImmediate.SIMM8, 0x0u, 0xFFFF_0000u)]
+    [TestCase(MemEx.W, 0x00u, LengthOfImmediate.SIMM16, 0xF1u, 0xF1u)]
+    [TestCase(MemEx.W, 0x00u, LengthOfImmediate.SIMM16, 0xF123u, 0xF123u)]
+    [TestCase(MemEx.W, 0xFFFF_FFFFu, LengthOfImmediate.SIMM16, 0x0u, 0xFFFF_0000u)]
+    [TestCase(MemEx.L, 0x00u, LengthOfImmediate.SIMM8, 0x80u, 0xFFFF_FF80u)]
+    [TestCase(MemEx.L, 0x00u, LengthOfImmediate.SIMM8, 0x70u, 0x70u)]
+    [TestCase(MemEx.L, 0xFFFF_FFFFu, LengthOfImmediate.SIMM8, 0x00u, 0x00u)]
+    [TestCase(MemEx.L, 0x00u, LengthOfImmediate.SIMM16, 0x7123u, 0x7123u)]
+    [TestCase(MemEx.L, 0x00u, LengthOfImmediate.SIMM16, 0x8ABCu, 0xFFFF_8ABCu)]
+    [TestCase(MemEx.L, 0xFFFF_FFFFu, LengthOfImmediate.SIMM16, 0x0u, 0x0u)]
+    [TestCase(MemEx.L, 0x00u, LengthOfImmediate.SIMM24, 0x75_1234u, 0x75_1234u)]
+    [TestCase(MemEx.L, 0x00u, LengthOfImmediate.SIMM24, 0xF5_1234u, 0xFFF5_1234u)]
+    [TestCase(MemEx.L, 0xFFFF_FFFFu, LengthOfImmediate.SIMM24, 0x0u, 0x0u)]
+    [TestCase(MemEx.L, 0x00u, LengthOfImmediate.IMM32, 0x1234_5678u, 0x1234_5678u)]
+    [TestCase(MemEx.L, 0x00u, LengthOfImmediate.IMM32, 0xFFFF_FFFFu, 0xFFFF_FFFFu)]
+    [TestCase(MemEx.L, 0xFFFF_FFFFu, LengthOfImmediate.IMM32, 0x0u, 0x0u)]
+    public void MOV_im_Test(MemEx size, uint initial, LengthOfImmediate li, uint src, uint expected) {
+        var random = TestContext.CurrentContext.Random;
+        var imm = new StdImmValue(li, src);
+        var rd = random.NextByte(1, 15);
+        var ld = (LengthOfDisplacement)random.Next(0, 2);
+        var dsp = GetRandomStdRegAddressing((Reg)rd, size, ld);
+        StoreDestOperand(cpu.Registers, busManager, MemEx.L, dsp.TargetReg, dsp.LD, dsp.Displacement, initial);
+        RunOpcode(MOV(size, imm, dsp));
+        LoadData(cpu.Registers, busManager, dsp.LD, (int)MemEx.L, dsp.Displacement, dsp.TargetReg)
+            .Is(expected);
+    }
+
+    [Test]
     public void MOVU_dsp5_reg_Test(
         [Values(MemEx.B, MemEx.W)] MemEx size,
         [Random((uint)ushort.MinValue, (uint)ushort.MaxValue, 3)] uint value,
@@ -941,7 +1028,9 @@ public class RXv1InstrunctionTest {
         [Random((uint)ushort.MinValue, (uint)ushort.MaxValue, 3)] uint value,
         [Range(0, 3)]int ld,
         [Random(1, 7, 2)]int rd) {
-        var dsp = GetRandomStdRegAddressing(size, (LengthOfDisplacement)ld);
+        var random = TestContext.CurrentContext.Random;
+        var reg = random.Next(1, 15);
+        var dsp = GetRandomStdRegAddressing((Reg)reg, size, (LengthOfDisplacement)ld);
         StoreRandomDest(dsp, 0, 300, value);
         RunOpcode(MOVU(size, dsp, (Reg)rd));
         cpu.Registers[rd].Is(BitOperation.GetLowerBits(value, GetSize(size)));
