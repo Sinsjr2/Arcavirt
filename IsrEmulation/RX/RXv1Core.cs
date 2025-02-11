@@ -2159,11 +2159,11 @@ namespace RX {
                     OpWAIT();
                     break;
                 case OpCode.XCHG_ub_rs_mr: {
-                    var src = LoadSourceOperand(operand[0], 4, operand[0], operand.Slice(3));
-                    ref var dest = ref Registers[operand[3]];
+                    var src = LoadSourceOperand(operand[2], (uint)MemEx.B, operand[0], operand.Slice(2));
+                    ref var dest = ref Registers[operand[1]];
                     var tmp = dest;
                     dest = src;
-                    StoreDestOperand((uint)MemEx.B, operand[1], operand[0], operand.Slice(3), tmp);
+                    StoreDestOperand((uint)MemEx.B, operand[0], operand[2], operand.Slice(2), tmp);
                     break;
                 }
                 case OpCode.XCHG_mr: {
