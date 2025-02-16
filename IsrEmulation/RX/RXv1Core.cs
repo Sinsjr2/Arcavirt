@@ -1749,7 +1749,10 @@ namespace RX {
                     StoreDestOperand(operand[1], operand[0], operand[2], operand.Slice(3), operand[5]);
                     break;
                 case OpCode.MOV_l_mr:
-                    Registers[operand[3]] = LoadSourceOperand(operand[0], operand[4], operand[1]);
+                    Registers[operand[2]] = SignExtension(
+                        true,
+                        LoadUnsignedSourceOperand(operand[3], operand[0], operand.Slice(4), operand[1]),
+                        (int)operand[0]);
                     break;
                 case OpCode.MOV_ar: {
                     if (operand[0] == 3) {
@@ -1760,7 +1763,7 @@ namespace RX {
                     var ri = Registers[operand[1]];
                     var rb = Registers[operand[2]];
                     var addr = rb + (ri << sz);
-                    Registers[operand[3]] = bus.Read(addr, 1 << sz);
+                    Registers[operand[3]] = SignExtension(true, bus.Read(addr, 1 << sz), sz);
                     break;
                 }
                 case OpCode.MOV_r_dsp:

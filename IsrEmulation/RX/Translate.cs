@@ -384,6 +384,7 @@ namespace RX {
                 // (9) (sz, rs, rd, ld, dsp)
                 // (9) MOV.<bwl> ([Rs]/dsp:8[Rs]/dsp:16[Rs]) rd
                 CreateGroup(OpCode.MOV_l_mr, "11.. 11.. .... ....", new[] {
+                        "1100 1100 .... ....",
                         "1100 1101 .... ....",
                         "1100 1110 .... ....",
                         "1101 1100 .... ....",

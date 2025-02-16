@@ -724,17 +724,17 @@ namespace RX {
 
         public static Instruction32 MOV(MemEx sz, StdRegAddressing src, Reg dest) {
             AssertSizeBWL(sz);
-            return Create(OpCode.MOV_l_mr, (uint)sz, (uint)src.LD, (uint)src.TargetReg, (uint)dest, src.Displacement);
+            return Create(OpCode.MOV_l_mr, (uint)sz, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement);
         }
 
-        public static Instruction32 MOV_indexed(MemEx sz, Reg src, UInt4 ni, Reg dest) {
+        public static Instruction32 MOV_indexed(MemEx sz, Reg src, Reg ni, Reg dest) {
             AssertSizeBWL(sz);
-            return Create(OpCode.MOV_ar, (uint)sz, ni.Value, (uint)dest, (uint)src);
+            return Create(OpCode.MOV_ar, (uint)sz, (uint)ni, (uint)src, (uint)dest);
         }
 
         public static Instruction32 MOV(MemEx sz, Reg src, StdRegAddressing dest) {
             AssertSizeBWL(sz);
-            return Create(OpCode.MOV_r_dsp, (uint)sz, (uint)dest.LD, (uint)dest.TargetReg, (uint)src, dest.Displacement);
+            return Create(OpCode.MOV_r_dsp, (uint)sz, (uint)dest.TargetReg, (uint)src, (uint)dest.LD, dest.Displacement);
         }
 
         public static Instruction32 MOV_indexed(MemEx sz, UInt4 ni, Reg src, Reg dest) {

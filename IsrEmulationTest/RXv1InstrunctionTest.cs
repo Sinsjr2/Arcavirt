@@ -913,7 +913,7 @@ public class RXv1InstrunctionTest {
         var initial = random.NextUInt();
         var dsp = new RegAddressing5(dspOffset, (Reg)rd);
         // mov命令は指定したサイズで上書き出来ていることを確認するため、乱数を設定する
-        StoreDestOperand(cpu.Registers, busManager, MemEx.L, dsp.TargetReg, LengthOfDisplacement.DSP8Reg, dsp.Displacement, initial);
+        StoreRandomDest(new RelRef8(dsp.Displacement, dsp.TargetReg, MemEx.L), 0, 300, initial);
         RunOpcode(MOV(sz, src, dsp));
         LoadData(cpu.Registers, busManager, LengthOfDisplacement.DSP8Reg, (uint)sz, dsp.Displacement, dsp.TargetReg)
         .Is(expected);
@@ -1001,8 +1001,86 @@ public class RXv1InstrunctionTest {
         var rd = random.NextByte(1, 15);
         var ld = (LengthOfDisplacement)random.Next(0, 2);
         var dsp = GetRandomStdRegAddressing((Reg)rd, size, ld);
-        StoreDestOperand(cpu.Registers, busManager, MemEx.L, dsp.TargetReg, dsp.LD, dsp.Displacement, initial);
+        StoreRandomDest(dsp, 0, 300, initial);
         RunOpcode(MOV(size, imm, dsp));
+        LoadData(cpu.Registers, busManager, dsp.LD, (int)MemEx.L, dsp.Displacement, dsp.TargetReg)
+            .Is(expected);
+    }
+
+    [Test]
+    [TestCase(MemEx.B, 0x71u, 0x71u)]
+    [TestCase(MemEx.B, 0x82u, 0xFFFF_FF82u)]
+    [TestCase(MemEx.B, 0x1234_5678u, 0x78u)]
+    [TestCase(MemEx.W, 0x75FFu, 0x75FFu)]
+    [TestCase(MemEx.W, 0x8123u, 0xFFFF_8123u)]
+    [TestCase(MemEx.W, 0x1234_5678u, 0x5678u)]
+    [TestCase(MemEx.L, 0x1234_5678u, 0x1234_5678u)]
+    [TestCase(MemEx.L, 0x0u, 0x0u)]
+    [TestCase(MemEx.L, 0xFFFF_FFFFu, 0xFFFF_FFFFu)]
+    public void MOV_l_mr_Test(MemEx size, uint src, uint expected) {
+        var random = TestContext.CurrentContext.Random;
+        var rs = random.NextByte(1, 14);
+        var rd = random.NextByte((byte)(rs + 1), 15);
+        var ld = (LengthOfDisplacement)random.Next(0, 2);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, size, ld);
+        StoreRandomDest(dsp, 0, 300, src);
+        RunOpcode(MOV(size, dsp, (Reg)rd));
+        cpu.Registers[rd].Is(expected);
+        // src が変化していないことを確認する
+        LoadData(cpu.Registers, busManager, dsp.LD, (int)MemEx.L, dsp.Displacement, dsp.TargetReg)
+            .Is(src);
+    }
+
+    [Test]
+    [TestCase(MemEx.B, 0x1234_5678u, 0x78u)]
+    [TestCase(MemEx.B, 0x70u, 0x70u)]
+    [TestCase(MemEx.B, 0x80u, 0xFFFF_FF80u)]
+    [TestCase(MemEx.W, 0x1234_5678u, 0x5678u)]
+    [TestCase(MemEx.W, 0x7012u, 0x7012u)]
+    [TestCase(MemEx.W, 0x8012u, 0xFFFF_8012u)]
+    [TestCase(MemEx.L, 0x1234_5678u, 0x1234_5678u)]
+    [TestCase(MemEx.L, 0x0u, 0x0u)]
+    [TestCase(MemEx.L, 0xFFFF_FFFF, 0xFFFF_FFFF)]
+    public void MOV_ar_Test(MemEx sz, uint src, uint expected) {
+        var random = TestContext.CurrentContext.Random;
+        var ri = random.NextByte(1, 13);
+        var rb = random.NextByte((byte)(ri + 1), 14);
+        var rd = random.NextByte((byte)(rb + 1), 15);
+
+        var baseAddr = random.NextUInt(0, 150);
+        var indexValue = random.NextUInt(0, 10);
+        var addr = baseAddr + (indexValue << (int)sz);
+        cpu.Registers[rb] = baseAddr;
+        cpu.Registers[ri] = indexValue;
+        busManager.Write(addr, 4, src);
+        RunOpcode(MOV_indexed(sz, (Reg)rb, (Reg)ri, (Reg)rd));
+        cpu.Registers[rd].Is(expected);
+        // 変化していないことを確認する
+        busManager.Read(addr, 4).Is(src);
+    }
+
+    [Test]
+    [TestCase(MemEx.B, 0x0u, 0x1234_5678u, 0x78u)]
+    [TestCase(MemEx.B, 0x0u, 0x80u, 0x80u)]
+    [TestCase(MemEx.B, 0x0u, 0xFFu, 0xFFu)]
+    [TestCase(MemEx.B, 0xFFFF_FFFFu, 0x0u, 0xFFFF_FF00u)]
+    [TestCase(MemEx.B, 0x0u, 0xFFFF_FFFFu, 0xFFu)]
+    [TestCase(MemEx.B, 0x5678_9ABCu, 0x1234_5678u, 0x5678_9A78u)]
+    [TestCase(MemEx.W, 0x0u, 0x1234_5678u, 0x5678u)]
+    [TestCase(MemEx.W, 0x0u, 0xFFFFu, 0xFFFFu)]
+    [TestCase(MemEx.W, 0x5678_9ABCu, 0x1234_5678u, 0x5678_5678u)]
+    [TestCase(MemEx.L, 0x0u, 0x1234_5678u, 0x1234_5678u)]
+    [TestCase(MemEx.L, 0xFFFF_FFFFu, 0x0u, 0u)]
+    [TestCase(MemEx.L, 0x0u, 0xFFFF_FFFFu, 0x0FFFF_FFFF)]
+    public void MOV_r_dsp_Test(MemEx sz, uint initial, uint src, uint expected) {
+        var random = TestContext.CurrentContext.Random;
+        var rs = random.NextByte(1, 14);
+        var rd = random.NextByte((byte)(rs + 1), 15);
+        var ld = (LengthOfDisplacement)random.Next(0, 2);
+        var dsp = GetRandomStdRegAddressing((Reg)rd, sz, ld);
+        cpu.Registers[rs] = src;
+        StoreRandomDest(dsp, 0, 300, initial);
+        RunOpcode(MOV(sz, (Reg)rs, dsp));
         LoadData(cpu.Registers, busManager, dsp.LD, (int)MemEx.L, dsp.Displacement, dsp.TargetReg)
             .Is(expected);
     }
