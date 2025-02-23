@@ -1346,14 +1346,14 @@ namespace RX {
                     break;
                 }
                 case OpCode.ADD_ub_rs_mr: {
-                    var src = LoadSourceOperand(operand[0], 4, operand[1], operand.Slice(3));
-                    ref var dest = ref Registers[operand[2]];
+                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                    ref var dest = ref Registers[operand[1]];
                     dest = OpADD(src, dest);
                     break;
                 }
                 case OpCode.ADD_mr: {
-                    var src = LoadSourceOperand(operand[1], operand[0], operand[2], operand.Slice(4));
-                    ref var dest = ref Registers[operand[3]];
+                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                    ref var dest = ref Registers[operand[2]];
                     dest = OpADD(src, dest);
                     break;
                 }
