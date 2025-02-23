@@ -106,11 +106,11 @@ public class RXv1InstrunctionTest {
             case LengthOfDisplacement.RefReg:
                 return new RegRef(reg, size);
             case LengthOfDisplacement.DSP8Reg: {
-                var dsp = random.NextByte();
+                var dsp = random.NextByte(0, 10);
                 return new RelRef8(dsp, reg, size);
             }
             case LengthOfDisplacement.DSP16Reg: {
-                var dsp = random.NextUShort(0, 300);
+                var dsp = random.NextUShort(0, 10);
                 return new RelRef16(dsp, reg, size);
             }
             default:
@@ -1057,6 +1057,7 @@ public class RXv1InstrunctionTest {
         cpu.Registers[rd].Is(expected);
         // 変化していないことを確認する
         busManager.Read(addr, 4).Is(src);
+        cpu.Registers[ri].Is(indexValue);
     }
 
     [Test]
@@ -1086,6 +1087,145 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
+    [TestCase(MemEx.B, 0x00u, 0x71u, 0x71u)]
+    [TestCase(MemEx.B, 0x00u, 0xFFu, 0xFFu)]
+    [TestCase(MemEx.B, 0x00u, 0x1234_5678u, 0x78u)]
+    [TestCase(MemEx.B, 0xFFFF_FFFFu, 0x00u, 0xFFFF_FF00u)]
+    [TestCase(MemEx.B, 0xFFFF_FFFFu, 0x23u, 0xFFFF_FF23u)]
+    [TestCase(MemEx.W, 0x00u, 0x1234_5678u, 0x5678u)]
+    [TestCase(MemEx.W, 0xFFFF_FFFFu, 0x1234_5678u, 0xFFFF_5678u)]
+    [TestCase(MemEx.W, 0xFFFF_FFFFu, 0x00u, 0xFFFF_0000u)]
+    [TestCase(MemEx.L, 0xFFFF_FFFFu, 0x00u, 0x00u)]
+    [TestCase(MemEx.L, 0x00u, 0x1234_5678u, 0x1234_5678u)]
+    [TestCase(MemEx.L, 0x1234_5678u, 0xABCD_EF01u, 0xABCD_EF01u)]
+    public void MOV_ra_Test(MemEx sz, uint initial, uint src, uint expected) {
+        var random = TestContext.CurrentContext.Random;
+        var rs = random.NextByte(1, 13);
+        var ri = random.NextByte((byte)(rs + 1), 14);
+        var rb = random.NextByte((byte)(ri + 1), 15);
+
+        var baseAddr = random.NextUInt(0, 150);
+        var indexValue = random.NextUInt(0, 10);
+        var addr = baseAddr + (indexValue << (int)sz);
+        cpu.Registers[rb] = baseAddr;
+        cpu.Registers[ri] = indexValue;
+        busManager.Write(addr, 4, initial);
+        cpu.Registers[rs] = src;
+        RunOpcode(MOV_indexedDest(sz, (Reg)rs, (Reg)ri, (Reg)rb));
+        busManager.Read(addr, 4).Is(expected);
+    }
+
+    [Test]
+    [TestCase(MemEx.B, 0x00u, 0xFEu, 0xFEu)]
+    [TestCase(MemEx.B, 0x00u, 0x1234u, 0x34u)]
+    [TestCase(MemEx.B, 0xFFFF_FFFF, 0x00u, 0xFFFF_FF00u)]
+    [TestCase(MemEx.W, 0x00u, 0xFEDCu, 0xFEDCu)]
+    [TestCase(MemEx.W, 0x00u, 0x1234_5678u, 0x5678u)]
+    [TestCase(MemEx.W, 0xFFFF_FFFFu, 0xFEDCu, 0xFFFF_FEDCu)]
+    [TestCase(MemEx.L, 0x00u, 0x1234_5678u, 0x1234_5678u)]
+    [TestCase(MemEx.L, 0xFFFF_FFFFu, 0x1234_5678u, 0x1234_5678u)]
+    [TestCase(MemEx.L, 0x1248_2356u, 0x00u, 0x00u)]
+    public void MOV_mm_Test(MemEx sz, uint initial, uint src, uint expected) {
+        var random = TestContext.CurrentContext.Random;
+        var rs = random.NextByte(1, 14);
+        var ldS = (LengthOfDisplacement)random.Next(0, 2);
+        var dspS = GetRandomStdRegAddressing((Reg)rs, sz, ldS);
+
+        var rd = random.NextByte((byte)(rs + 1), 15);
+        var ldD = (LengthOfDisplacement)random.Next(0, 2);
+        var dspD = GetRandomStdRegAddressing((Reg)rd, sz, ldD);
+
+        StoreRandomDest(dspD, 0, 100, initial);
+        StoreRandomDest(dspS, 160, 200, src);
+        RunOpcode(MOV(sz, dspS, dspD));
+        LoadData(cpu.Registers, busManager, dspD.LD, (int)MemEx.L, dspD.Displacement, dspD.TargetReg)
+            .Is(expected);        
+    }
+
+    [Test]
+    [TestCase(Addressing.PostInc, MemEx.B, 0x0u, 0xFFu, 1, 0xFFu)]
+    [TestCase(Addressing.PostInc, MemEx.B, 0x0u, 0xFFFF_FFFFu, 1, 0xFFu)]
+    [TestCase(Addressing.PostInc, MemEx.B, 0xFFu, 0x0u, 1, 0x0u)]
+    [TestCase(Addressing.PostInc, MemEx.B, 0xFFu, 0xFFFF_FF00u, 1, 0x0u)]
+    [TestCase(Addressing.PostInc, MemEx.B, 0xFFFF_FFFFu, 0x0u, 1, 0xFFFF_FF00u)]
+    [TestCase(Addressing.PostInc, MemEx.B, 0x0u, 0x12u, 1, 0x12u)]
+    [TestCase(Addressing.PostInc, MemEx.W, 0x0u, 0xFFFFu, 2, 0xFFFFu)]
+    [TestCase(Addressing.PostInc, MemEx.W, 0x0u, 0xFFFF_0000u, 2, 0x00u)]
+    [TestCase(Addressing.PostInc, MemEx.W, 0x0u, 0x1234u, 2, 0x1234u)]
+    [TestCase(Addressing.PostInc, MemEx.W, 0xFFFF_FFFFu, 0x0u, 2, 0xFFFF_0000u)]
+    [TestCase(Addressing.PostInc, MemEx.W, 0xFFFF_FFFFu, 0x1234u, 2, 0xFFFF_1234u)]
+    [TestCase(Addressing.PostInc, MemEx.L, 0x0u, 0x1234_5678u, 4, 0x1234_5678u)]
+    [TestCase(Addressing.PostInc, MemEx.L, 0xFFFF_FFFFu, 0x0u, 4, 0x0u)]
+    [TestCase(Addressing.PreDec, MemEx.B, 0x0u, 0xFFu, -1, 0xFFu)]
+    [TestCase(Addressing.PreDec, MemEx.B, 0xFFFF_FFFFu, 0x0u, -1, 0xFFFF_FF00u)]
+    [TestCase(Addressing.PreDec, MemEx.B, 0x0u, 0xABu, -1, 0xABu)]
+    [TestCase(Addressing.PreDec, MemEx.B, 0x0u, 0x1234_5678u, -1, 0x78u)]
+    [TestCase(Addressing.PreDec, MemEx.W, 0x0u, 0xFFFFu, -2, 0xFFFFu)]
+    [TestCase(Addressing.PreDec, MemEx.W, 0xFFFF_FFFFu, 0x0u, -2, 0xFFFF_0000u)]
+    [TestCase(Addressing.PreDec, MemEx.W, 0x0u, 0x1234_5678u, -2, 0x5678u)]
+    [TestCase(Addressing.PreDec, MemEx.L, 0x0u, 0x1234_5678u, -4, 0x1234_5678u)]
+    [TestCase(Addressing.PreDec, MemEx.L, 0xFFFF_FFFFu, 0x0u, -4, 0x0u)]
+    [TestCase(Addressing.PreDec, MemEx.L, 0x0u, 0xFFFF_FFFFu, -4, 0xFFFF_FFFFu)]
+    public void MOV_rp_Test(Addressing ad, MemEx sz, uint initial, uint src, int afterAddrOffset, uint expected) {
+        var random = TestContext.CurrentContext.Random;
+        var rs = random.Next(1, 14);
+        var rd = random.Next(rs + 1, 15);
+        var addr = random.Next(20, 260);
+
+        busManager.Write((uint)addr, 4, initial);
+        cpu.Registers[rs] = src;
+        cpu.Registers[rd] = (uint)addr;
+
+        RunOpcode(MOV(sz, (Reg)rs, ad, (Reg)rd));
+        cpu.Registers[rd].Is((uint)(addr + afterAddrOffset));
+        busManager.Read((uint)(addr + (ad == Addressing.PreDec ? afterAddrOffset : 0)), 4).Is(expected);
+    }
+
+    [Test]
+    [TestCase(Addressing.PostInc, MemEx.B, 0x1u, 1, 0x1u)]
+    [TestCase(Addressing.PostInc, MemEx.B, 0x7Fu, 1, 0x7Fu)]
+    [TestCase(Addressing.PostInc, MemEx.B, 0x1234_5678u, 1, 0x78u)]
+    [TestCase(Addressing.PostInc, MemEx.B, 0x80u, 1, 0xFFFF_FF80u)]
+    [TestCase(Addressing.PostInc, MemEx.B, 0xFFu, 1, 0xFFFF_FFFFu)]
+    [TestCase(Addressing.PostInc, MemEx.W, 0x1234_5678u, 2, 0x5678u)]
+    [TestCase(Addressing.PostInc, MemEx.W, 0x70FFu, 2, 0x70FFu)]
+    [TestCase(Addressing.PostInc, MemEx.W, 0x8000u, 2, 0xFFFF_8000u)]
+    [TestCase(Addressing.PostInc, MemEx.W, 0xFFFF_0000u, 2, 0x0u)]
+    [TestCase(Addressing.PostInc, MemEx.W, 0xFFFFu, 2, 0xFFFF_FFFFu)]
+    [TestCase(Addressing.PostInc, MemEx.L, 0x1234_5678u, 4, 0x1234_5678u)]
+    [TestCase(Addressing.PostInc, MemEx.L, 0xFFFF_FFFFu, 4, 0xFFFF_FFFFu)]
+    [TestCase(Addressing.PostInc, MemEx.L, 0x0u, 4, 0x0u)]
+    [TestCase(Addressing.PostInc, MemEx.L, 0x7FFF_FFFFu, 4, 0x7FFF_FFFFu)]
+    [TestCase(Addressing.PreDec, MemEx.B, 0x1u, -1, 0x1u)]
+    [TestCase(Addressing.PreDec, MemEx.B, 0x7Fu, -1, 0x7Fu)]
+    [TestCase(Addressing.PreDec, MemEx.B, 0x80u, -1, 0xFFFF_FF80u)]
+    [TestCase(Addressing.PreDec, MemEx.B, 0x1234_5680u, -1, 0xFFFF_FF80u)]
+    [TestCase(Addressing.PreDec, MemEx.B, 0x0u, -1, 0x0u)]
+    [TestCase(Addressing.PreDec, MemEx.W, 0x0u, -2, 0x0u)]
+    [TestCase(Addressing.PreDec, MemEx.W, 0x7FFFu, -2, 0x7FFFu)]
+    [TestCase(Addressing.PreDec, MemEx.W, 0x8000u, -2, 0xFFFF_8000u)]
+    [TestCase(Addressing.PreDec, MemEx.W, 0x1234_8000u, -2, 0xFFFF_8000u)]
+    [TestCase(Addressing.PreDec, MemEx.W, 0xFFFF_6787u, -2, 0x6787u)]
+    [TestCase(Addressing.PreDec, MemEx.L, 0xFFFF_FFFFu, -4, 0xFFFF_FFFFu)]
+    [TestCase(Addressing.PreDec, MemEx.L, 0x1234_5678u, -4, 0x1234_5678u)]
+    [TestCase(Addressing.PreDec, MemEx.L, 0x7234_5678u, -4, 0x7234_5678u)]
+    [TestCase(Addressing.PreDec, MemEx.L, 0x0u, -4, 0x0u)]
+    public void MOV_pr_Test(Addressing ad, MemEx sz, uint src, int afterAddrOffset, uint expected) {
+        var random = TestContext.CurrentContext.Random;
+        var rs = random.Next(1, 14);
+        var rd = random.Next(rs + 1, 15);
+        var addr = random.Next(20, 260);
+
+        busManager.Write((uint)(addr + (ad == Addressing.PreDec ? afterAddrOffset : 0)), 4, src);
+        cpu.Registers[rs] = (uint)addr;
+        cpu.Registers[rd] = 0;
+
+        RunOpcode(MOV(sz, ad, (Reg)rs, (Reg)rd));
+        cpu.Registers[rs].Is((uint)(addr + afterAddrOffset));
+        cpu.Registers[rd].Is(expected);
+    }
+
+    [Test]
     public void MOVU_dsp5_reg_Test(
         [Values(MemEx.B, MemEx.W)] MemEx size,
         [Random((uint)ushort.MinValue, (uint)ushort.MaxValue, 3)] uint value,
@@ -1112,6 +1252,67 @@ public class RXv1InstrunctionTest {
         StoreRandomDest(dsp, 0, 300, value);
         RunOpcode(MOVU(size, dsp, (Reg)rd));
         cpu.Registers[rd].Is(BitOperation.GetLowerBits(value, GetSize(size)));
+    }
+
+    [TestCase(MemEx.B, 0x0u, 0x0u)]
+    [TestCase(MemEx.B, 0x1u, 0x1u)]
+    [TestCase(MemEx.B, 0x7Fu, 0x7Fu)]
+    [TestCase(MemEx.B, 0x80u, 0x80u)]
+    [TestCase(MemEx.B, 0xFFFF_FF80u, 0x80u)]
+    [TestCase(MemEx.B, 0x1234_5678u, 0x78u)]
+    [TestCase(MemEx.B, 0xFFu, 0xFFu)]
+    [TestCase(MemEx.B, 0xFFFF_FF00u, 0x0u)]
+    [TestCase(MemEx.W, 0x0u, 0x0u)]
+    [TestCase(MemEx.W, 0x1u, 0x1u)]
+    [TestCase(MemEx.W, 0x7Fu, 0x7Fu)]
+    [TestCase(MemEx.W, 0x7FFFu, 0x7FFFu)]
+    [TestCase(MemEx.W, 0x8000u, 0x8000u)]
+    [TestCase(MemEx.W, 0xFFFF_8000u, 0x8000u)]
+    [TestCase(MemEx.W, 0x1234_5678u, 0x5678u)]
+    [TestCase(MemEx.W, 0xFFFF_FFFFu, 0xFFFFu)]
+    public void MOVU_ar_Test(MemEx sz, uint src, uint expected) {
+        var random = TestContext.CurrentContext.Random;
+        var ri = random.NextByte(1, 13);
+        var rb = random.NextByte((byte)(ri + 1), 14);
+        var rd = random.NextByte((byte)(rb + 1), 15);
+
+        var baseAddr = random.NextUInt(0, 150);
+        var indexValue = random.NextUInt(0, 10);
+        var addr = baseAddr + (indexValue << (int)sz);
+        cpu.Registers[rb] = baseAddr;
+        cpu.Registers[ri] = indexValue;
+        busManager.Write(addr, 4, src);
+        RunOpcode(MOVU_indexed(sz, (Reg)ri, (Reg)rb, (Reg)rd));
+        cpu.Registers[rd].Is(expected);
+        // 変化していないことを確認する
+        busManager.Read(addr, 4).Is(src);
+        cpu.Registers[ri].Is(indexValue);
+    }
+
+    [Test]
+    [TestCase(Addressing.PostInc, MemEx.B, 0x0u, 1, 0x0u)]
+    [TestCase(Addressing.PostInc, MemEx.B, 0x7Fu, 1, 0x7Fu)]
+    [TestCase(Addressing.PostInc, MemEx.B, 0x80u, 1, 0x80u)]
+    [TestCase(Addressing.PostInc, MemEx.B, 0xFFFF_FFFFu, 1, 0xFFu)]
+    [TestCase(Addressing.PostInc, MemEx.B, 0x1234_5678u, 1, 0x78u)]
+    [TestCase(Addressing.PostInc, MemEx.W, 0x0u, 2, 0x0u)]
+    [TestCase(Addressing.PostInc, MemEx.W, 0x1234_5678u, 2, 0x5678u)]
+    [TestCase(Addressing.PostInc, MemEx.W, 0x7FFFu, 2, 0x7FFFu)]
+    [TestCase(Addressing.PostInc, MemEx.W, 0x8000u, 2, 0x8000u)]
+    [TestCase(Addressing.PostInc, MemEx.W, 0xFFFF_FFFFu, 2, 0xFFFFu)]
+    public void MOVU_pr_Test(Addressing ad, MemEx sz, uint src, int afterAddrOffset, uint expected) {
+        var random = TestContext.CurrentContext.Random;
+        var rs = random.Next(1, 14);
+        var rd = random.Next(rs + 1, 15);
+        var addr = random.Next(20, 260);
+
+        busManager.Write((uint)(addr + (ad == Addressing.PreDec ? afterAddrOffset : 0)), 4, src);
+        cpu.Registers[rs] = (uint)addr;
+        cpu.Registers[rd] = 0;
+
+        RunOpcode(MOVU(sz, ad, (Reg)rs, (Reg)rd));
+        cpu.Registers[rs].Is((uint)(addr + afterAddrOffset));
+        cpu.Registers[rd].Is(expected);
     }
 
     [Test]

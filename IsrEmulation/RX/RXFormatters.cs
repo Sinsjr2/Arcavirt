@@ -143,12 +143,13 @@ namespace RX {
             var byteLengthA = DisplacementValueFormatter.GetDspByteLength(ldA);
             var byteLengthB = DisplacementValueFormatter.GetDspByteLength(ldB);
 
-            writer.WriteMaskedUInteger(dspReadSize, 0b11U << shiftA, ldA << shiftA);
-            writer.WriteMaskedUInteger(dspReadSize, 0b11U << shiftB, ldB << shiftB);
+            writer.SetMaskedUInteger(dspReadSize, 0b11U << shiftA, ldA << shiftA);
+            writer.SetMaskedUInteger(dspReadSize, 0b11U << shiftB, ldB << shiftB);
+            writer.Skip(dspReadSize);
             if (byteLengthA != 0) {
                 writer.WriteUInteger(byteLengthA, dspA);
             }
-            if (byteLengthA != 0) {
+            if (byteLengthB != 0) {
                 writer.WriteUInteger(byteLengthB, dspB);
             }
         }

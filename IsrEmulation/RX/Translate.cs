@@ -446,7 +446,7 @@ namespace RX {
                 Create(OpCode.MOV_rp, "1111 1101 0010 0... .... ....", new Composite(new LEUInt(10, 1, 2), new LEUInt(8, 2, 2), new Skip(2), new LEUInt(4, 4, 1), new LEUInt(0, 4, 1), new Skip(1))),
                 // (15) MOV.l [rs+], rd
                 // (15) MOV.l [-rs], rd
-                Create(OpCode.MOV_pr, "1111 1101 0010 1... .... ....", new Composite(new LEUInt(10, 1, 2), new LEUInt(8, 2, 2), new Skip(2), new LEUInt(4, 4, 1), new LEUInt(0, 4, 1), new Skip(1))),
+                Create(OpCode.MOV_pr, "1111 1101 0010 1... .... ....", new Composite(new LEUInt(10, 2, 2), new LEUInt(8, 2, 2), new Skip(2), new LEUInt(4, 4, 1), new LEUInt(0, 4, 1), new Skip(1))),
 
                 // (1) MOVU.<bw> dsp5[rs], rd (sz, dsp, rs, rd)
                 Create(OpCode.MOVU_dsp5_mr, "1011 .... .... ....", movu_mr),
