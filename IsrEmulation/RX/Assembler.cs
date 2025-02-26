@@ -60,7 +60,8 @@ namespace RX {
         public readonly int Value;
 
         public Int24(int value) {
-            if (!(-8388608 <= value && value <= 8388607)) {
+            // 上位ビットが全て0(型に収まる値)もしくは23ビット以上が全て1(負の値)であることを確認する
+            if (!((value & 0xFF00_0000) == 0 || (value & 0xFF80_0000) == 0xFF80_0000)) {
                 throw new ArgumentOutOfRangeException($"-8388608 <= value <= 8388607 actual: {value}", nameof(value));
             }
             Value = value;
@@ -323,8 +324,8 @@ namespace RX {
 
         public static Instruction32 ADD(StdRegAddressing src, Reg dest) =>
             src.Memex.HasValue
-            ? Create(OpCode.ADD_mr, (uint)src.Memex, (uint)src.LD, (uint)src.TargetReg, (uint)dest, src.Displacement)
-            : Create(OpCode.ADD_ub_rs_mr, (uint)src.LD, (uint)src.TargetReg, (uint)dest, src.Displacement);
+            ? Create(OpCode.ADD_mr, (uint)src.Memex, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement)
+            : Create(OpCode.ADD_ub_rs_mr, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement);
 
         public static Instruction32 ADD(StdImmValue src, Reg src2, Reg dest) =>
             Create(OpCode.ADD_irrr, (uint)src2, (uint)dest, (uint)src.LI, src.Value);
@@ -706,42 +707,44 @@ namespace RX {
         public static Instruction32 MOV(StdImmValue src, Reg dest) =>
             Create(OpCode.MOV_ir, (uint)dest, (uint)src.LI, src.Value);
 
-        public static Instruction32 MOV(MemEx sz, Reg src, Reg dest) =>
-            Create(OpCode.MOV_rr, (uint)sz, (uint)src, (uint)dest);
+        public static Instruction32 MOV(MemEx sz, Reg src, Reg dest) {
+            AssertSizeBWL(sz);
+            return Create(OpCode.MOV_rr, (uint)sz, (uint)src, (uint)dest);
+        }
 
         public static Instruction32 MOV(MemEx sz, StdImmValue src, StdRegAddressing dest) {
             AssertSizeBWL(sz);
             return dest.LD switch {
-                LengthOfDisplacement.RefReg => Create(OpCode.MOV_im_p, (uint)dest.LD, (uint)dest.TargetReg, (uint)src.LI, (uint)sz, src.Value),
-                LengthOfDisplacement.DSP8Reg => Create(OpCode.MOV_im_dsp8, (uint)dest.LD, (uint)dest.TargetReg, (uint)src.LI, (uint)sz, (uint)dest.LD, src.Value),
-                LengthOfDisplacement.DSP16Reg => Create(OpCode.MOV_im_dsp8, (uint)dest.LD, (uint)dest.TargetReg, (uint)src.LI, (uint)sz, (uint)dest.LD, src.Value),
+                LengthOfDisplacement.RefReg   => Create(OpCode.MOV_im_p    , (uint)dest.TargetReg, (uint)sz, (uint)LengthOfDisplacement.RefReg, (uint)src.LI, src.Value),
+                LengthOfDisplacement.DSP8Reg  => Create(OpCode.MOV_im_dsp8 , (uint)dest.TargetReg, (uint)sz, (uint)dest.LD, dest.Displacement, (uint)src.LI, src.Value),
+                LengthOfDisplacement.DSP16Reg => Create(OpCode.MOV_im_dsp16, (uint)dest.TargetReg, (uint)sz, (uint)dest.LD, dest.Displacement, (uint)src.LI, src.Value),
                 _ => throw new ArgumentException($"not support: {dest.LD}")
             };
         }
 
         public static Instruction32 MOV(MemEx sz, StdRegAddressing src, Reg dest) {
             AssertSizeBWL(sz);
-            return Create(OpCode.MOV_l_mr, (uint)sz, (uint)src.LD, (uint)src.TargetReg, (uint)dest, src.Displacement);
+            return Create(OpCode.MOV_l_mr, (uint)sz, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement);
         }
 
-        public static Instruction32 MOV_indexed(MemEx sz, Reg src, UInt4 ni, Reg dest) {
+        public static Instruction32 MOV_indexed(MemEx sz, Reg src, Reg ni, Reg dest) {
             AssertSizeBWL(sz);
-            return Create(OpCode.MOV_ar, (uint)sz, ni.Value, (uint)dest, (uint)src);
+            return Create(OpCode.MOV_ar, (uint)sz, (uint)ni, (uint)src, (uint)dest);
         }
 
         public static Instruction32 MOV(MemEx sz, Reg src, StdRegAddressing dest) {
             AssertSizeBWL(sz);
-            return Create(OpCode.MOV_r_dsp, (uint)sz, (uint)dest.LD, (uint)dest.TargetReg, (uint)src, dest.Displacement);
+            return Create(OpCode.MOV_r_dsp, (uint)sz, (uint)dest.TargetReg, (uint)src, (uint)dest.LD, dest.Displacement);
         }
 
-        public static Instruction32 MOV_indexed(MemEx sz, UInt4 ni, Reg src, Reg dest) {
+        public static Instruction32 MOV_indexedDest(MemEx sz, Reg src, Reg ni, Reg dest) {
             AssertSizeBWL(sz);
-            return Create(OpCode.MOV_ra, (uint)sz, ni.Value, (uint)dest, (uint)src);
+            return Create(OpCode.MOV_ra, (uint)sz, (uint)ni, (uint)dest, (uint)src);
         }
 
         public static Instruction32 MOV(MemEx sz, StdRegAddressing src, StdRegAddressing dest) {
             AssertSizeBWL(sz);
-            return Create(OpCode.MOV_mm, (uint)sz, (uint)dest.LD, (uint)src.LD, (uint)src.TargetReg, (uint)dest.TargetReg, src.Displacement, dest.Displacement);
+            return Create(OpCode.MOV_mm, (uint)sz, (uint)src.TargetReg, (uint)dest.TargetReg, (uint)src.LD, src.Displacement ?? 0, (uint)dest.LD, dest.Displacement ?? 0);
         }
 
         public static Instruction32 MOV(MemEx sz, Reg src, Addressing ad, Reg dest) {
@@ -770,9 +773,9 @@ namespace RX {
             return Create(OpCode.MOVU_mr, (uint)sz, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement);
         }
 
-        public static Instruction32 MOVU_indexed(MemEx sz, UInt4 ni, Reg rb, Reg dest) {
+        public static Instruction32 MOVU_indexed(MemEx sz, Reg ni, Reg rb, Reg dest) {
             AssertSizeBW(sz);
-            return Create(OpCode.MOVU_ar, (uint)sz, ni.Value, (uint)rb, (uint)dest);
+            return Create(OpCode.MOVU_ar, (uint)sz, (uint)ni, (uint)rb, (uint)dest);
         }
 
         public static Instruction32 MOVU(MemEx sz, Addressing ad, Reg src, Reg dest) {

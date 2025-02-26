@@ -376,14 +376,15 @@ namespace RX {
                         "1110 1111 .... ...."
                 }, mov_rr),
                 // (8) MOV.<bwl> //imm, [rd] (rd, sz, ld, li, imm)
-                Create(OpCode.MOV_im_p, "1111 1000 .... ....", new Composite(new LEUInt(12, 4, 2), new LEUInt(8, 2, 2), new LEUInt(0, 2, 1), new ImmediateValueFormatter(2, 10))),
+                Create(OpCode.MOV_im_p, "1111 1000 .... ...."    , new Composite(new LEUInt(12, 4, 2), new LEUInt(8, 2, 2), new LEUInt(0, 2, 1), new ImmediateValueFormatter(2, 10))),
                 // (8) MOV.<bwl> //imm, dsp8[rd] (rd, sz, ld, dsp, li, imm)
-                Create(OpCode.MOV_im_dsp8, "1111 1001 .... ....", new Composite(new LEUInt(12, 4, 2), new LEUInt(8, 2, 2), new LEUInt(0, 2, 1), new LEUInt(16, 8, 3), new ImmediateValueFormatter(3, 10))),
+                Create(OpCode.MOV_im_dsp8, "1111 1001 .... ...." , new Composite(new LEUInt(12, 4, 2), new LEUInt(8, 2, 2), new LEUInt(0, 2, 1), new LEUInt(16, 8, 3), new ImmediateValueFormatter(3, 10))),
                 // (8) MOV.<bwl> //imm, dsp16[rd] (rd, sz, ld, dsp, li, imm)
                 Create(OpCode.MOV_im_dsp16, "1111 1010 .... ....", new Composite(new LEUInt(12, 4, 2), new LEUInt(8, 2, 2), new LEUInt(0, 2, 1), new LEUInt(16, 16, 4), new ImmediateValueFormatter(4, 10))),
                 // (9) (sz, rs, rd, ld, dsp)
                 // (9) MOV.<bwl> ([Rs]/dsp:8[Rs]/dsp:16[Rs]) rd
                 CreateGroup(OpCode.MOV_l_mr, "11.. 11.. .... ....", new[] {
+                        "1100 1100 .... ....",
                         "1100 1101 .... ....",
                         "1100 1110 .... ....",
                         "1101 1100 .... ....",
@@ -445,7 +446,7 @@ namespace RX {
                 Create(OpCode.MOV_rp, "1111 1101 0010 0... .... ....", new Composite(new LEUInt(10, 1, 2), new LEUInt(8, 2, 2), new Skip(2), new LEUInt(4, 4, 1), new LEUInt(0, 4, 1), new Skip(1))),
                 // (15) MOV.l [rs+], rd
                 // (15) MOV.l [-rs], rd
-                Create(OpCode.MOV_pr, "1111 1101 0010 1... .... ....", new Composite(new LEUInt(10, 1, 2), new LEUInt(8, 2, 2), new Skip(2), new LEUInt(4, 4, 1), new LEUInt(0, 4, 1), new Skip(1))),
+                Create(OpCode.MOV_pr, "1111 1101 0010 1... .... ....", new Composite(new LEUInt(10, 2, 2), new LEUInt(8, 2, 2), new Skip(2), new LEUInt(4, 4, 1), new LEUInt(0, 4, 1), new Skip(1))),
 
                 // (1) MOVU.<bw> dsp5[rs], rd (sz, dsp, rs, rd)
                 Create(OpCode.MOVU_dsp5_mr, "1011 .... .... ....", movu_mr),

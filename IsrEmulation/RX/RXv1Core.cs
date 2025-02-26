@@ -1346,14 +1346,14 @@ namespace RX {
                     break;
                 }
                 case OpCode.ADD_ub_rs_mr: {
-                    var src = LoadSourceOperand(operand[0], 4, operand[1], operand.Slice(3));
-                    ref var dest = ref Registers[operand[2]];
+                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                    ref var dest = ref Registers[operand[1]];
                     dest = OpADD(src, dest);
                     break;
                 }
                 case OpCode.ADD_mr: {
-                    var src = LoadSourceOperand(operand[1], operand[0], operand[2], operand.Slice(4));
-                    ref var dest = ref Registers[operand[3]];
+                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                    ref var dest = ref Registers[operand[2]];
                     dest = OpADD(src, dest);
                     break;
                 }
@@ -1739,7 +1739,7 @@ namespace RX {
                     Registers[operand[0]] = operand[2];
                     break;
                 case OpCode.MOV_rr:
-                    Registers[operand[2]] = BitOperation.GetLowerBits(Registers[operand[1]], 1u << (int)operand[0]);
+                    Registers[operand[2]] = SignExtension(true, BitOperation.GetLowerBits(Registers[operand[1]], 1u << (int)operand[0]), (int)operand[0]);
                     break;
                 case OpCode.MOV_im_p:
                     StoreDestOperand(operand[1], operand[0], operand[2], default, operand[4]);
@@ -1749,7 +1749,10 @@ namespace RX {
                     StoreDestOperand(operand[1], operand[0], operand[2], operand.Slice(3), operand[5]);
                     break;
                 case OpCode.MOV_l_mr:
-                    Registers[operand[3]] = LoadSourceOperand(operand[0], operand[4], operand[1]);
+                    Registers[operand[2]] = SignExtension(
+                        true,
+                        LoadUnsignedSourceOperand(operand[3], operand[0], operand.Slice(4), operand[1]),
+                        (int)operand[0]);
                     break;
                 case OpCode.MOV_ar: {
                     if (operand[0] == 3) {
@@ -1760,7 +1763,7 @@ namespace RX {
                     var ri = Registers[operand[1]];
                     var rb = Registers[operand[2]];
                     var addr = rb + (ri << sz);
-                    Registers[operand[3]] = bus.Read(addr, 1 << sz);
+                    Registers[operand[3]] = SignExtension(true, bus.Read(addr, 1 << sz), sz);
                     break;
                 }
                 case OpCode.MOV_r_dsp:
@@ -1779,15 +1782,15 @@ namespace RX {
                     break;
                 }
                 case OpCode.MOV_mm:
-                    StoreDestOperand(operand[0], operand[2], operand[3], operand.Slice(4),
-                                     LoadSourceOperand(operand[0], operand[6], operand[1]));
+                    StoreDestOperand(operand[0], operand[2], operand[5], operand.Slice(6, 1),
+                                    LoadUnsignedSourceOperand(operand[3], operand[0], operand.Slice(4, 1), operand[1]));
                     break;
                 case OpCode.MOV_rp: {
                     if (operand[1] == 3) {
                         // 非対応のサイズ
                         break;
                     }
-                    ref var dest = ref Registers[operand[3]];
+                    ref var dest = ref Registers[operand[2]];
                     var sz = 1u << (int)operand[1];
                     var ad = operand[0];
                     var addr = dest;
@@ -1821,7 +1824,7 @@ namespace RX {
                         addr -= sz;
                         src = addr;
                     }
-                    Registers[3] = bus.Read(addr, (int)sz);
+                    Registers[operand[3]] = SignExtension(true, bus.Read(addr, (int)sz), (int)operand[1]);
                     break;
                 }
                 case OpCode.MOVU_dsp5_mr:
@@ -1830,10 +1833,31 @@ namespace RX {
                 case OpCode.MOVU_mr:
                     Registers[operand[2]] = LoadUnsignedSourceOperand(operand[3], operand[0], operand.Slice(4), operand[1]);
                     break;
-                case OpCode.MOVU_ar:
+                case OpCode.MOVU_ar: {
+                    var sz = (int)operand[0];
+                    var ri = Registers[operand[1]];
+                    var rb = Registers[operand[2]];
+                    var addr = rb + (ri << sz);
+                    Registers[operand[3]] = bus.Read(addr, 1 << sz);
                     break;
-                case OpCode.MOVU_pr:
+                }
+                case OpCode.MOVU_pr: {
+                    ref var src = ref Registers[operand[2]];
+                    var sz = 1u << (int)operand[1];
+                    var ad = operand[0];
+                    var addr = src;
+                    // post increment
+                    if (ad == 2) {
+                        src = addr + sz;
+                    }
+                    else if (ad == 3) {
+                        // pre decrement
+                        addr -= sz;
+                        src = addr;
+                    }
+                    Registers[operand[3]] = bus.Read(addr, (int)sz);
                     break;
+                }
                 case OpCode.MUL_4ir: {
                     ref var dest = ref Registers[operand[1]];
                     dest = OpMUL(operand[0], dest);
@@ -2159,11 +2183,11 @@ namespace RX {
                     OpWAIT();
                     break;
                 case OpCode.XCHG_ub_rs_mr: {
-                    var src = LoadSourceOperand(operand[0], 4, operand[0], operand.Slice(3));
-                    ref var dest = ref Registers[operand[3]];
+                    var src = LoadSourceOperand(operand[2], (uint)MemEx.B, operand[0], operand.Slice(2));
+                    ref var dest = ref Registers[operand[1]];
                     var tmp = dest;
                     dest = src;
-                    StoreDestOperand((uint)MemEx.B, operand[1], operand[0], operand.Slice(3), tmp);
+                    StoreDestOperand((uint)MemEx.B, operand[0], operand[2], operand.Slice(2), tmp);
                     break;
                 }
                 case OpCode.XCHG_mr: {
