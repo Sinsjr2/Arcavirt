@@ -73,7 +73,7 @@ namespace RX {
                 new LEUInt(24, 4, 3), new LEUInt(16, 4, 3), new Skip(3));
             var b3_rs_rs2 = new Composite(new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new Skip(3));
             var b3_rd_rs = new Composite(new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new Skip(3));
-            var b3_rd_ld = new Composite(new LEUInt(12, 2, 3), new LEUInt(20, 4, 3),
+            var b3_rd_ld = new Composite(new LEUInt(14, 2, 3), new LEUInt(20, 4, 3),
                                          new LEUInt(16, 4, 3), new DisplacementValueFormatter(3, 8));
             var b3_rd_ld_ub = new Composite(new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new DisplacementValueFormatter(3, 8));
             var b3_rs_rd = new Composite(new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new Skip(3));

@@ -379,7 +379,7 @@ namespace RX {
         }
 
         public OpCode32PatternMatchFormatter(uint unknownOpcodeKind, IReadOnlyList<OpCodePair32> formatters_) {
-            formatters = new OpCodePair32[ushort.MaxValue][];
+            formatters = new OpCodePair32[ushort.MaxValue + 1][];
             var formatterArray = formatters_.ToArray();
             int twoLevelCount = 0;
             for (uint i = 0; i < formatters.Length; i++) {
@@ -405,7 +405,7 @@ namespace RX {
                         throw new ArgumentException(
                             $"Twolevel sub table slot already busy: {formatters[i]![0]!.OpCode.Name}");
                     }
-                    var subFormatters = new OpCodePair32[byte.MaxValue];
+                    var subFormatters = new OpCodePair32[byte.MaxValue + 1];
                     formatters[i] = subFormatters;
                     for (int j = 0; j < subFormatters.Length; j++) {
                         var subCode = i | ((uint)j << 16);

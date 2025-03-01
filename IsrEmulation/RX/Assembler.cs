@@ -311,7 +311,7 @@ namespace RX {
                 if (src.Memex != MemEx.L) {
                     throw new ArgumentException(nameof(src.Memex));
                 }
-                return Create(OpCode.ADC_mr, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement);
+                return Create(OpCode.ADC_mr, (uint)src.Memex.Value, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement);
             }
             return Create(OpCode.ADC_rr, (uint)src.TargetReg, (uint)dest);
         }
@@ -962,7 +962,7 @@ namespace RX {
                 if (src.Memex != MemEx.L) {
                     throw new ArgumentException($"actual: {src.Memex}");
                 }
-                return Create(OpCode.SBB_mr, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement);
+                return Create(OpCode.SBB_mr, (uint)src.Memex.Value, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement);
             }
             return Create(OpCode.SBB_rr, (uint)src.TargetReg, (uint)dest);
         }

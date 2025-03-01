@@ -98,8 +98,13 @@ public class RXv1InstrunctionTest {
         StoreDestOperand(cpu.Registers, busManager, MemEx.L, dest.TargetReg, dest.LD, dest.Displacement, value);
     }
 
-    static StdRegAddressing GetRandomStdRegAddressing(Reg reg, MemEx size, LengthOfDisplacement ld) {
+    static StdRegAddressing GetRandomStdRegAddressing(Reg reg, MemEx size, LengthOfDisplacement ldBegin, LengthOfDisplacement ldEnd) {
         var random = TestContext.CurrentContext.Random;
+        var ld = size == MemEx.L
+            ? (LengthOfDisplacement)random.Next((int)ldBegin, (int)ldEnd + 1)
+            : (LengthOfDisplacement)random.Next(
+                Math.Min((int)ldBegin, (int)LengthOfDisplacement.Reg),
+                Math.Min((int)ldEnd + 1, (int)LengthOfDisplacement.Reg));
         switch (ld) {
             case LengthOfDisplacement.Reg:
                 return reg;
@@ -162,7 +167,7 @@ public class RXv1InstrunctionTest {
     [TestCase(unchecked((uint)-1000), 1000u)]
     public void ABS_rd_Test(uint a, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         cpu.Registers[rd] = a;
         RunOpcode(ABS((Reg)rd));
         cpu.Registers[rd].Is(result);
@@ -174,8 +179,8 @@ public class RXv1InstrunctionTest {
     [TestCase(unchecked((uint)-440), 440u)]
     public void ABS_rs_rd_Test(uint a, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 15);
-        var rd = random.Next(1, 15);
+        var rs = random.Next(1, 16);
+        var rd = random.Next(1, 16);
         cpu.Registers[rs] = a;
         RunOpcode(ABS((Reg)rs, (Reg)rd));
         cpu.Registers[rd].Is(result);
@@ -192,7 +197,7 @@ public class RXv1InstrunctionTest {
     [TestCase( true, LengthOfImmediate.IMM32, 10u, 5u, 16u)]
     public void ADC_ir_Test(bool psw_c, LengthOfImmediate li, uint a, uint b, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         cpu.Registers[rd] = b;
         cpu.PSW_c = psw_c;
         RunOpcode(ADC(new StdImmValue(li, a), (Reg)rd));
@@ -201,15 +206,16 @@ public class RXv1InstrunctionTest {
 
     [Test]
     [TestCase(false, 10u, 5u, 15u)]
-    [TestCase( true, 10u, 5u, 16u)]
+    [TestCase(true, 10u, 5u, 16u)]
     public void ADC_mr__ADC_rr_Test(bool psw_c, uint a, uint b, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = 1;
-        var rd = random.Next(rs + 1, 15);
-        cpu.Registers[rs] = a;
-        cpu.Registers[rd] = b;
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, MemEx.L, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, a);
         cpu.PSW_c = psw_c;
-        RunOpcode(ADC(R1, (Reg)rd));
+        cpu.Registers[rd] = b;
+        RunOpcode(ADC(dsp, (Reg)rd));
         cpu.Registers[rd].Is(result);
     }
 
@@ -217,7 +223,7 @@ public class RXv1InstrunctionTest {
     [TestCase(13, 1u, 14u)]
     public void ADD_4irr_Test(byte a, uint b, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         cpu.Registers[rd] = b;
         RunOpcode(ADD(new UInt4(a), (Reg)rd));
         cpu.Registers[rd].Is(result);
@@ -228,23 +234,23 @@ public class RXv1InstrunctionTest {
     [TestCase(LengthOfImmediate.SIMM24, 70000u, 100u, 70100u)]
     public void ADD_irrr_Test(LengthOfImmediate li, uint a, uint b, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         cpu.Registers[rd] = b;
         RunOpcode(ADD(new StdImmValue(li, a), (Reg)rd));
         cpu.Registers[rd].Is(result);
     }
 
     [Test]
-    [TestCase(100u, 10u, 110u)]
-    [TestCase(50u, 300u, 350u)]
-    public void ADD_mr__ADD_ub_rs_mr_Test(uint a, uint b, uint result) {
+    [TestCase(MemEx.L, 100u, 10u, 110u)]
+    [TestCase(MemEx.L, 50u, 300u, 350u)]
+    public void ADD_mr__ADD_ub_rs_mr_Test(MemEx sz, uint a, uint b, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = 1;
-        var rd = random.Next(rs + 1, 15);
-        memory.Write(0x001, 1, a);
-        cpu.Registers[1] = 1;
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, a);
         cpu.Registers[rd] = b;
-        RunOpcode(ADD(new RelRef8(0, R1, MemEx.B), (Reg)rd));
+        RunOpcode(ADD(dsp, (Reg)rd));
         cpu.Registers[rd].Is(result);
     }
 
@@ -253,8 +259,8 @@ public class RXv1InstrunctionTest {
     [TestCase(1u, 1u, 1u, false, false)]
     public void AND_mr__AND_ub_rs_mr_Test(uint a, uint b, uint result, bool expZ, bool expS) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
         cpu.Registers[rs] = a;
         cpu.Registers[rd] = b;
         RunOpcode(AND((Reg)rs, (Reg)rd));
@@ -262,7 +268,6 @@ public class RXv1InstrunctionTest {
         cpu.PSW_z.Is(expZ);
         cpu.PSW_s.Is(expS);
     }
-
     [Test]
     [TestCase( 0, 0xFFFF_FFFF, 0xFFFF_FFFEu)]
     [TestCase( 1, 0xFFFF_FFFF, 0xFFFF_FFFDu)]
@@ -270,7 +275,7 @@ public class RXv1InstrunctionTest {
     [TestCase(31,        0x0u,           0u)]
     public void BCLR_ir_Test(byte a, uint b, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         cpu.Registers[rd] = b;
         RunOpcode(BCLR(new UInt5(a), (Reg)rd));
         cpu.Registers[rd].Is(result);
@@ -284,8 +289,8 @@ public class RXv1InstrunctionTest {
     [TestCase(33u, 0xFFFF_FFFFu, 0xFFFF_FFFDu)]
     public void BCLR_rr__BCLR_rm_Test(uint a, uint b, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
         cpu.Registers[rs] = a;
         cpu.Registers[rd] = b;
         RunOpcode(BCLR((Reg)rs, (Reg)rd));
@@ -488,7 +493,7 @@ public class RXv1InstrunctionTest {
         var random = TestContext.CurrentContext.Random;
         var value = random.NextUInt();
         byte src = (byte)random.Next(0, 31);
-        var reg = random.Next(1, 15);
+        var reg = random.Next(1, 16);
         cpu.PSW_c = psw_c;
         cpu.PSW_z = psw_z;
         cpu.PSW_s = psw_s;
@@ -511,7 +516,7 @@ public class RXv1InstrunctionTest {
         var random = TestContext.CurrentContext.Random;
         var value = random.NextByte();
         byte src = (byte)random.Next(0, 8);
-        var reg = random.Next(1, 15);
+        var reg = random.Next(1, 16);
         var addr = 0x10u;
         memory.Write(addr, 1, value);
         cpu.PSW_c = psw_c;
@@ -533,7 +538,7 @@ public class RXv1InstrunctionTest {
     [TestCase(~0u, 14, ~(1u << 14))]
     public void BNOT_ir_Test(uint a, byte b, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         cpu.Registers[rd] = a;
         RunOpcode(BNOT(new UInt5(b), (Reg)rd));
         cpu.Registers[rd].Is(result);
@@ -546,8 +551,8 @@ public class RXv1InstrunctionTest {
     [TestCase(0xE0u, 1u, 0u)]
     public void BNOT_rr_Test(uint a, uint b, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
         cpu.Registers[rs] = a;
         cpu.Registers[rd] = b;
         RunOpcode(BNOT((Reg)rs, (Reg)rd));
@@ -601,7 +606,7 @@ public class RXv1InstrunctionTest {
     [TestCase(1u << 8,   8, 1u <<  8)]
     public void BSET_ir_Test(uint a, byte b, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         cpu.Registers[rd] = a;
         RunOpcode(BSET(new UInt5(b), (Reg)rd));
         cpu.Registers[rd].Is(result);
@@ -614,8 +619,8 @@ public class RXv1InstrunctionTest {
     [TestCase(31u, 0x7FFF_FFFFu, 0xFFFF_FFFFu)]
     public void BSET_rm__BSET_rr_Test(uint a, uint b, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
         cpu.Registers[rs] = a;
         cpu.Registers[rd] = b;
         RunOpcode(BSET((Reg)rs, (Reg)rd));
@@ -653,7 +658,7 @@ public class RXv1InstrunctionTest {
     [TestCase(25, 1u << 25,  true, false)]
     public void BTST_ir_Test(byte a, uint b, bool expC, bool expZ) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         cpu.Registers[rd] = b;
         RunOpcode(BTST(new UInt5(a), (Reg)rd));
         cpu.PSW_c.Is(expC);
@@ -690,16 +695,17 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
-    [TestCase(0u, 0u, true,  true, false, false)]
-    [TestCase(1u, 5u, true, false, false, false)]
-    public void CMP_mr__CMP_ub_rs_mr_Test(uint a, uint b,
+    [TestCase(MemEx.L, 0u, 0u, true,  true, false, false)]
+    [TestCase(MemEx.L, 1u, 5u, true, false, false, false)]
+    public void CMP_mr__CMP_ub_rs_mr_Test(MemEx sz, uint a, uint b,
                          bool expC, bool expZ, bool expS, bool expO) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        cpu.Registers[rs] = a;
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, a);
         cpu.Registers[rd] = b;
-        RunOpcode(CMP((Reg)rs, (Reg)rd));
+        RunOpcode(CMP(dsp, (Reg)rd));
         cpu.PSW_c.Is(expC);
         cpu.PSW_z.Is(expZ);
         cpu.PSW_s.Is(expS);
@@ -707,17 +713,18 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
-    [TestCase(10u, 400u,  40u, false)]
-    [TestCase(  5u,  0u,   0u, false)]
-    [TestCase(  0u,  5u, null,  true)]
-    [TestCase(99u, unchecked((uint)-2000), unchecked((uint)-20u), false)]
-    public void DIV_mr__DIV_ub_rs_mr_Test(uint a, uint b, uint? result, bool expO) {
+    [TestCase(MemEx.L, 10u, 400u,  40u, false)]
+    [TestCase(MemEx.L,   5u,  0u,   0u, false)]
+    [TestCase(MemEx.L,   0u,  5u, null,  true)]
+    [TestCase(MemEx.L, 99u, unchecked((uint)-2000), unchecked((uint)-20u), false)]
+    public void DIV_mr__DIV_ub_rs_mr_Test(MemEx sz, uint a, uint b, uint? result, bool expO) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        cpu.Registers[rs] = a;
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, a);
         cpu.Registers[rd] = b;
-        RunOpcode(DIV((Reg)rs, (Reg)rd));
+        RunOpcode(DIV(dsp, (Reg)rd));
         if (result.HasValue) {
             cpu.Registers[rd].Is(result.Value);
         }
@@ -725,17 +732,18 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
-    [TestCase(10u, 400u, 40u, false)]
-    [TestCase(0u, 5u, null, true)]
+    [TestCase(MemEx.L, 10u, 400u, 40u, false)]
+    [TestCase(MemEx.L, 0u, 5u, null, true)]
     // -2000 -> 0xFFFFF830 -> 4294965296
-    [TestCase(236u, unchecked((uint)-2000), 18199005u, false)]
-    public void DIVU_mr__DIVU_ub_rs_mr_Test(uint a, uint b, uint? result, bool expO) {
+    [TestCase(MemEx.L, 236u, unchecked((uint)-2000), 18199005u, false)]
+    public void DIVU_mr__DIVU_ub_rs_mr_Test(MemEx sz, uint a, uint b, uint? result, bool expO) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        cpu.Registers[rs] = a;
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, a);
         cpu.Registers[rd] = b;
-        RunOpcode(DIVU((Reg)rs, (Reg)rd));
+        RunOpcode(DIVU(dsp, (Reg)rd));
         if (result.HasValue) {
             cpu.Registers[rd].Is(result.Value);
         }
@@ -757,14 +765,15 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
-    [TestCase(1000000u, 99999u, 1000000Lu * 99999Lu)]
-    public void EMULU_mr__EMULU_ub_rs_mr_Test(uint a, uint b, ulong result) {
+    [TestCase(MemEx.L, 1000000u, 99999u, 1000000Lu * 99999Lu)]
+    public void EMULU_mr__EMULU_ub_rs_mr_Test(MemEx sz, uint a, uint b, ulong result) {
         var random = TestContext.CurrentContext.Random;
         var rs = random.Next(1, 13);
         var rd = random.Next(rs + 1, 14);
-        cpu.Registers[rs] = a;
+        var dsp = GetRandomStdRegAddressing((Reg)rs, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, a);
         cpu.Registers[rd] = b;
-        RunOpcode(EMULU((Reg)rs, (Reg)rd));
+        RunOpcode(EMULU(dsp, (Reg)rd));
         cpu.Registers[rd + 1].Is((uint)(result >> 32));
         cpu.Registers[rd].Is(unchecked((uint)result));
     }
@@ -773,11 +782,12 @@ public class RXv1InstrunctionTest {
     [TestCase(3.55f, 0.5f, 4.05f)]
     public void FADD_mr_Test(float a, float b, float result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        cpu.Registers[rs] = BitConverter.SingleToUInt32Bits(a);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, MemEx.L, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, BitConverter.SingleToUInt32Bits(a));
         cpu.Registers[rd] = BitConverter.SingleToUInt32Bits(b);
-        RunOpcode(FADD((Reg)rs, (Reg)rd));
+        RunOpcode(FADD(dsp, (Reg)rd));
         cpu.Registers[rd].Is(BitConverter.SingleToUInt32Bits(result));
     }
 
@@ -788,11 +798,12 @@ public class RXv1InstrunctionTest {
     public void FCMP_mr_Test(float a, float b,
                           bool expO, bool expS, bool expZ) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        cpu.Registers[rs] = BitConverter.SingleToUInt32Bits(a);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, MemEx.L, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, BitConverter.SingleToUInt32Bits(a));
         cpu.Registers[rd] = BitConverter.SingleToUInt32Bits(b);
-        RunOpcode(FCMP((Reg)rs, (Reg)rd));
+        RunOpcode(FCMP(dsp, (Reg)rd));
         cpu.PSW_o.Is(expO);
         cpu.PSW_s.Is(expS);
         cpu.PSW_z.Is(expZ);
@@ -806,11 +817,12 @@ public class RXv1InstrunctionTest {
     [TestCase(-2.0f, -1.0f, 0.5f)]
     public void FDIV_mr_Test(float a, float b, float result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        cpu.Registers[rs] = BitConverter.SingleToUInt32Bits(a);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, MemEx.L, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, BitConverter.SingleToUInt32Bits(a));
         cpu.Registers[rd] = BitConverter.SingleToUInt32Bits(b);
-        RunOpcode(FDIV((Reg)rs, (Reg)rd));
+        RunOpcode(FDIV(dsp, (Reg)rd));
         cpu.Registers[rd].Is(BitConverter.SingleToUInt32Bits(result));
     }
 
@@ -821,11 +833,12 @@ public class RXv1InstrunctionTest {
     [TestCase(-100.0f, -15.34f,  1534.0f)]
     public void FMUL_mr_Test(float a, float b, float result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        cpu.Registers[rs] = BitConverter.SingleToUInt32Bits(a);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, MemEx.L, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, BitConverter.SingleToUInt32Bits(a));
         cpu.Registers[rd] = BitConverter.SingleToUInt32Bits(b);
-        RunOpcode(FMUL((Reg)rs, (Reg)rd));
+        RunOpcode(FMUL(dsp, (Reg)rd));
         cpu.Registers[rd].Is(BitConverter.SingleToUInt32Bits(result));
     }
 
@@ -835,11 +848,12 @@ public class RXv1InstrunctionTest {
     [TestCase(0.5f, -5.5f, -6.0f)]
     public void FSUB_mr_Test(float a, float b, float result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        cpu.Registers[rs] = BitConverter.SingleToUInt32Bits(a);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, MemEx.L, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, BitConverter.SingleToUInt32Bits(a));
         cpu.Registers[rd] = BitConverter.SingleToUInt32Bits(b);
-        RunOpcode(FSUB((Reg)rs, (Reg)rd));
+        RunOpcode(FSUB(dsp, (Reg)rd));
         cpu.Registers[rd].Is(BitConverter.SingleToUInt32Bits(result));
     }
 
@@ -850,10 +864,11 @@ public class RXv1InstrunctionTest {
     [TestCase(-9.99f, -9)]
     public void FTOI_Test(float a, int result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        cpu.Registers[rs] = BitConverter.SingleToUInt32Bits(a);
-        RunOpcode(FTOI((Reg)rs, (Reg)rd));
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, MemEx.L, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, BitConverter.SingleToUInt32Bits(a));
+        RunOpcode(FTOI(dsp, (Reg)rd));
         cpu.Registers[rd].Is(unchecked((uint)result));
     }
 
@@ -863,14 +878,22 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
-    [TestCase(5, 5.0f)]
-    [TestCase(-5, -5.0f)]
-    public void ITOF_Test(int a, float result) {
+    [TestCase(MemEx.B, 50, 50.0f)]
+    [TestCase(MemEx.B, -50, -50.0f)]
+    [TestCase(MemEx.W, -20000, -20000.0f)]
+    [TestCase(MemEx.W, 20000, 20000.0f)]
+    [TestCase(MemEx.UW, 40000, 40000.0f)]
+    [TestCase(MemEx.UW, 20000, 20000.0f)]
+    [TestCase(MemEx.L, 70000, 70000.0f)]
+    [TestCase(MemEx.L, 5, 5.0f)]
+    [TestCase(MemEx.L, -5, -5.0f)]
+    public void ITOF_Test(MemEx sz, int a, float result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        cpu.Registers[rs] = unchecked((uint)a);
-        RunOpcode(ITOF((Reg)rs, (Reg)rd));
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, unchecked((uint)a));
+        RunOpcode(ITOF(dsp, (Reg)rd));
         cpu.Registers[rd].Is(BitConverter.SingleToUInt32Bits(result));
     }
 
@@ -895,8 +918,8 @@ public class RXv1InstrunctionTest {
     [TestCase(-100000, -2000, 500, (-1000000L << 16) - 100000)]
     public void MACHI_Test(long acc, short a, short b, long result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rs2 = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rs2 = random.Next(rs + 1, 16);
         cpu.Acc = unchecked((ulong)acc);
         cpu.Registers[rs] = (uint)a << 16;
         cpu.Registers[rs2] = (uint)b << 16;
@@ -909,8 +932,8 @@ public class RXv1InstrunctionTest {
     [TestCase(-100000, -2000, 500, ((-1000000L) << 16) -100000)]
     public void MACLO_Test(long acc, short a, short b, long result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rs2 = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rs2 = random.Next(rs + 1, 16);
         cpu.Acc = unchecked((ulong)acc);
         cpu.Registers[rs] = (uint)a;
         cpu.Registers[rs2] = (uint)b;
@@ -919,29 +942,46 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
-    [TestCase(1000000, -5, 1000000)]
-    [TestCase(-150000, -100, -100)]
-    public void MAX_mr__MAX_ub_rs_mr_Test(int a, int b, int result) {
+    [TestCase(MemEx.B, 120, 50, 120)]
+    [TestCase(MemEx.B, -120, 50, 50)]
+    [TestCase(MemEx.W, 300, 260, 300)]
+    [TestCase(MemEx.W, -300, 260, 260)]
+    [TestCase(MemEx.W, -300, -3000, -300)]
+    [TestCase(MemEx.UW, 40000, 41000, 41000)]
+    [TestCase(MemEx.UW, 42000, 41000, 42000)]
+    [TestCase(MemEx.L, 1000000, -5, 1000000)]
+    [TestCase(MemEx.L, -150000, -100, -100)]
+    public void MAX_mr__MAX_ub_rs_mr_Test(MemEx sz, int a, int b, int result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        cpu.Registers[rs] = unchecked((uint)a);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, unchecked((uint)a));
         cpu.Registers[rd] = unchecked((uint)b);
-        RunOpcode(MAX((Reg)rs, (Reg)rd));
+        RunOpcode(MAX(dsp, (Reg)rd));
         cpu.Registers[rd].Is(unchecked((uint)result));
     }
 
     [Test]
-    [TestCase(1000000, -5, -5)]
-    [TestCase(-150000, -100, -150000)]
-    [TestCase(200, 3, 3)]
-    public void MIN_mr__MIN_ub_rs_mr_Test(int a, int b, int result) {
+    [TestCase(MemEx.B, -120, 120, -120)]
+    [TestCase(MemEx.B, -120, -2000, -2000)]
+    [TestCase(MemEx.B, 80, 120, 80)]
+    [TestCase(MemEx.W, -20000, 20000, -20000)]
+    [TestCase(MemEx.W, 20000, 20001, 20000)]
+    [TestCase(MemEx.UW, 40000, 40001, 40000)]
+    [TestCase(MemEx.UW, 40000, 39999, 39999)]
+    [TestCase(MemEx.UW, 0, 40000, 0)]
+    [TestCase(MemEx.L, 1000000, -5, -5)]
+    [TestCase(MemEx.L, -150000, -100, -150000)]
+    [TestCase(MemEx.L, 200, 3, 3)]
+    public void MIN_mr__MIN_ub_rs_mr_Test(MemEx sz, int a, int b, int result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        cpu.Registers[rs] = unchecked((uint)a);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, unchecked((uint)a));
         cpu.Registers[rd] = unchecked((uint)b);
-        RunOpcode(MIN((Reg)rs, (Reg)rd));
+        RunOpcode(MIN(dsp, (Reg)rd));
         cpu.Registers[rd].Is(unchecked((uint)result));
     }
 
@@ -1016,7 +1056,7 @@ public class RXv1InstrunctionTest {
     [Test]
     public void MOV_u8ir_Test([Random(byte.MinValue, byte.MaxValue, 5)]byte src) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         // 上書きされることを確認するために適当な値で埋める
         cpu.Registers[rd] = random.NextUInt();
         RunOpcode(MOV(src, (Reg)rd));
@@ -1034,7 +1074,7 @@ public class RXv1InstrunctionTest {
     [TestCase(LengthOfImmediate.IMM32, 0x7065_4321u, 0x7065_4321u)]
     public void MOV_ir_Test(LengthOfImmediate li, uint src, uint expected) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         // 上書きされることを確認するために適当な値で埋める
         cpu.Registers[rd] = random.NextUInt();
         var imm = new StdImmValue(li, src);
@@ -1058,8 +1098,8 @@ public class RXv1InstrunctionTest {
     [TestCase(MemEx.L, 0x1234_5678u, 0x1234_5678u)]
     public void MOV_rr_Test(MemEx size, uint src, uint expected) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
         cpu.Registers[rs] = src;
         // 上書きされることを確認するために適当な値で埋める
         cpu.Registers[rd] = random.NextUInt();
@@ -1092,9 +1132,8 @@ public class RXv1InstrunctionTest {
     public void MOV_im_Test(MemEx size, uint initial, LengthOfImmediate li, uint src, uint expected) {
         var random = TestContext.CurrentContext.Random;
         var imm = new StdImmValue(li, src);
-        var rd = random.Next(1, 15);
-        var ld = (LengthOfDisplacement)random.Next(0, 2);
-        var dsp = GetRandomStdRegAddressing((Reg)rd, size, ld);
+        var rd = random.Next(1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rd, size, LengthOfDisplacement.RefReg, LengthOfDisplacement.DSP16Reg);
         StoreRandomDest(dsp, 0, 300, initial);
         RunOpcode(MOV(size, imm, dsp));
         LoadData(cpu.Registers, busManager, dsp.LD, (int)MemEx.L, dsp.Displacement, dsp.TargetReg)
@@ -1113,10 +1152,9 @@ public class RXv1InstrunctionTest {
     [TestCase(MemEx.L, 0xFFFF_FFFFu, 0xFFFF_FFFFu)]
     public void MOV_l_mr_Test(MemEx size, uint src, uint expected) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        var ld = (LengthOfDisplacement)random.Next(0, 2);
-        var dsp = GetRandomStdRegAddressing((Reg)rs, size, ld);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, size, LengthOfDisplacement.RefReg, LengthOfDisplacement.DSP16Reg);
         StoreRandomDest(dsp, 0, 300, src);
         RunOpcode(MOV(size, dsp, (Reg)rd));
         cpu.Registers[rd].Is(expected);
@@ -1137,9 +1175,9 @@ public class RXv1InstrunctionTest {
     [TestCase(MemEx.L, 0xFFFF_FFFF, 0xFFFF_FFFF)]
     public void MOV_ar_Test(MemEx sz, uint src, uint expected) {
         var random = TestContext.CurrentContext.Random;
-        var ri = random.Next(1, 13);
-        var rb = random.Next(ri + 1, 14);
-        var rd = random.Next(rb + 1, 15);
+        var ri = random.Next(1, 14);
+        var rb = random.Next(ri + 1, 15);
+        var rd = random.Next(rb + 1, 16);
 
         var baseAddr = random.NextUInt(0, 150);
         var indexValue = random.NextUInt(0, 10);
@@ -1169,10 +1207,9 @@ public class RXv1InstrunctionTest {
     [TestCase(MemEx.L, 0x0u, 0xFFFF_FFFFu, 0x0FFFF_FFFF)]
     public void MOV_r_dsp_Test(MemEx sz, uint initial, uint src, uint expected) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        var ld = (LengthOfDisplacement)random.Next(0, 2);
-        var dsp = GetRandomStdRegAddressing((Reg)rd, sz, ld);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rd, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.DSP16Reg);
         cpu.Registers[rs] = src;
         StoreRandomDest(dsp, 0, 300, initial);
         RunOpcode(MOV(sz, (Reg)rs, dsp));
@@ -1194,9 +1231,9 @@ public class RXv1InstrunctionTest {
     [TestCase(MemEx.L, 0x1234_5678u, 0xABCD_EF01u, 0xABCD_EF01u)]
     public void MOV_ra_Test(MemEx sz, uint initial, uint src, uint expected) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 13);
-        var ri = random.Next(rs + 1, 14);
-        var rb = random.Next(ri + 1, 15);
+        var rs = random.Next(1, 14);
+        var ri = random.Next(rs + 1, 15);
+        var rb = random.Next(ri + 1, 16);
 
         var baseAddr = random.NextUInt(0, 150);
         var indexValue = random.NextUInt(0, 10);
@@ -1221,13 +1258,11 @@ public class RXv1InstrunctionTest {
     [TestCase(MemEx.L, 0x1248_2356u, 0x00u, 0x00u)]
     public void MOV_mm_Test(MemEx sz, uint initial, uint src, uint expected) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var ldS = (LengthOfDisplacement)random.Next(0, 2);
-        var dspS = GetRandomStdRegAddressing((Reg)rs, sz, ldS);
+        var rs = random.Next(1, 15);
+        var dspS = GetRandomStdRegAddressing((Reg)rs, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.DSP16Reg);
 
-        var rd = random.Next(rs + 1, 15);
-        var ldD = (LengthOfDisplacement)random.Next(0, 2);
-        var dspD = GetRandomStdRegAddressing((Reg)rd, sz, ldD);
+        var rd = random.Next(rs + 1, 16);
+        var dspD = GetRandomStdRegAddressing((Reg)rd, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.DSP16Reg);
 
         StoreRandomDest(dspD, 0, 100, initial);
         StoreRandomDest(dspS, 160, 200, src);
@@ -1262,8 +1297,8 @@ public class RXv1InstrunctionTest {
     [TestCase(Addressing.PreDec, MemEx.L, 0x0u, 0xFFFF_FFFFu, -4, 0xFFFF_FFFFu)]
     public void MOV_rp_Test(Addressing ad, MemEx sz, uint initial, uint src, int afterAddrOffset, uint expected) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
         var addr = random.Next(20, 260);
 
         busManager.Write((uint)addr, 4, initial);
@@ -1306,8 +1341,8 @@ public class RXv1InstrunctionTest {
     [TestCase(Addressing.PreDec, MemEx.L, 0x0u, -4, 0x0u)]
     public void MOV_pr_Test(Addressing ad, MemEx sz, uint src, int afterAddrOffset, uint expected) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
         var addr = random.Next(20, 260);
 
         busManager.Write((uint)(addr + (ad == Addressing.PreDec ? afterAddrOffset : 0)), 4, src);
@@ -1338,11 +1373,10 @@ public class RXv1InstrunctionTest {
     public void MOVU_stdAddr_reg_Test(
         [Values(MemEx.B, MemEx.W)] MemEx size,
         [Random((uint)ushort.MinValue, (uint)ushort.MaxValue, 3)] uint value,
-        [Range(0, 3)]int ld,
         [Random(1, 7, 2)]int rd) {
         var random = TestContext.CurrentContext.Random;
-        var reg = random.Next(1, 15);
-        var dsp = GetRandomStdRegAddressing((Reg)reg, size, (LengthOfDisplacement)ld);
+        var reg = random.Next(1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)reg, size, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
         StoreRandomDest(dsp, 0, 300, value);
         RunOpcode(MOVU(size, dsp, (Reg)rd));
         cpu.Registers[rd].Is(BitOperation.GetLowerBits(value, GetSize(size)));
@@ -1366,9 +1400,9 @@ public class RXv1InstrunctionTest {
     [TestCase(MemEx.W, 0xFFFF_FFFFu, 0xFFFFu)]
     public void MOVU_ar_Test(MemEx sz, uint src, uint expected) {
         var random = TestContext.CurrentContext.Random;
-        var ri = random.Next(1, 13);
-        var rb = random.Next(ri + 1, 14);
-        var rd = random.Next(rb + 1, 15);
+        var ri = random.Next(1, 14);
+        var rb = random.Next(ri + 1, 15);
+        var rd = random.Next(rb + 1, 16);
 
         var baseAddr = random.NextUInt(0, 150);
         var indexValue = random.NextUInt(0, 10);
@@ -1396,8 +1430,8 @@ public class RXv1InstrunctionTest {
     [TestCase(Addressing.PostInc, MemEx.W, 0xFFFF_FFFFu, 2, 0xFFFFu)]
     public void MOVU_pr_Test(Addressing ad, MemEx sz, uint src, int afterAddrOffset, uint expected) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
         var addr = random.Next(20, 260);
 
         busManager.Write((uint)(addr + (ad == Addressing.PreDec ? afterAddrOffset : 0)), 4, src);
@@ -1410,16 +1444,24 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
-    [TestCase(unchecked((uint)-8), 7u, unchecked((uint)-56))]
-    [TestCase(22u, 1000u, 22000u)]
-    public void MUL_mr__MUL_ub_rs_mr_Test(uint a, uint b, uint result) {
+    [TestCase(MemEx.B, -120, 10, -1200)]
+    [TestCase(MemEx.B, 120, 10, 1200)]
+    [TestCase(MemEx.B, -120, -10, 1200)]
+    [TestCase(MemEx.W, 2000, 100, 200000)]
+    [TestCase(MemEx.W, -2000, 100, -200000)]
+    [TestCase(MemEx.UW, 40000, 10, 400000)]
+    [TestCase(MemEx.UW, 40000, -10, -400000)]
+    [TestCase(MemEx.L, -8, 7, -56)]
+    [TestCase(MemEx.L, 22, 1000, 22000)]
+    public void MUL_mr__MUL_ub_rs_mr_Test(MemEx sz, int a, int b, int result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        cpu.Registers[rs] = a;
-        cpu.Registers[rd] = b;
-        RunOpcode(MUL((Reg)rs, (Reg)rd));
-        cpu.Registers[rd].Is(result);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, (uint)a);
+        cpu.Registers[rd] = (uint)b;
+        RunOpcode(MUL(dsp, (Reg)rd));
+        cpu.Registers[rd].Is((uint)result);
     }
 
     [Test]
@@ -1428,8 +1470,8 @@ public class RXv1InstrunctionTest {
     [TestCase(-9000, -9000, 81000000)]
     public void MULHI_Test(short a, short b, long result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rs2 = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rs2 = random.Next(rs + 1, 16);
         cpu.Registers[rs] = unchecked((uint)a << 16);
         cpu.Registers[rs2] = unchecked((uint)b << 16);
         RunOpcode(MULHI((Reg)rs, (Reg)rs2));
@@ -1442,8 +1484,8 @@ public class RXv1InstrunctionTest {
     [TestCase(-9000, -9000,  81000000)]
     public void MULLO_Test(short a, short b, long result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rs2 = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rs2 = random.Next(rs + 1, 16);
         cpu.Registers[rs] = unchecked((uint)a);
         cpu.Registers[rs2] = unchecked((uint)b);
         RunOpcode(MULLO((Reg)rs, (Reg)rs2));
@@ -1456,7 +1498,7 @@ public class RXv1InstrunctionTest {
     [TestCase(0x12345678_FFFFFFFFu, 0x12345678u)]
     public void MVFACHI_Test(ulong acc, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         cpu.Acc = acc;
         RunOpcode(MVFACHI((Reg)rd));
         cpu.Registers[rd].Is(result);
@@ -1468,7 +1510,7 @@ public class RXv1InstrunctionTest {
     [TestCase(0xFFFF_12345678_0000u, 0x12345678u)]
     public void MVFACMI_Test(ulong acc, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         cpu.Acc = acc;
         RunOpcode(MVFACMI((Reg)rd));
         cpu.Registers[rd].Is(result);
@@ -1496,7 +1538,7 @@ public class RXv1InstrunctionTest {
             default: Assert.Fail(); break;
         }
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         RunOpcode(MVFC(a, (Reg)rd));
         cpu.Registers[rd].Is(result);
     }
@@ -1507,7 +1549,7 @@ public class RXv1InstrunctionTest {
     [TestCase(0u, 0u)]
     public void MVTACHI_Test(uint a, ulong result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 15);
+        var rs = random.Next(1, 16);
         cpu.Registers[rs] = a;
         RunOpcode(MVTACHI((Reg)rs));
         cpu.Acc.Is(result);
@@ -1519,7 +1561,7 @@ public class RXv1InstrunctionTest {
     [TestCase(0u, 0u)]
     public void MVTACLO_Test(uint a, ulong result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 15);
+        var rs = random.Next(1, 16);
         cpu.Registers[rs] = a;
         RunOpcode(MVTACLO((Reg)rs));
         cpu.Acc.Is(result);
@@ -1536,7 +1578,7 @@ public class RXv1InstrunctionTest {
     [TestCase(8u, ControlReg.INTB , 8u)]
     public void MVTC_r_Test(uint a, ControlReg b, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 15);
+        var rs = random.Next(1, 16);
         cpu.Registers[rs] = a;
         RunOpcode(MVTC((Reg)rs, b));
         var regValue = b switch
@@ -1575,8 +1617,8 @@ public class RXv1InstrunctionTest {
     public void NEG_rs_rd_Test(uint a, uint result,
                          bool expC, bool expZ, bool expS, bool expO) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
         cpu.Registers[rs] = a;
         RunOpcode(NEG((Reg)rs, (Reg)rd));
         cpu.Registers[rd].Is(result);
@@ -1600,7 +1642,7 @@ public class RXv1InstrunctionTest {
     public void NOT_rd_Test(uint a, uint result,
                          bool expZ, bool expS) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         cpu.Registers[rd] = a;
         RunOpcode(NOT((Reg)rd));
         cpu.Registers[rd].Is(result);
@@ -1609,17 +1651,24 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
-    [TestCase(0xFFFF_FFFFu,           0u, 0xFFFF_FFFFu, false, true)]
-    [TestCase(0x7F00_00FFu, 0x00FF_70FFu, 0x7FFF_70FFu, false, false)]
-    [TestCase(          0u,           0u,           0u,  true, false)]
-    public void OR_mr__OR_ub_rs_mr_Test(uint a, uint b, uint result,
+    [TestCase(MemEx.B, 0xFFu, 0x0u, 0xFFFF_FFFFu, false, true)]
+    [TestCase(MemEx.B, 0x7Fu, 0x0u, 0x7Fu, false, false)]
+    [TestCase(MemEx.W, 0xFFFFu, 0x0u, 0xFFFF_FFFFu, false, true)]
+    [TestCase(MemEx.W, 0x7FFFu, 0x0u, 0x7FFFu, false, false)]
+    [TestCase(MemEx.UW, 0xFFFFu, 0x0u, 0xFFFFu, false, false)]
+    [TestCase(MemEx.UW, 0x1234u, 0x0u, 0x1234u, false, false)]
+    [TestCase(MemEx.L, 0xFFFF_FFFFu, 0u, 0xFFFF_FFFFu, false, true)]
+    [TestCase(MemEx.L, 0x7F00_00FFu, 0x00FF_70FFu, 0x7FFF_70FFu, false, false)]
+    [TestCase(MemEx.L, 0u, 0u, 0u, true, false)]
+    public void OR_mr__OR_ub_rs_mr_Test(MemEx sz, uint a, uint b, uint result,
                         bool expZ, bool expS) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        cpu.Registers[rs] = a;
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, a);
         cpu.Registers[rd] = b;
-        RunOpcode(OR((Reg)rs, (Reg)rd));
+        RunOpcode(OR(dsp, (Reg)rd));
         cpu.Registers[rd].Is(result);
         cpu.PSW_z.Is(expZ);
         cpu.PSW_s.Is(expS);
@@ -1799,8 +1848,8 @@ public class RXv1InstrunctionTest {
     [TestCase(0x9876_5432u, 0x3254_7698u)]
     public void REVL_Test(uint a, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
         cpu.Registers[rs] = a;
         RunOpcode(REVL((Reg)rs, (Reg)rd));
         cpu.Registers[rd].Is(result);
@@ -1811,8 +1860,8 @@ public class RXv1InstrunctionTest {
     [TestCase(0x9876_5432u, 0x7698_3254u)]
     public void REVW_Test(uint a, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
         cpu.Registers[rs] = a;
         RunOpcode(REVW((Reg)rs, (Reg)rd));
         cpu.Registers[rd].Is(result);
@@ -1826,7 +1875,7 @@ public class RXv1InstrunctionTest {
     [TestCase(false, 0x8000_0000u, 0x0000_0000u,  true,  true, false)]
     public void RPLC_Test(bool psw_c, uint a, uint result, bool expC, bool expZ, bool expS) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         cpu.PSW_c = psw_c;
         cpu.Registers[rd] = a;
         RunOpcode(ROLC((Reg)rd));
@@ -1843,7 +1892,7 @@ public class RXv1InstrunctionTest {
     [TestCase(false, 0xF000_000Eu, 0x7800_0007u, false, false, false)]
     public void RORC_Test(bool psw_c, uint a, uint result, bool expC, bool expZ, bool expS) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         cpu.PSW_c = psw_c;
         cpu.Registers[rd] = a;
         RunOpcode(RORC((Reg)rd));
@@ -1862,7 +1911,7 @@ public class RXv1InstrunctionTest {
     public void ROTL_ir_Test(byte a, uint b, uint result,
                           bool expC, bool expZ, bool expS) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         cpu.Registers[rd] = b;
         RunOpcode(ROTL(new UInt5(a), (Reg)rd));
         cpu.Registers[rd].Is(result);
@@ -1882,8 +1931,8 @@ public class RXv1InstrunctionTest {
     public void ROTL_rr_Test(uint a, uint b, uint result,
                           bool expC, bool expZ, bool expS) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
         cpu.Registers[rs] = a;
         cpu.Registers[rd] = b;
         RunOpcode(ROTL((Reg)rs, (Reg)rd));
@@ -1902,8 +1951,8 @@ public class RXv1InstrunctionTest {
     public void ROTR_rr_Test(uint a, uint b, uint result,
                           bool expC, bool expZ, bool expS) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
         cpu.Registers[rs] = a;
         cpu.Registers[rd] = b;
         RunOpcode(ROTR((Reg)rs, (Reg)rd));
@@ -1917,11 +1966,12 @@ public class RXv1InstrunctionTest {
     // [TestCase(RXFloatRoundingMode.)]
     public void ROUND_Test(RXFloatRoundingMode rm, float a, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        cpu.Registers[rs] = BitConverter.SingleToUInt32Bits(a);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, MemEx.L, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, BitConverter.SingleToUInt32Bits(a));
         cpu.FPSW_rm = rm;
-        RunOpcode(ROUND((Reg)rs, (Reg)rd));
+        RunOpcode(ROUND(dsp, (Reg)rd));
         cpu.Registers[rd].Is(result);
         cpu.FPSW_co.Is(false);
         cpu.FPSW_cz.Is(false);
@@ -2004,7 +2054,7 @@ public class RXv1InstrunctionTest {
     [TestCase(false,  true, 0x0000_0000u, 0x0000_0000u)]
     public void SAT_Test(bool psw_o, bool psw_s, uint a, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         cpu.PSW_o = psw_o;
         cpu.PSW_s = psw_s;
         cpu.Registers[rd] = a;
@@ -2052,12 +2102,13 @@ public class RXv1InstrunctionTest {
         bool psw_c, uint a, uint b, uint result,
         bool expC, bool expZ, bool expS, bool expO) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, MemEx.L, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, a);
         cpu.PSW_c = psw_c;
-        cpu.Registers[rs] = a;
         cpu.Registers[rd] = b;
-        RunOpcode(SBB((Reg)rs, (Reg)rd));
+        RunOpcode(SBB(dsp, (Reg)rd));
         cpu.Registers[rd].Is(result);
         cpu.PSW_c.Is(expC);
         cpu.PSW_z.Is(expZ);
@@ -2127,7 +2178,7 @@ public class RXv1InstrunctionTest {
         bool psw_c, bool psw_z, bool psw_s, bool psw_o,
         Cnd condition, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         cpu.PSW_c = psw_c;
         cpu.PSW_z = psw_z;
         cpu.PSW_s = psw_s;
@@ -2395,8 +2446,8 @@ public class RXv1InstrunctionTest {
     public void SHAR_irr_Test(byte a, uint b, uint result,
                           bool expC, bool expZ, bool expS) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
         cpu.Registers[rs] = b;
         RunOpcode(SHAR(new UInt5(a), (Reg)rs, (Reg)rd));
         cpu.Registers[rd].Is(result);
@@ -2417,8 +2468,8 @@ public class RXv1InstrunctionTest {
     public void SHAR_rr_Test(uint a, uint b, uint result,
                              bool expC, bool expZ, bool expS) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
         cpu.Registers[rs] = a;
         cpu.Registers[rd] = b;
         RunOpcode(SHAR((Reg)rs, (Reg)rd));
@@ -2443,8 +2494,8 @@ public class RXv1InstrunctionTest {
     public void SHLL_irr_Test(byte a, uint b, uint result,
                               bool expC, bool expZ, bool expS, bool expO) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
         cpu.Registers[rs] = b;
         RunOpcode(SHLL(new UInt5(a), (Reg)rs, (Reg)rd));
         cpu.Registers[rd].Is(result);
@@ -2468,8 +2519,8 @@ public class RXv1InstrunctionTest {
     public void SHLL_rr_Test(uint a, uint b, uint result,
                              bool expC, bool expZ, bool expS, bool expO) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
         cpu.Registers[rs] = a;
         cpu.Registers[rd] = b;
         RunOpcode(SHLL((Reg)rs, (Reg)rd));
@@ -2479,7 +2530,6 @@ public class RXv1InstrunctionTest {
         cpu.PSW_s.Is(expS);
         cpu.PSW_o.Is(expO);
     }
-
 
     [Test]
     [TestCase(16, 0xFFFF_FFFFu, 0x0000_FFFFu,  true, false, false)]
@@ -2491,8 +2541,8 @@ public class RXv1InstrunctionTest {
     public void SHLR_irr_Test(byte a, uint b, uint result,
                               bool expC, bool expZ, bool expS) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
         cpu.Registers[rs] = b;
         RunOpcode(SHLR(new UInt5(a), (Reg)rs, (Reg)rd));
         cpu.Registers[rd].Is(result);
@@ -2508,8 +2558,8 @@ public class RXv1InstrunctionTest {
     public void SHLR_rr_Test(uint a, uint b, uint result,
                              bool expC, bool expZ, bool expS) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
         cpu.Registers[rs] = a;
         cpu.Registers[rd] = b;
         RunOpcode(SHLR((Reg)rs, (Reg)rd));
@@ -2524,7 +2574,7 @@ public class RXv1InstrunctionTest {
     [TestCase(false, 6u, unchecked((int)0xFF1122EE), 0xFF1122EEu)]
     public void STNZ_Test(bool psw_z, uint initial, int a, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         cpu.Registers[rd] = initial;
         cpu.PSW_z = psw_z;
         RunOpcode(STNZ(a, (Reg)rd));
@@ -2536,7 +2586,7 @@ public class RXv1InstrunctionTest {
     [TestCase( true, 6u, unchecked((int)0xFF1122EEu), 0xFF1122EEu)]
     public void STZ_Test(bool psw_z, uint initial, int a, uint result) {
         var random = TestContext.CurrentContext.Random;
-        var rd = random.Next(1, 15);
+        var rd = random.Next(1, 16);
         cpu.Registers[rd] = initial;
         cpu.PSW_z = psw_z;
         RunOpcode(STZ(a, (Reg)rd));
@@ -2544,21 +2594,28 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
-    [TestCase(                100u,          1_000_905u,             1_000_805u,  true, false, false, false)]
-    [TestCase(               2000u,               2000u,                     0u,  true,  true, false, false)]
-    [TestCase( unchecked((uint)-1),         0x7FFF_FFFFu,           0x8000_0000u,  false, false,  true,  true)]
-    [TestCase(                100u, unchecked((uint)-1),   unchecked((uint)-101),  true, false,  true, false)]
-    [TestCase( unchecked((uint)-1),         0xFFFF_FFFFu,                     0u, true,  true, false,  false)]
+    [TestCase(MemEx.B, 50, 60, 10, true, false, false, false)]
+    [TestCase(MemEx.B, -10, 60, 70, false, false, false, false)]
+    [TestCase(MemEx.W, 300, 400, 100, true, false, false, false)]
+    [TestCase(MemEx.W, -300, 10, 310, false, false, false, false)]
+    [TestCase(MemEx.UW, 40000, 42000, 2000, true, false, false, false)]
+    [TestCase(MemEx.UW, 300, -20, -320, true, false, true, false)]
+    [TestCase(MemEx.L, 100, 1_000_905, 1_000_805, true, false, false, false)]
+    [TestCase(MemEx.L, 2000, 2000, 0,  true, true, false, false)]
+    [TestCase(MemEx.L, -1, 0x7FFF_FFFF, unchecked((int)0x8000_0000), false, false, true, true)]
+    [TestCase(MemEx.L, 100, -1, -101, true, false,  true, false)]
+    [TestCase(MemEx.L, -1, ~0, 0, true, true, false, false)]
     public void SUB_mr__SUB_ub_rs_mr_Test(
-        uint a, uint b, uint result,
+        MemEx sz, int a, int b, int result,
         bool expC, bool expZ, bool expS, bool expO) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        cpu.Registers[rs] = a;
-        cpu.Registers[rd] = b;
-        RunOpcode(SUB((Reg)rs, (Reg)rd));
-        cpu.Registers[rd].Is(result);
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, (uint)a);
+        cpu.Registers[rd] = (uint)b;
+        RunOpcode(SUB(dsp, (Reg)rd));
+        cpu.Registers[rd].Is((uint)result);
         cpu.PSW_c.Is(expC);
         cpu.PSW_z.Is(expZ);
         cpu.PSW_s.Is(expS);
@@ -2640,7 +2697,6 @@ public class RXv1InstrunctionTest {
             MemEx.L => value,
             _ => throw new NotSupportedException(size.ToString())
         };
-        var maxValue = (uint)((1L << (8 * byteLength)) - 1);
         var datas = random.NextBool()
             // 異なる値を含む場合
             ? Enumerable.Repeat(expectedValue, (int)(length - 1))
@@ -2679,62 +2735,76 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
-    [TestCase(          0u, 0xFFFF_FFFFu,  true, false)]
-    [TestCase(          4u,         100u, false, false)]
-    [TestCase(0x8000_0000u, 0x8000_0000u, false,  true)]
-    public void TST_mr__TST_ub_rs_mr_Test(uint a, uint b, bool expZ, bool expS) {
+    [TestCase(MemEx.B, 1u, 1u, false, false)]
+    [TestCase(MemEx.B, 0x80u, 0x8000_0000u, false, true)]
+    [TestCase(MemEx.B, 0x70u, 0x8000_0000u, true, false)]
+    [TestCase(MemEx.W, 0x8000u, 0x8000_0000u, false, true)]
+    [TestCase(MemEx.W, 0x7000u, 0x8000_0000u, true, false)]
+    [TestCase(MemEx.UW, 0x8000u, 0x8000_0000u, true, false)]
+    [TestCase(MemEx.UW, 0x7000u, 0x8000_0000u, true, false)]
+    [TestCase(MemEx.L,           0u, 0xFFFF_FFFFu,  true, false)]
+    [TestCase(MemEx.L,           4u,         100u, false, false)]
+    [TestCase(MemEx.L, 0x8000_0000u, 0x8000_0000u, false,  true)]
+    public void TST_mr__TST_ub_rs_mr_Test(MemEx sz, uint a, uint b, bool expZ, bool expS) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        cpu.Registers[rs] = a;
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, a);
         cpu.Registers[rd] = b;
-        RunOpcode(TST((Reg)rs, (Reg)rd));
+        RunOpcode(TST(dsp, (Reg)rd));
         cpu.PSW_z.Is(expZ);
         cpu.PSW_s.Is(expS);
     }
 
     [Test]
-    [TestCase(0b1010_0000u, 0b0111_0011u, 0b1101_0011u, false,  false)]
-    [TestCase(0b1010_0000u << 24, 0b0111_0011u << 24, 0b1101_0011u << 24, false,  true)]
-    [TestCase(0xFFFF_FFFFu, 0xFFFF_FFFFu,           0u,  true, false)]
-    [TestCase(          0u,           0u,           0u,  true, false)]
-    public void XOR_mr__XOR_ub_rs_mr_Test(uint a, uint b, uint result, bool expZ, bool expS) {
+    [TestCase(MemEx.B, 0x7Fu, 0x1234_5678u, 0x7Fu, 0x78u)]
+    [TestCase(MemEx.B, 0x7Fu, 0xFFu, 0x7Fu, 0xFFu)]
+    [TestCase(MemEx.B, 0x70u, 0x0u, 0x70u, 0x0u)]
+    [TestCase(MemEx.B, 0x80u, 0xFFu, 0xFFFF_FF80u, 0xFFu)]
+    [TestCase(MemEx.W, 0x8012u, 0x3456_789Au, 0xFFFF_8012u, 0x789Au)]
+    [TestCase(MemEx.W, 0x7012u, 0x3456_789Au, 0x7012u, 0x789Au)]
+    [TestCase(MemEx.UW, 0xFFEEu, 0x1234_5678u, 0xFFEEu, 0x5678u)]
+    [TestCase(MemEx.UW, 0xCCDDEEFFu, 0u, 0xEEFFu, 0xCCDD_0000u)]
+    [TestCase(MemEx.L, 0xCCDDEEFFu, 0x11223344u, 0xCCDDEEFFu, 0x11223344u)]
+    [TestCase(MemEx.L, 0xFFEEDDCCu, 0x87654321u, 0xFFEEDDCCu, 0x87654321u)]
+    public void XCHG_mr__XCHG_ub_rs_mr_Test(MemEx sz, uint a, uint b, uint exppectedReg, uint expectedMem) {
         var random = TestContext.CurrentContext.Random;
-        var rs = random.Next(1, 14);
-        var rd = random.Next(rs + 1, 15);
-        cpu.Registers[rs] = a;
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, a);
         cpu.Registers[rd] = b;
-        RunOpcode(XOR((Reg)rs, (Reg)rd));
+        RunOpcode(XCHG(dsp, (Reg)rd));
+        cpu.Registers[rd].Is(exppectedReg);
+        LoadData(cpu.Registers, busManager, dsp.LD, (int)MemEx.L, dsp.Displacement, dsp.TargetReg)
+            .Is(expectedMem);
+    }
+
+    [Test]
+    [TestCase(MemEx.B, 0x80u, 0x80u, 0xFFFF_FF00u, false, true)]
+    [TestCase(MemEx.B, 0x7Fu, 0x80u, 0xFFu, false, false)]
+    [TestCase(MemEx.B, 0x7Fu, 0x7Fu, 0u, true, false)]
+    [TestCase(MemEx.W, 0x8000u, 0x8000u, 0xFFFF_0000u, false, true)]
+    [TestCase(MemEx.W, 0x7FFFu, 0x8000u, 0xFFFFu, false, false)]
+    [TestCase(MemEx.W, 0x7FFFu, 0x7FFFu, 0u, true, false)]
+    [TestCase(MemEx.UW, 0x8000u, 0x8000u, 0u, true, false)]
+    [TestCase(MemEx.UW, 0x7FFFu, 0x8000u, 0xFFFFu, false, false)]
+    [TestCase(MemEx.UW, 0x7FFFu, 0x7FFFu, 0u, true, false)]
+    [TestCase(MemEx.L, 0b1010_0000u, 0b0111_0011u, 0b1101_0011u, false,  false)]
+    [TestCase(MemEx.L, 0b1010_0000u << 24, 0b0111_0011u << 24, 0b1101_0011u << 24, false,  true)]
+    [TestCase(MemEx.L, 0xFFFF_FFFFu, 0xFFFF_FFFFu,           0u,  true, false)]
+    [TestCase(MemEx.L,           0u,           0u,           0u,  true, false)]
+    public void XOR_mr__XOR_ub_rs_mr_Test(MemEx sz, uint a, uint b, uint result, bool expZ, bool expS) {
+        var random = TestContext.CurrentContext.Random;
+        var rs = random.Next(1, 15);
+        var rd = random.Next(rs + 1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rs, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, a);
+        cpu.Registers[rd] = b;
+        RunOpcode(XOR(dsp, (Reg)rd));
         cpu.Registers[rd].Is(result);
         cpu.PSW_z.Is(expZ);
         cpu.PSW_s.Is(expS);
-    }
-
-       [Test]
-    public void TSTRS_Test()
-    {
-        /*
-        //addr指定
-        uint addrA = Convert.ToUInt32(random_generate.NextInt64(1,10));
-        uint addrB;
-        do
-        {
-            addrB = Convert.ToUInt32(random_generate.NextInt64(1,10));
-        }while(addrA == addrB);
-        */
-        //ランダムネーム
-        var address = 0x3u;
-        var a = 0xCCDDEEFFu;
-        var b = 0x11223344u;
-        memory.Write(address, 4, a);
-        cpu.Registers[1] = address;
-        cpu.Registers[2] = b;
-        //Reg reg = (Reg)Enum.ToObject(typeof(Reg), 2);
-
-        RunOpcode(XCHG(new RegRef(R1, MemEx.L), R2));
-        //cpu.Registers[2].Is(a&b);
-        memory.Read(address, 4).Is(b);
-
-
     }
 }

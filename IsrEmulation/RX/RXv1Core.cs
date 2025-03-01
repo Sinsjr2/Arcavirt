@@ -246,7 +246,7 @@ namespace RX {
         uint LoadSourceOperand(uint ld, uint mi, uint rs, ReadOnlySpan<uint> dsp) {
             if (ld == 0) {
                 var memOp = MemOps.Span[(int)mi];
-                return bus.Read(Registers[rs], 1 << memOp.Size);
+                return SignExtension(memOp.IsSigned, bus.Read(Registers[rs], 1 << memOp.Size), memOp.Size);
             }
             if (ld < 3) {
                 var memOp = MemOps.Span[(int)mi];
@@ -1335,8 +1335,8 @@ namespace RX {
                     break;
                 }
                 case OpCode.ADC_mr: {
-                    var src = LoadSourceOperand(operand[1], operand[0], operand[2], operand.Slice(4));
-                    ref var dest = ref Registers[operand[3]];
+                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                    ref var dest = ref Registers[operand[2]];
                     dest = OpADC(src, dest);
                     break;
                 }
@@ -1608,7 +1608,7 @@ namespace RX {
                     break;
                 }
                 case OpCode.FADD_mr: {
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                    var src = LoadUnsignedSourceOperand(operand[2], 2, operand.Slice(3), operand[0]);
                     ref var dest = ref Registers[operand[1]];
                     dest = OpFADD(src, dest);
                     break;
@@ -1617,7 +1617,7 @@ namespace RX {
                     OpFCMP(operand[1], Registers[operand[0]]);
                     break;
                 case OpCode.FCMP_mr: {
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                    var src = LoadUnsignedSourceOperand(operand[2], 2, operand.Slice(3), operand[0]);
                     OpFCMP(src, Registers[operand[1]]);
                     break;
                 }
@@ -1627,7 +1627,7 @@ namespace RX {
                     break;
                 }
                 case OpCode.FDIV_mr: {
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                    var src = LoadUnsignedSourceOperand(operand[2], 2, operand.Slice(3), operand[0]);
                     ref var dest = ref Registers[operand[1]];
                     dest = OpFDIV(src, dest);
                     break;
@@ -1638,7 +1638,7 @@ namespace RX {
                     break;
                 }
                 case OpCode.FMUL_mr: {
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                    var src = LoadUnsignedSourceOperand(operand[2], 2, operand.Slice(3), operand[0]);
                     ref var dest = ref Registers[operand[1]];
                     dest = OpFMUL(src, dest);
                     break;
@@ -1649,13 +1649,13 @@ namespace RX {
                     break;
                 }
                 case OpCode.FSUB_mr: {
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                    var src = LoadUnsignedSourceOperand(operand[2], 2, operand.Slice(3), operand[0]);
                     ref var dest = ref Registers[operand[1]];
                     dest = OpFSUB(src, dest);
                     break;
                 }
                 case OpCode.FTOI: {
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                    var src = LoadUnsignedSourceOperand(operand[2], 2, operand.Slice(3), operand[0]);
                     Registers[operand[1]] = OpFTOI(src);
                     break;
                 }
@@ -2065,8 +2065,8 @@ namespace RX {
                     break;
                 }
                 case OpCode.SBB_mr: {
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
-                    ref var dest = ref Registers[operand[1]];
+                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                    ref var dest = ref Registers[operand[2]];
                     dest = OpSBB(src, dest);
                     break;
                 }
@@ -2175,7 +2175,7 @@ namespace RX {
                     break;
                 }
                 case OpCode.TST_mr: {
-                    var src = LoadSourceOperand(operand[3], operand[4], operand[1], operand.Slice(4));
+                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
                     OpTST(src, Registers[operand[2]]);
                     break;
                 }
