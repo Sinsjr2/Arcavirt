@@ -582,8 +582,8 @@ namespace RX {
             ? Create(OpCode.EMULU_mr, (uint)src.Memex, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement)
             : Create(OpCode.EMULU_ub_rs_mr, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement);
 
-        public static Instruction32 FADD(int src, Reg dest) {
-            return Create(OpCode.FADD_ir, (uint)dest, unchecked((uint)src));
+        public static Instruction32 FADD(float src, Reg dest) {
+            return Create(OpCode.FADD_ir, (uint)dest, BitConverter.SingleToUInt32Bits(src));
         }
 
         public static Instruction32 FADD(StdRegAddressing src, Reg dest) {
@@ -593,8 +593,8 @@ namespace RX {
             return Create(OpCode.FADD_mr, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement);
         }
 
-        public static Instruction32 FCMP(int src, Reg dest) {
-            return Create(OpCode.FCMP_ir, (uint)dest, unchecked((uint)src));
+        public static Instruction32 FCMP(float src, Reg dest) {
+            return Create(OpCode.FCMP_ir, (uint)dest, BitConverter.SingleToUInt32Bits(src));
         }
 
         public static Instruction32 FCMP(StdRegAddressing src, Reg dest) {
@@ -604,8 +604,8 @@ namespace RX {
             return Create(OpCode.FCMP_mr, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement);
         }
 
-        public static Instruction32 FDIV(int src, Reg dest) {
-            return Create(OpCode.FDIV_ir, (uint)dest, unchecked((uint)src));
+        public static Instruction32 FDIV(float src, Reg dest) {
+            return Create(OpCode.FDIV_ir, (uint)dest, BitConverter.SingleToUInt32Bits(src));
         }
 
         public static Instruction32 FDIV(StdRegAddressing src, Reg dest) {
@@ -615,8 +615,8 @@ namespace RX {
             return Create(OpCode.FDIV_mr, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement);
         }
 
-        public static Instruction32 FMUL(int src, Reg dest) {
-            return Create(OpCode.FMUL_ir, (uint)dest, unchecked((uint)src));
+        public static Instruction32 FMUL(float src, Reg dest) {
+            return Create(OpCode.FMUL_ir, (uint)dest, BitConverter.SingleToUInt32Bits(src));
         }
 
         public static Instruction32 FMUL(StdRegAddressing src, Reg dest) {
@@ -626,8 +626,8 @@ namespace RX {
             return Create(OpCode.FMUL_mr, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement);
         }
 
-        public static Instruction32 FSUB(int src, Reg dest) {
-            return Create(OpCode.FSUB_ir, (uint)dest, unchecked((uint)src));
+        public static Instruction32 FSUB(float src, Reg dest) {
+            return Create(OpCode.FSUB_ir, (uint)dest, BitConverter.SingleToUInt32Bits(src));
         }
 
         public static Instruction32 FSUB(StdRegAddressing src, Reg dest) {

@@ -1369,7 +1369,7 @@ namespace RX {
                     break;
                 }
                 case OpCode.AND_ir: {
-                    ref var dest = ref Registers[operand[1]];
+                    ref var dest = ref Registers[operand[0]];
                     dest = OpAND(operand[2], dest);
                     break;
                 }
@@ -1386,7 +1386,7 @@ namespace RX {
                     break;
                 }
                 case OpCode.AND_rrr: {
-                    Registers[operand[0]] = OpAND(operand[1], operand[2]);
+                    Registers[operand[0]] = OpAND(Registers[operand[1]], Registers[operand[2]]);
                     break;
                 }
                 case OpCode.BCLR_im:
@@ -1521,12 +1521,13 @@ namespace RX {
                     OpCLRPSW(operand[0]);
                     break;
                 case OpCode.CMP_4ir:
-                    OpSUB(operand[1], Registers[operand[0]]);
-                    break;
-                case OpCode.CMP_8ir:
                     OpSUB(operand[0], Registers[operand[1]]);
                     break;
+                case OpCode.CMP_8ir:
+                    OpSUB(operand[1], Registers[operand[0]]);
+                    break;
                 case OpCode.CMP_ir:
+                    OpSUB(operand[2], Registers[operand[0]]);
                     break;
                 case OpCode.CMP_ub_rs_mr: {
                     var dest = Registers[operand[1]];
@@ -1542,7 +1543,7 @@ namespace RX {
                 }
                 case OpCode.DIV_ir: {
                     ref var dest = ref Registers[operand[0]];
-                    dest = OpDIV(Registers[operand[0]], dest);
+                    dest = OpDIV(operand[2], dest);
                     break;
                 }
                 case OpCode.DIV_ub_rs_mr: {

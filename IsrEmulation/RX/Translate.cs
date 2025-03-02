@@ -51,7 +51,7 @@ namespace RX {
             var b1_imm8 = new Composite(new LEUInt(8, 8, 2), new Skip(2));
 
             var b2_rds = new Composite(new LEUInt(8, 4, 2), new Skip(2));
-            var b2_rds_li = new Composite(new LEUInt(8, 4, 2), new Skip(2));
+            var b2_rds_li = new Composite(new LEUInt(8, 4, 2), new ImmediateValueFormatter(2, 0));
             var b2_rd_rs_li = new Composite(new LEUInt(12, 4, 2), new LEUInt(8, 4, 2), new ImmediateValueFormatter(2, 0));
             var b2_rs2_rd_li = new Composite(new LEUInt(12, 4, 2), new LEUInt(8, 4, 2), new ImmediateValueFormatter(2, 0));
             var b2_rds_uimm4 = new Composite(new LEUInt(12, 4, 2), new LEUInt(8, 4, 2), new Skip(2));
@@ -70,7 +70,7 @@ namespace RX {
 
             var b3_rd_rs_rs2 = new Composite(
                 new LEUInt(8, 4, 3),
-                new LEUInt(24, 4, 3), new LEUInt(16, 4, 3), new Skip(3));
+                new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new Skip(3));
             var b3_rs_rs2 = new Composite(new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new Skip(3));
             var b3_rd_rs = new Composite(new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new Skip(3));
             var b3_rd_ld = new Composite(new LEUInt(14, 2, 3), new LEUInt(20, 4, 3),

@@ -73,8 +73,9 @@ namespace RX {
                     return (uint)immediate;
                 }
                 case 3: {
-                    int immediate = (int)ReadI8() | ((int)ReadI8() << 8) | ((int)ReadI8() << 16);
-                    return (uint)immediate;
+                    uint immediate = (uint)(ReadU8() | (ReadU8() << 8) | (ReadU8() << 16));
+                    bool isNeg = ((immediate >> 23) & 1) != 0;
+                    return isNeg ? immediate | 0xFF00_0000u : immediate;
                 }
                 case 4: {
                     int immediate = ReadI32();
