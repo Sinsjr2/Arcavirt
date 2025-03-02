@@ -74,9 +74,13 @@ namespace RX {
     /// </summary>
     public struct RegRef {
         public readonly Reg RegisterNo;
-        public readonly MemEx Memex;
 
-        public RegRef(Reg registerNo, MemEx mi) {
+        /// <summary>
+        /// null の場合は UB になります。
+        /// </summary>
+        public readonly MemEx? Memex;
+
+        public RegRef(Reg registerNo, MemEx? mi) {
             RegisterNo = registerNo;
             Memex = mi;
         }
@@ -89,9 +93,13 @@ namespace RX {
     public struct RelRef8 {
         public readonly byte Displacement;
         public readonly Reg RegisterNo;
-        public readonly MemEx Memex;
 
-        public RelRef8(byte displacement, Reg registerNo, MemEx mi) {
+        /// <summary>
+        /// null の場合は UB になります。
+        /// </summary>
+        public readonly MemEx? Memex;
+
+        public RelRef8(byte displacement, Reg registerNo, MemEx? mi) {
             Displacement = displacement;
             RegisterNo = registerNo;
             Memex = mi;
@@ -105,9 +113,13 @@ namespace RX {
     public struct RelRef16 {
         public readonly ushort Displacement;
         public readonly Reg RegisterNo;
-        public readonly MemEx Memex;
 
-        public RelRef16(ushort displacement, Reg registerNo, MemEx mi) {
+        /// <summary>
+        /// null の場合は UB になります。
+        /// </summary>
+        public readonly MemEx? Memex;
+
+        public RelRef16(ushort displacement, Reg registerNo, MemEx? mi) {
             Displacement = displacement;
             RegisterNo = registerNo;
             Memex = mi;
@@ -533,10 +545,10 @@ namespace RX {
         public static Instruction32 CMP(StdImmValue src, Reg src2) =>
             Create(OpCode.CMP_ir, (uint)src2, (uint)src.LI, src.Value);
 
-        public static Instruction32 CMP(StdRegAddressing src, Reg dest) =>
+        public static Instruction32 CMP(StdRegAddressing src, Reg src2) =>
             src.Memex.HasValue
-            ? Create(OpCode.CMP_mr, (uint)src.Memex, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement)
-            : Create(OpCode.CMP_ub_rs_mr, (uint)src.TargetReg, (uint)dest, (uint)src.LD, src.Displacement);
+            ? Create(OpCode.CMP_mr, (uint)src.Memex, (uint)src.TargetReg, (uint)src2, (uint)src.LD, src.Displacement)
+            : Create(OpCode.CMP_ub_rs_mr, (uint)src.TargetReg, (uint)src2, (uint)src.LD, src.Displacement);
 
         public static Instruction32 DIV(StdImmValue src, Reg dest) =>
             Create(OpCode.DIV_ir, (uint)dest, (uint)src.LI, src.Value);

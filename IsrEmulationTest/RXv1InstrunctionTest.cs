@@ -98,7 +98,7 @@ public class RXv1InstrunctionTest {
         StoreDestOperand(cpu.Registers, busManager, MemEx.L, dest.TargetReg, dest.LD, dest.Displacement, value);
     }
 
-    static StdRegAddressing GetRandomStdRegAddressing(Reg reg, MemEx size, LengthOfDisplacement ldBegin, LengthOfDisplacement ldEnd) {
+    static StdRegAddressing GetRandomStdRegAddressing(Reg reg, MemEx? size, LengthOfDisplacement ldBegin, LengthOfDisplacement ldEnd) {
         var random = TestContext.CurrentContext.Random;
         var ld = size == MemEx.L
             ? (LengthOfDisplacement)random.Next((int)ldBegin, (int)ldEnd + 1)
@@ -241,9 +241,19 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
+    [TestCase(null, 0x7Fu, 0x1u, 0x80u)]
+    [TestCase(null, 0x80u, 0x1u, 0x81u)]
+    [TestCase(MemEx.B, 0x7Fu, 0x1u, 0x80u)]
+    [TestCase(MemEx.B, 0x80u, 0x1u, 0xFFFF_FF81u)]
+    [TestCase(MemEx.W, 0x7F00u, 0x1u, 0x7F01u)]
+    [TestCase(MemEx.W, 0x8000u, 0x1u, 0xFFFF_8001u)]
+    [TestCase(MemEx.UW, 0x7Fu, 0x1u, 0x80u)]
+    [TestCase(MemEx.UW, 0x80u, 0x1u, 0x81u)]
+    [TestCase(MemEx.UW, 0x7F01u, 0x1u, 0x7F02u)]
+    [TestCase(MemEx.UW, 0x8001u, 0x1u, 0x8002u)]
     [TestCase(MemEx.L, 100u, 10u, 110u)]
     [TestCase(MemEx.L, 50u, 300u, 350u)]
-    public void ADD_mr__ADD_ub_rs_mr_Test(MemEx sz, uint a, uint b, uint result) {
+    public void ADD_mr__ADD_ub_rs_mr_Test(MemEx? sz, uint a, uint b, uint result) {
         var random = TestContext.CurrentContext.Random;
         var rs = random.Next(1, 15);
         var rd = random.Next(rs + 1, 16);
@@ -255,15 +265,29 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
-    [TestCase(0u, 1u, 0u, true, false)]
-    [TestCase(1u, 1u, 1u, false, false)]
-    public void AND_mr__AND_ub_rs_mr_Test(uint a, uint b, uint result, bool expZ, bool expS) {
+    [TestCase(null, 0x71u, 0xFFFF_FFFFu, 0x71u, false, false)]
+    [TestCase(null, 0x81u, 0xFFFF_FFFFu, 0x81u, false, false)]
+    [TestCase(MemEx.B, 0x71u, 0xFFFF_FFFFu, 0x71u, false, false)]
+    [TestCase(MemEx.B, 0x81u, 0xFFFF_FFFFu, 0xFFFF_FF81u, false, true)]
+    [TestCase(MemEx.W, 0x7F00u, 0xFFFF_FFFFu, 0x7F00u, false, false)]
+    [TestCase(MemEx.W, 0x80F0u, 0xFFFF_FFFFu, 0xFFFF_80F0, false, true)]
+    [TestCase(MemEx.UW, 0x7F00u, 0xFFFF_FFFFu, 0x7F00u, false, false)]
+    [TestCase(MemEx.UW, 0x80F0u, 0xFFFF_FFFFu, 0x80F0u, false, false)]
+    [TestCase(MemEx.L, 0u, 1u, 0u, true, false)]
+    [TestCase(MemEx.L, 1u, 1u, 1u, false, false)]
+    [TestCase(MemEx.L, 1u, 0u, 0u, true, false)]
+    [TestCase(MemEx.L, 0u, 0u, 0u, true, false)]
+    [TestCase(MemEx.L, 0xFFFF_FFFFu, 0x0u, 0x0u, true, false)]
+    [TestCase(MemEx.L, 0xFFFF_FFFFu, 0xFFFF_FFFFu, 0xFFFF_FFFFu, false, true)]
+    [TestCase(MemEx.L, 0x8123_4567u, 0x8123_4567u, 0x8123_4567u, false, true)]
+    public void AND_mr__AND_ub_rs_mr_Test(MemEx? sz, uint a, uint b, uint result, bool expZ, bool expS) {
         var random = TestContext.CurrentContext.Random;
         var rs = random.Next(1, 15);
         var rd = random.Next(rs + 1, 16);
-        cpu.Registers[rs] = a;
+        var dsp = GetRandomStdRegAddressing((Reg)rs, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, a);
         cpu.Registers[rd] = b;
-        RunOpcode(AND((Reg)rs, (Reg)rd));
+        RunOpcode(AND(dsp, (Reg)rd));
         cpu.Registers[rd].Is(result);
         cpu.PSW_z.Is(expZ);
         cpu.PSW_s.Is(expS);
@@ -695,9 +719,22 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
+    [TestCase(null, 0x70u,~0u, true, false, true, false)]
+    [TestCase(null, 0x80u, ~0u, true, false, true, false)]
+    [TestCase(MemEx.B, 0x70u, ~0u, true, false, true, false)]
+    [TestCase(MemEx.B, 0x80u, ~0u, true, false, false, false)]
+    [TestCase(MemEx.W, 0x7000u, ~0u, true, false, true, false)]
+    [TestCase(MemEx.W, 0x8000u, ~0u, true, false, false, false)]
+    [TestCase(MemEx.UW, 0x7000u, ~0u, true, false, true, false)]
+    [TestCase(MemEx.UW, 0x8000u, ~0u, true, false, true, false)]
+    [TestCase(MemEx.L, 0x7000_0000u, ~0u, true, false, true, false)]
+    [TestCase(MemEx.L, 0x8000_0000u, ~0u, true, false, false, false)]
     [TestCase(MemEx.L, 0u, 0u, true,  true, false, false)]
     [TestCase(MemEx.L, 1u, 5u, true, false, false, false)]
-    public void CMP_mr__CMP_ub_rs_mr_Test(MemEx sz, uint a, uint b,
+    [TestCase(MemEx.L, 5u, 1u, false, false, true, false)]
+    [TestCase(MemEx.L, 0xFFFF_FC18u, 0x7FFF_FFFFu, false, false, true, true)]
+    [TestCase(MemEx.L, 0x7FFF_FFFFu, 0xFFFF_FC18u, true, false, false, true)]
+    public void CMP_mr__CMP_ub_rs_mr_Test(MemEx? sz, uint a, uint b,
                          bool expC, bool expZ, bool expS, bool expO) {
         var random = TestContext.CurrentContext.Random;
         var rs = random.Next(1, 15);
@@ -705,6 +742,10 @@ public class RXv1InstrunctionTest {
         var dsp = GetRandomStdRegAddressing((Reg)rs, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
         StoreRandomDest(dsp, 0, 300, a);
         cpu.Registers[rd] = b;
+        cpu.PSW_c = random.NextBool();
+        cpu.PSW_z = random.NextBool();
+        cpu.PSW_s = random.NextBool();
+        cpu.PSW_o = random.NextBool();
         RunOpcode(CMP(dsp, (Reg)rd));
         cpu.PSW_c.Is(expC);
         cpu.PSW_z.Is(expZ);
@@ -713,30 +754,52 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
-    [TestCase(MemEx.L, 10u, 400u,  40u, false)]
-    [TestCase(MemEx.L,   5u,  0u,   0u, false)]
-    [TestCase(MemEx.L,   0u,  5u, null,  true)]
-    [TestCase(MemEx.L, 99u, unchecked((uint)-2000), unchecked((uint)-20u), false)]
-    public void DIV_mr__DIV_ub_rs_mr_Test(MemEx sz, uint a, uint b, uint? result, bool expO) {
+    [TestCase(null, 100, 60000, 600, false)]
+    [TestCase(null, 200, 60000, 300, false)]
+    [TestCase(MemEx.B, -126, 1260000, -10000, false)]
+    [TestCase(MemEx.B, 126, 1260000, 10000, false)]
+    [TestCase(MemEx.W, -4000, 4000, -1, false)]
+    [TestCase(MemEx.W, 300, 900, 3, false)]
+    [TestCase(MemEx.UW, 40000, 40000, 1, false)]
+    [TestCase(MemEx.UW, 300, 900, 3, false)]
+    [TestCase(MemEx.L, 10, 400, 40, false)]
+    [TestCase(MemEx.L, 5, 0, 0, false)]
+    [TestCase(MemEx.L, 0,  5, null,  true)]
+    [TestCase(MemEx.L, -1, -2147483648, null, true)]
+    [TestCase(MemEx.L, 99, -2000, -20, false)]
+    public void DIV_mr__DIV_ub_rs_mr_Test(MemEx? sz, int a, int b, int? result, bool expO) {
         var random = TestContext.CurrentContext.Random;
         var rs = random.Next(1, 15);
         var rd = random.Next(rs + 1, 16);
         var dsp = GetRandomStdRegAddressing((Reg)rs, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
-        StoreRandomDest(dsp, 0, 300, a);
-        cpu.Registers[rd] = b;
+        StoreRandomDest(dsp, 0, 300, unchecked((uint)a));
+        cpu.Registers[rd] = unchecked((uint)b);
+        cpu.PSW_o = random.NextBool();
         RunOpcode(DIV(dsp, (Reg)rd));
         if (result.HasValue) {
-            cpu.Registers[rd].Is(result.Value);
+            cpu.Registers[rd].Is(unchecked((uint) result.Value));
+        }
+        else {
+            // 計算不能な場合は前の値を維持していることを確認する
+            cpu.Registers[rd].Is(unchecked((uint)b));
         }
         cpu.PSW_o.Is(expO);
     }
 
     [Test]
+    [TestCase(null, 0x70u, 0xFFFF_FFFFu, 0x249_2492u, false)]
+    [TestCase(null, 0x80u, 0xFFFF_FFFFu, 0x1FFFFFFu, false)]
+    [TestCase(MemEx.B, 0x70u, 0xFFFF_FFFFu, 0x249_2492u, false)]
+    [TestCase(MemEx.B, 0x80u, 0xFFFF_FFFFu, 1u, false)]
+    [TestCase(MemEx.W, 0x7000u, 0xFFFF_FFFFu, 0x2_4924u, false)]
+    [TestCase(MemEx.W, 0x8000u, 0xFFFF_FFFFu, 1u, false)]
+    [TestCase(MemEx.UW, 20000u, 80000u, 4u, false)]
+    [TestCase(MemEx.UW, 40000u, 80000u, 2u, false)]
     [TestCase(MemEx.L, 10u, 400u, 40u, false)]
     [TestCase(MemEx.L, 0u, 5u, null, true)]
     // -2000 -> 0xFFFFF830 -> 4294965296
     [TestCase(MemEx.L, 236u, unchecked((uint)-2000), 18199005u, false)]
-    public void DIVU_mr__DIVU_ub_rs_mr_Test(MemEx sz, uint a, uint b, uint? result, bool expO) {
+    public void DIVU_mr__DIVU_ub_rs_mr_Test(MemEx? sz, uint a, uint b, uint? result, bool expO) {
         var random = TestContext.CurrentContext.Random;
         var rs = random.Next(1, 15);
         var rd = random.Next(rs + 1, 16);
@@ -747,26 +810,47 @@ public class RXv1InstrunctionTest {
         if (result.HasValue) {
             cpu.Registers[rd].Is(result.Value);
         }
+        else {
+            // 計算不能な場合は前の値を維持していることを確認する
+            cpu.Registers[rd].Is(b);
+        }
         cpu.PSW_o.Is(expO);
     }
 
     [Test]
-    [TestCase(1000000u, 99999u, 1000000L * 99999L)]
-    [TestCase(unchecked((uint)-100000), 99999u, -100000L * 99999L)]
-    public void EMUL_mr__EMUL_ub_rs_mr_Test(uint a, uint b, long result) {
+    [TestCase(null, 100, 1000, 100L * 1000L)]
+    [TestCase(null, 200, 1000, 200L * 1000L)]
+    [TestCase(MemEx.B, 100, 1000, 100L * 1000L)]
+    [TestCase(MemEx.B, -100, 1000, -100L * 1000L)]
+    [TestCase(MemEx.W, 20000, 2000, 20000L * 2000L)]
+    [TestCase(MemEx.W, -1000, 2000, -1000L * 2000L)]
+    [TestCase(MemEx.UW, 20000, 2000, 20000L * 2000L)]
+    [TestCase(MemEx.UW, 40000, 2000, 40000L * 2000L)]
+    [TestCase(MemEx.L, 1000000, 99999, 1000000L * 99999L)]
+    [TestCase(MemEx.L, -100000, 99999, -100000L * 99999L)]
+    public void EMUL_mr__EMUL_ub_rs_mr_Test(MemEx? sz, int a, int b, long result) {
         var random = TestContext.CurrentContext.Random;
         var rs = random.Next(1, 13);
         var rd = random.Next(rs + 1, 14);
-        cpu.Registers[rs] = a;
-        cpu.Registers[rd] = b;
-        RunOpcode(EMUL((Reg)rs, (Reg)rd));
+        var dsp = GetRandomStdRegAddressing((Reg)rs, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        StoreRandomDest(dsp, 0, 300, unchecked((uint)a));
+        cpu.Registers[rd] = unchecked((uint)b);
+        RunOpcode(EMUL(dsp, (Reg)rd));
         cpu.Registers[rd + 1].Is((uint)((ulong)result >> 32));
         cpu.Registers[rd].Is(unchecked((uint)result));
     }
 
     [Test]
+    [TestCase(null, 0x70u, 1000u, 0x70Lu * 1000Lu)]
+    [TestCase(null, 200u, 1000u, 200Lu * 1000Lu)]
+    [TestCase(MemEx.B, 0x70u, 1000u, 0x70Lu * 1000Lu)]
+    [TestCase(MemEx.B, 0x80u, 1000u, 0xFFFF_FF80Lu * 1000Lu)]
+    [TestCase(MemEx.W, 0x7012u, 1000u, 0x7012Lu * 1000Lu)]
+    [TestCase(MemEx.W, 0x8012u, 1000u, 0xFFFF_8012Lu * 1000Lu)]
+    [TestCase(MemEx.UW, 0x7012u, 1000u, 0x7012Lu * 1000Lu)]
+    [TestCase(MemEx.UW, 0x8012u, 1000u, 0x8012Lu * 1000Lu)]
     [TestCase(MemEx.L, 1000000u, 99999u, 1000000Lu * 99999Lu)]
-    public void EMULU_mr__EMULU_ub_rs_mr_Test(MemEx sz, uint a, uint b, ulong result) {
+    public void EMULU_mr__EMULU_ub_rs_mr_Test(MemEx? sz, uint a, uint b, ulong result) {
         var random = TestContext.CurrentContext.Random;
         var rs = random.Next(1, 13);
         var rd = random.Next(rs + 1, 14);
@@ -942,6 +1026,10 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
+    [TestCase(null, 120, 50, 120)]
+    [TestCase(null, 200, 50, 200)]
+    [TestCase(null, 200, 300, 300)]
+    [TestCase(null, 200, -300, 200)]
     [TestCase(MemEx.B, 120, 50, 120)]
     [TestCase(MemEx.B, -120, 50, 50)]
     [TestCase(MemEx.W, 300, 260, 300)]
@@ -951,7 +1039,7 @@ public class RXv1InstrunctionTest {
     [TestCase(MemEx.UW, 42000, 41000, 42000)]
     [TestCase(MemEx.L, 1000000, -5, 1000000)]
     [TestCase(MemEx.L, -150000, -100, -100)]
-    public void MAX_mr__MAX_ub_rs_mr_Test(MemEx sz, int a, int b, int result) {
+    public void MAX_mr__MAX_ub_rs_mr_Test(MemEx? sz, int a, int b, int result) {
         var random = TestContext.CurrentContext.Random;
         var rs = random.Next(1, 15);
         var rd = random.Next(rs + 1, 16);
@@ -963,6 +1051,10 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
+    [TestCase(null, 80, 120, 80)]
+    [TestCase(null, 200, 120, 120)]
+    [TestCase(null, 200, 300, 200)]
+    [TestCase(null, 200, -300, -300)]
     [TestCase(MemEx.B, -120, 120, -120)]
     [TestCase(MemEx.B, -120, -2000, -2000)]
     [TestCase(MemEx.B, 80, 120, 80)]
@@ -974,7 +1066,7 @@ public class RXv1InstrunctionTest {
     [TestCase(MemEx.L, 1000000, -5, -5)]
     [TestCase(MemEx.L, -150000, -100, -150000)]
     [TestCase(MemEx.L, 200, 3, 3)]
-    public void MIN_mr__MIN_ub_rs_mr_Test(MemEx sz, int a, int b, int result) {
+    public void MIN_mr__MIN_ub_rs_mr_Test(MemEx? sz, int a, int b, int result) {
         var random = TestContext.CurrentContext.Random;
         var rs = random.Next(1, 15);
         var rd = random.Next(rs + 1, 16);
@@ -1444,6 +1536,9 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
+    [TestCase(null, 120, 10, 1200)]
+    [TestCase(null, 200, 10, 2000)]
+    [TestCase(null, 200, -10, -2000)]
     [TestCase(MemEx.B, -120, 10, -1200)]
     [TestCase(MemEx.B, 120, 10, 1200)]
     [TestCase(MemEx.B, -120, -10, 1200)]
@@ -1453,7 +1548,7 @@ public class RXv1InstrunctionTest {
     [TestCase(MemEx.UW, 40000, -10, -400000)]
     [TestCase(MemEx.L, -8, 7, -56)]
     [TestCase(MemEx.L, 22, 1000, 22000)]
-    public void MUL_mr__MUL_ub_rs_mr_Test(MemEx sz, int a, int b, int result) {
+    public void MUL_mr__MUL_ub_rs_mr_Test(MemEx? sz, int a, int b, int result) {
         var random = TestContext.CurrentContext.Random;
         var rs = random.Next(1, 15);
         var rd = random.Next(rs + 1, 16);
@@ -1609,11 +1704,11 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
-    [TestCase(                 5u,             unchecked((uint)-5), false, false,  true, false)]
-    [TestCase(unchecked((uint)-5),                              5u, false, false, false, false)]
-    [TestCase(          90000000u,      unchecked((uint)-90000000), false, false,  true, false)]
-    [TestCase(                 0u,                              0u,  true,  true, false, false)]
-    [TestCase(        0x80000000u,   unchecked((uint)-0x80000000u), false, false,  true,  true)]
+    [TestCase(5u, unchecked((uint)-5), false, false, true,false)]
+    [TestCase(unchecked((uint)-5), 5u, false, false, false, false)]
+    [TestCase(90000000u, unchecked((uint)-90000000), false, false, true, false)]
+    [TestCase(0u, 0u, true, true, false, false)]
+    [TestCase(0x80000000u, unchecked((uint)-0x80000000u), false, false, true, true)]
     public void NEG_rs_rd_Test(uint a, uint result,
                          bool expC, bool expZ, bool expS, bool expO) {
         var random = TestContext.CurrentContext.Random;
@@ -1651,8 +1746,14 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
+    [TestCase(null, 0xFFu, 0x8000_0000, 0x8000_00FFu, false, true)]
+    [TestCase(null, 0x0u, 0x71u, 0x71u, false, false)]
+    [TestCase(null, 0x70u, 0x0u, 0x70u, false, false)]
+    [TestCase(null, 0x80u, 0x0u, 0x80u, false, false)]
+    [TestCase(MemEx.B, 0x0u, 0xFFu, 0xFFu, false, false)]
     [TestCase(MemEx.B, 0xFFu, 0x0u, 0xFFFF_FFFFu, false, true)]
     [TestCase(MemEx.B, 0x7Fu, 0x0u, 0x7Fu, false, false)]
+    [TestCase(MemEx.W, 0x0u, 0xFFFFu, 0xFFFFu, false, false)]
     [TestCase(MemEx.W, 0xFFFFu, 0x0u, 0xFFFF_FFFFu, false, true)]
     [TestCase(MemEx.W, 0x7FFFu, 0x0u, 0x7FFFu, false, false)]
     [TestCase(MemEx.UW, 0xFFFFu, 0x0u, 0xFFFFu, false, false)]
@@ -1660,7 +1761,7 @@ public class RXv1InstrunctionTest {
     [TestCase(MemEx.L, 0xFFFF_FFFFu, 0u, 0xFFFF_FFFFu, false, true)]
     [TestCase(MemEx.L, 0x7F00_00FFu, 0x00FF_70FFu, 0x7FFF_70FFu, false, false)]
     [TestCase(MemEx.L, 0u, 0u, 0u, true, false)]
-    public void OR_mr__OR_ub_rs_mr_Test(MemEx sz, uint a, uint b, uint result,
+    public void OR_mr__OR_ub_rs_mr_Test(MemEx? sz, uint a, uint b, uint result,
                         bool expZ, bool expS) {
         var random = TestContext.CurrentContext.Random;
         var rs = random.Next(1, 15);
@@ -2480,7 +2581,6 @@ public class RXv1InstrunctionTest {
         cpu.PSW_o.Is(false);
     }
 
-
     [Test]
     [TestCase( 4, 0x1234_5678u, 0x2345_6780u,  true, false, false,  true)]
     [TestCase( 4, 0xF923_4567u, 0x9234_5670u,  true, false,  true, false)]
@@ -2594,6 +2694,8 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
+    [TestCase(null, 200, 500, 300, true, false, false, false)]
+    [TestCase(null, 100, 500, 400, true, false, false, false)]
     [TestCase(MemEx.B, 50, 60, 10, true, false, false, false)]
     [TestCase(MemEx.B, -10, 60, 70, false, false, false, false)]
     [TestCase(MemEx.W, 300, 400, 100, true, false, false, false)]
@@ -2606,7 +2708,7 @@ public class RXv1InstrunctionTest {
     [TestCase(MemEx.L, 100, -1, -101, true, false,  true, false)]
     [TestCase(MemEx.L, -1, ~0, 0, true, true, false, false)]
     public void SUB_mr__SUB_ub_rs_mr_Test(
-        MemEx sz, int a, int b, int result,
+        MemEx? sz, int a, int b, int result,
         bool expC, bool expZ, bool expS, bool expO) {
         var random = TestContext.CurrentContext.Random;
         var rs = random.Next(1, 15);
@@ -2735,6 +2837,9 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
+    [TestCase(null, 1u, 1u, false, false)]
+    [TestCase(null, 0x80u, 0x8000_0000u, true, false)]
+    [TestCase(null, 0x70u, 0x8000_0000u, true, false)]
     [TestCase(MemEx.B, 1u, 1u, false, false)]
     [TestCase(MemEx.B, 0x80u, 0x8000_0000u, false, true)]
     [TestCase(MemEx.B, 0x70u, 0x8000_0000u, true, false)]
@@ -2745,7 +2850,7 @@ public class RXv1InstrunctionTest {
     [TestCase(MemEx.L,           0u, 0xFFFF_FFFFu,  true, false)]
     [TestCase(MemEx.L,           4u,         100u, false, false)]
     [TestCase(MemEx.L, 0x8000_0000u, 0x8000_0000u, false,  true)]
-    public void TST_mr__TST_ub_rs_mr_Test(MemEx sz, uint a, uint b, bool expZ, bool expS) {
+    public void TST_mr__TST_ub_rs_mr_Test(MemEx? sz, uint a, uint b, bool expZ, bool expS) {
         var random = TestContext.CurrentContext.Random;
         var rs = random.Next(1, 15);
         var rd = random.Next(rs + 1, 16);
@@ -2758,6 +2863,9 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
+    [TestCase(null, 0xFFFF_FFFFu, 0x1234_5600u, 0xFFu, 0xFFFF_FF00u)]
+    [TestCase(null, 0x70u, 0x1234_5678u, 0x70u, 0x78u)]
+    [TestCase(null, 0x80u, 0x1234_5678u, 0x80u, 0x78u)]
     [TestCase(MemEx.B, 0x7Fu, 0x1234_5678u, 0x7Fu, 0x78u)]
     [TestCase(MemEx.B, 0x7Fu, 0xFFu, 0x7Fu, 0xFFu)]
     [TestCase(MemEx.B, 0x70u, 0x0u, 0x70u, 0x0u)]
@@ -2768,7 +2876,7 @@ public class RXv1InstrunctionTest {
     [TestCase(MemEx.UW, 0xCCDDEEFFu, 0u, 0xEEFFu, 0xCCDD_0000u)]
     [TestCase(MemEx.L, 0xCCDDEEFFu, 0x11223344u, 0xCCDDEEFFu, 0x11223344u)]
     [TestCase(MemEx.L, 0xFFEEDDCCu, 0x87654321u, 0xFFEEDDCCu, 0x87654321u)]
-    public void XCHG_mr__XCHG_ub_rs_mr_Test(MemEx sz, uint a, uint b, uint exppectedReg, uint expectedMem) {
+    public void XCHG_mr__XCHG_ub_rs_mr_Test(MemEx? sz, uint a, uint b, uint exppectedReg, uint expectedMem) {
         var random = TestContext.CurrentContext.Random;
         var rs = random.Next(1, 15);
         var rd = random.Next(rs + 1, 16);
@@ -2782,6 +2890,9 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
+    [TestCase(null, 0xFFFF_FFFFu, 0xFFFF_FF00u, 0xFFFF_FFFFu, false, true)]
+    [TestCase(null, 0x80u, 0x80u, 0x0u, true, false)]
+    [TestCase(null, 0x7Fu, 0x80u, 0xFFu, false, false)]
     [TestCase(MemEx.B, 0x80u, 0x80u, 0xFFFF_FF00u, false, true)]
     [TestCase(MemEx.B, 0x7Fu, 0x80u, 0xFFu, false, false)]
     [TestCase(MemEx.B, 0x7Fu, 0x7Fu, 0u, true, false)]
@@ -2795,7 +2906,7 @@ public class RXv1InstrunctionTest {
     [TestCase(MemEx.L, 0b1010_0000u << 24, 0b0111_0011u << 24, 0b1101_0011u << 24, false,  true)]
     [TestCase(MemEx.L, 0xFFFF_FFFFu, 0xFFFF_FFFFu,           0u,  true, false)]
     [TestCase(MemEx.L,           0u,           0u,           0u,  true, false)]
-    public void XOR_mr__XOR_ub_rs_mr_Test(MemEx sz, uint a, uint b, uint result, bool expZ, bool expS) {
+    public void XOR_mr__XOR_ub_rs_mr_Test(MemEx? sz, uint a, uint b, uint result, bool expZ, bool expS) {
         var random = TestContext.CurrentContext.Random;
         var rs = random.Next(1, 15);
         var rd = random.Next(rs + 1, 16);

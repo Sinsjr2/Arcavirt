@@ -275,21 +275,16 @@ namespace RX {
             return SignExtension(true, LoadUnsignedSourceOperand(sz, dsp, rs), (int)sz);
         }
 
-        void StoreDestOperand(uint sz, uint rd, uint ld, ReadOnlySpan<uint> dsp, uint value) {
-            var size = sz switch {
-                (uint)MemEx.B => 1,
-                (uint)MemEx.W => 2,
-                (uint)MemEx.L => 4,
-                (uint)MemEx.UW => 2,
-                _ => throw new ArgumentException($"not supported sz. actual: {sz}")
-            };
+        void StoreDestOperand(uint mi, uint rd, uint ld, ReadOnlySpan<uint> dsp, uint value) {
             if (ld == 0) {
-                bus.Write(Registers[rd], size, value);
+                var memOp = MemOps.Span[(int)mi];
+                bus.Write(Registers[rd], 1 << memOp.Size, value);
                 return;
             }
             if (ld < 3) {
+                var memOp = MemOps.Span[(int)mi];
                 var addr = ReadIndexAddr((int)ld, dsp[0], (int)rd);
-                bus.Write(addr, size, value);
+                bus.Write(addr, 1 << memOp.Size, value);
                 return;
             }
             Registers[rd] = value;
@@ -651,9 +646,12 @@ namespace RX {
         }
 
         uint OpDIV(uint src, uint dest) {
-            var result = src == 0 ? dest : (uint)((int)dest / (int)src);
-            PSW_o = src == 0 || (dest == 0x80000000 && src == ~0u);
-            return result;
+            if (src == 0 || (dest == 0x80000000 && src == ~0u)) {
+                PSW_o = true;
+                return dest;
+            }
+            PSW_o = false;
+            return (uint)((int)dest / (int)src);
         }
 
         uint OpDIVU(uint src, uint dest) {
@@ -2183,11 +2181,11 @@ namespace RX {
                     OpWAIT();
                     break;
                 case OpCode.XCHG_ub_rs_mr: {
-                    var src = LoadSourceOperand(operand[2], (uint)MemEx.B, operand[0], operand.Slice(2));
+                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
                     ref var dest = ref Registers[operand[1]];
                     var tmp = dest;
                     dest = src;
-                    StoreDestOperand((uint)MemEx.B, operand[0], operand[2], operand.Slice(2), tmp);
+                    StoreDestOperand(4, operand[0], operand[2], operand.Slice(3), tmp);
                     break;
                 }
                 case OpCode.XCHG_mr: {
@@ -2195,7 +2193,7 @@ namespace RX {
                     ref var dest = ref Registers[operand[2]];
                     var tmp = dest;
                     dest = src;
-                    StoreDestOperand(MemOps.Span[(int)operand[0]].Size, operand[1], operand[3], operand.Slice(4), tmp);
+                    StoreDestOperand(operand[0], operand[1], operand[3], operand.Slice(4), tmp);
                     break;
                 }
                 case OpCode.XOR_ir: {
@@ -2207,7 +2205,6 @@ namespace RX {
                     var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
                     ref var dest = ref Registers[operand[1]];
                     dest = OpXOR(src, dest);
-
                     break;
                 }
                 case OpCode.XOR_mr: {
