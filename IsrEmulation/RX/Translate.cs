@@ -86,7 +86,7 @@ namespace RX {
             var b3_sz_ld_rd_cd = new Composite(new LEUInt(10, 2, 3), new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new DisplacementValueFormatter(3, 8));
             var b3_rds_imm5 = new Composite(new BEUIntegerFormatter(4, 5, 3), new LEUInt(16, 4, 3), new Skip(3));
             var b3_ld_rd_rs = new Composite(new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new DisplacementValueFormatter(3, 8));
-            var b3_ir = new Composite(new LEUInt(16, 4, 3), new Skip(3), new LEUInt(0, 32, 4));
+            var b3_ir = new Composite(new LEUInt(16, 4, 3), new Skip(3), new LEUInt(0, 32, 4), new Skip(4));
             var b3_r = new Composite(new LEUInt(16, 4, 3), new Skip(3));
             var b3_imm4 = new Composite(new LEUInt(16, 4, 3), new Skip(3));
 
@@ -170,7 +170,7 @@ namespace RX {
                             ,new Composite(new LEUInt(8, 5, 2), new LEUInt(20, 4, 3), new LEUInt(16, 4, 3), new Skip(3))),
                 // (1) BNOT //imm, dsp[rd] (imm, rd, ld[, dsp])
                 Create(OpCode.BNOT_im, "1111 1100 111. .... .... 1111",
-                    new Composite(new LEUInt(10, 3, 2), new LEUInt(8, 2, 2), new LEUInt(20, 4, 3), new Skip(3))),
+                    new Composite(new LEUInt(10, 3, 2), new LEUInt(20, 4, 3), new DisplacementValueFormatter(3, 8))),
                 // (2) BNOT rs, dsp[rd] (rd, rs, ld[, dsp])
                 CreateGroup(OpCode.BNOT_rm, "1111 1100 0110 11.. .... ....", new[] {
                         "1111 1100 0110 1100 .... ....",

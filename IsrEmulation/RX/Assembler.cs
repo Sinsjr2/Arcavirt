@@ -530,8 +530,8 @@ namespace RX {
             return Create(OpCode.BTST_rr, (uint)src2.TargetReg, (uint)src);
         }
 
-        public static Instruction32 BTST(UInt5 src, Reg dest) =>
-            Create(OpCode.BTST_ir, src.Value, (uint)dest);
+        public static Instruction32 BTST(UInt5 src, Reg src2) =>
+            Create(OpCode.BTST_ir, src.Value, (uint)src2);
 
         public static Instruction32 CLRPSW(PSWFlag dest) =>
             Create(OpCode.CLRPSW, (uint)dest);
@@ -796,7 +796,7 @@ namespace RX {
         }
 
         public static Instruction32 MUL(UInt4 src, Reg dest) =>
-            Create(OpCode.MUL_4ir, src.Value);
+            Create(OpCode.MUL_4ir, src.Value, (uint)dest);
 
         public static Instruction32 MUL(StdImmValue src, Reg dest) =>
             Create(OpCode.MUL_ir, (uint)dest, (uint)src.LI, src.Value);

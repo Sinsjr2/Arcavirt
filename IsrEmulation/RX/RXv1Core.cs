@@ -632,8 +632,8 @@ namespace RX {
         }
 
         void OpBTST_m(uint src, byte src2) {
-            PSW_z = (src2 >> (int)(src & 7u) & 1u) != 0u;
-            PSW_c = (src2 >> (int)(src & 7u) & 1u) == 0u;
+            PSW_z = (src2 >> (int)(src & 7u) & 1u) == 0u;
+            PSW_c = (src2 >> (int)(src & 7u) & 1u) != 0u;
         }
 
         void OpBTST_r(uint src, uint src2) {
@@ -1391,12 +1391,11 @@ namespace RX {
                 }
                 case OpCode.BCLR_im:
                     StoreDestOperand((uint)MemEx.B, operand[0], operand[2], operand.Slice(3),
-                                     OpBCLR_m(operand[1], LoadUnsignedSourceOperand(operand[2], (uint)MemEx.B, operand.Slice(3), operand[0])));
+                                     OpBCLR_m(operand[1], (byte)LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3))));
                     break;
                 case OpCode.BCLR_rm:
                     StoreDestOperand((uint)MemEx.B, operand[0], operand[2], operand.Slice(3),
-                                     OpBCLR_m(Registers[operand[1]], LoadUnsignedSourceOperand(operand[2], (uint)MemEx.B, operand.Slice(3), operand[1])));
-
+                                     OpBCLR_m(Registers[operand[1]], (byte)LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3))));
                     break;
                 case OpCode.BCLR_ir: {
                     ref var dest = ref Registers[operand[1]];
@@ -1453,11 +1452,11 @@ namespace RX {
                     StoreDestOperand((uint)MemEx.B, operand[1], operand[2], operand.Slice(3),
                                      OpBNOT_m(operand[0], (byte)LoadSourceOperand(operand[2], 4, operand[1], operand.Slice(3))));
                     break;
-                case OpCode.BNOT_rm:
-                    StoreDestOperand((uint)MemEx.B, operand[0], operand[2], operand.Slice(3),
-                                     OpBNOT_r(Registers[operand[0]], (byte)LoadSourceOperand(operand[2], 4, operand[1], operand.Slice(3))));
-
+                case OpCode.BNOT_rm: {
+                    StoreDestOperand(4, operand[0], operand[2], operand.Slice(3),
+                                     OpBNOT_r(Registers[operand[1]], (byte)LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3))));
                     break;
+                }
                 case OpCode.BNOT_ir: {
                     ref var dest = ref Registers[operand[1]];
                     dest = OpBNOT_r(operand[0], dest);
@@ -1560,7 +1559,7 @@ namespace RX {
                 }
                 case OpCode.DIVU_ir: {
                     ref var dest = ref Registers[operand[0]];
-                    dest = OpDIVU(operand[1], dest);
+                    dest = OpDIVU(operand[2], dest);
                     break;
                 }
                 case OpCode.DIVU_ub_rs_mr: {
@@ -1969,7 +1968,7 @@ namespace RX {
                     OpPUSH(operand[0], Registers[operand[1]]);
                     break;
                 case OpCode.PUSH_m: {
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                    var src = LoadSourceOperand(operand[2], operand[1], operand[0], operand.Slice(3));
                     OpPUSH(operand[1], src);
                     break;
                 }
@@ -2198,7 +2197,7 @@ namespace RX {
                     break;
                 }
                 case OpCode.XOR_ir: {
-                    ref var dest = ref Registers[operand[1]];
+                    ref var dest = ref Registers[operand[0]];
                     dest = OpXOR(operand[2], dest);
                     break;
                 }
