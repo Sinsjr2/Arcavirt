@@ -6,6 +6,8 @@ using Pheripheral;
 using System.Buffers;
 using Peripheral.Renesas;
 using Util;
+using System.Runtime.Intrinsics.Arm;
+using ScottPlot;
 
 namespace IsrEmulationTest;
 public class RXv1InstrunctionTest {
@@ -136,8 +138,8 @@ public class RXv1InstrunctionTest {
         romBeginAddress = romEndAddress - rom.MemorySize;
         busManager.AddRangedAddressMapping(romBeginAddress, romEndAddress, rom);
         cpu = new RXv1Core(busManager);
-        //cpu.PC = romBeginAddress;
-        cpu.PC = 0;
+        cpu.PC = romBeginAddress;
+        //cpu.PC = 0;
         cpu.SP = ramEndAddress;
     }
 
@@ -145,9 +147,10 @@ public class RXv1InstrunctionTest {
         var writer = new ArrayBufferWriter<byte>();
         var asmWriter = new AssemblyWriter(writer);
         rxv1Translate.CreateBinary(instruction, ref asmWriter);
-        var instData = new RAM32Bit("", 10);
-        instData.WriteRange(0, writer.WrittenMemory.ToArray());
-        var reader = new Reader(instData, cpu.PC);
+        for (uint i = 0; i < writer.WrittenCount; i++) {
+            busManager.Write(cpu.PC + i, 1, writer.WrittenSpan[(int)i]);
+        }
+        var reader = new Reader(busManager, cpu.PC);
         var prevPos = reader.Position;
         var queue = new Queue<uint>();
         rxv1Translate.ParseAssembly(ref reader, queue);
@@ -159,61 +162,111 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
-    [TestCase(1000u, 1000u)]
-    [TestCase(   0u, 0u)]
-    [TestCase(unchecked((uint)-1000), 1000u)]
-    public void ABS_rd_Test(uint a, uint result) {
+    [TestCase(0xFFFF_FFFFu, 0x1u, false, false, false)]
+    [TestCase(0x8000_0000u, 0x8000_0000, false, true, true)]
+    [TestCase(0x0u, 0x0u, true, false, false)]
+    [TestCase(1000u, 1000u, false, false, false)]
+    [TestCase(unchecked((uint)-1000), 1000u, false, false, false)]
+    public void ABS_rd_Test(uint a, uint result, bool expZ, bool expS, bool expO) {
         var random = TestContext.CurrentContext.Random;
         var rd = random.Next(1, 16);
+        cpu.PSW_z = random.NextBool();
+        cpu.PSW_s = random.NextBool();
+        cpu.PSW_o = random.NextBool();
         cpu.Registers[rd] = a;
         RunOpcode(ABS((Reg)rd));
         cpu.Registers[rd].Is(result);
+        cpu.PSW_z = expZ;
+        cpu.PSW_s = expS;
+        cpu.PSW_o = expO;
     }
 
     [Test]
-    [TestCase(550u, 550u)]
-    [TestCase(  0u,   0u)]
-    [TestCase(unchecked((uint)-440), 440u)]
-    public void ABS_rs_rd_Test(uint a, uint result) {
+    [TestCase(0xFFFF_FFFFu, 0x1u, false, false, false)]
+    [TestCase(0x8000_0000u, 0x8000_0000, false, true, true)]
+    [TestCase(550u, 550u, false, false, false)]
+    [TestCase(  0u,   0u, true, false, false)]
+    [TestCase(unchecked((uint)-440), 440u, false, true, false)]
+    public void ABS_rs_rd_Test(uint a, uint result, bool expZ, bool expS, bool expO) {
         var random = TestContext.CurrentContext.Random;
         var rs = random.Next(1, 16);
         var rd = random.Next(1, 16);
+        cpu.PSW_z = random.NextBool();
+        cpu.PSW_s = random.NextBool();
+        cpu.PSW_o = random.NextBool();
         cpu.Registers[rs] = a;
         RunOpcode(ABS((Reg)rs, (Reg)rd));
         cpu.Registers[rd].Is(result);
+        cpu.PSW_z = expZ;
+        cpu.PSW_s = expS;
+        cpu.PSW_o = expO;
     }
 
     [Test]
-    [TestCase(false, LengthOfImmediate.SIMM8, 0x80u/*-128*/, 128u, 0x0u)]
-    [TestCase(false, LengthOfImmediate.SIMM8, 127u, 129u, 256u)]
-    [TestCase(false, LengthOfImmediate.SIMM16, 32767u, 32769u, 65536u)]
-    [TestCase(false, LengthOfImmediate.SIMM16, 0x8000u, 0x8000u, 0u)]
-    [TestCase(false, LengthOfImmediate.SIMM24, 0x80_0000u, 0x80_0000u, 0x0u)]
-    [TestCase(false, LengthOfImmediate.SIMM24, 0x7F_FFFFu, 0x10_0001u, 0x90_0000u)]
-    [TestCase(false, LengthOfImmediate.IMM32, 10u, 5u, 15u)]
-    [TestCase( true, LengthOfImmediate.IMM32, 10u, 5u, 16u)]
-    public void ADC_ir_Test(bool psw_c, LengthOfImmediate li, uint a, uint b, uint result) {
+    [TestCase(false, LengthOfImmediate.SIMM8, 0x80u/*-128*/, 128u, 0x0u, true, true, false, false)]
+    [TestCase(false, LengthOfImmediate.SIMM8, 127u, 129u, 256u, false, false, false, false)]
+    [TestCase(false, LengthOfImmediate.SIMM16, 32767u, 32769u, 65536u, false, false, false, false)]
+    [TestCase(false, LengthOfImmediate.SIMM16, 0x8000u, 0x8000u, 0u, true, true, false, false)]
+    [TestCase(false, LengthOfImmediate.SIMM24, 0x80_0000u, 0x80_0000u, 0x0u, true, true, false, false)]
+    [TestCase(false, LengthOfImmediate.SIMM24, 0x7F_FFFFu, 0x10_0001u, 0x90_0000u, false, false, false, false)]
+    [TestCase(false, LengthOfImmediate.IMM32, 10u, 5u, 15u, false, false, false, false)]
+    [TestCase( true, LengthOfImmediate.IMM32, 10u, 5u, 16u, false, false, false, false)]
+    [TestCase(false, LengthOfImmediate.IMM32, 0u, 0u, 0u, false, true, false, false)]
+    [TestCase(true, LengthOfImmediate.IMM32, 0u, 0u, 1u, false, false, false, false)]
+    [TestCase(false, LengthOfImmediate.IMM32, 0xFFFF_FFFFu, 1u, 0u, true, true, false, false)]
+    [TestCase(false, LengthOfImmediate.IMM32, 1u, 0xFFFF_FFFFu, 0u, true, true, false, false)]
+    [TestCase(false, LengthOfImmediate.IMM32, 0x7FFF_FFFFu, 1u, 0x8000_0000u, false, false, true, true)]
+    [TestCase(false, LengthOfImmediate.IMM32, 1u, 0x7FFF_FFFFu, 0x8000_0000u, false, false, true, true)]
+    [TestCase(false, LengthOfImmediate.IMM32, 0x8000_0000u, 0xFFFF_FFFFu, 0x7FFF_FFFFu, true, false, false, true)]
+    [TestCase(false, LengthOfImmediate.IMM32, 0x8000_0000u, 0x8000_0000u, 0u, true, true, false, true)]
+    public void ADC_ir_Test(bool psw_c, LengthOfImmediate li, uint a, uint b, uint result,
+        bool expC, bool expZ, bool expS, bool expO) {
+
         var random = TestContext.CurrentContext.Random;
         var rd = random.Next(1, 16);
         cpu.Registers[rd] = b;
         cpu.PSW_c = psw_c;
+        cpu.PSW_z = random.NextBool();
+        cpu.PSW_s = random.NextBool();
+        cpu.PSW_o = random.NextBool();
         RunOpcode(ADC(new StdImmValue(li, a), (Reg)rd));
         cpu.Registers[rd].Is(result);
+        cpu.PSW_c.Is(expC);
+        cpu.PSW_z.Is(expZ);
+        cpu.PSW_s.Is(expS);
+        cpu.PSW_o.Is(expO);
     }
 
     [Test]
-    [TestCase(false, 10u, 5u, 15u)]
-    [TestCase(true, 10u, 5u, 16u)]
-    public void ADC_mr__ADC_rr_Test(bool psw_c, uint a, uint b, uint result) {
+    [TestCase(false, 10u, 5u, 15u, false, false, false, false)]
+    [TestCase(true, 10u, 5u, 16u, false, false, false, false)]
+    [TestCase(false, 0u, 0u, 0u, false, true, false, false)]
+    [TestCase(true, 0u, 0u, 1u, false, false, false, false)]
+    [TestCase(false, 0xFFFF_FFFFu, 1u, 0u, true, true, false, false)]
+    [TestCase(false, 1u, 0xFFFF_FFFFu, 0u, true, true, false, false)]
+    [TestCase(false, 0x7FFF_FFFFu, 1u, 0x8000_0000u, false, false, true, true)]
+    [TestCase(false, 1u, 0x7FFF_FFFFu, 0x8000_0000u, false, false, true, true)]
+    [TestCase(false, 0x8000_0000u, 0xFFFF_FFFFu, 0x7FFF_FFFFu, true, false, false, true)]
+    [TestCase(false, 0x8000_0000u, 0x8000_0000u, 0u, true, true, false, true)]
+    public void ADC_mr__ADC_rr_Test(bool psw_c, uint a, uint b, uint result,
+        bool expC, bool expZ, bool expS, bool expO) {
+
         var random = TestContext.CurrentContext.Random;
         var rs = random.Next(1, 15);
         var rd = random.Next(rs + 1, 16);
         var dsp = GetRandomStdRegAddressing((Reg)rs, MemEx.L, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
         StoreRandomDest(dsp, 0, 300, a);
         cpu.PSW_c = psw_c;
+        cpu.PSW_z = random.NextBool();
+        cpu.PSW_s = random.NextBool();
+        cpu.PSW_o = random.NextBool();
         cpu.Registers[rd] = b;
         RunOpcode(ADC(dsp, (Reg)rd));
         cpu.Registers[rd].Is(result);
+        cpu.PSW_c.Is(expC);
+        cpu.PSW_z.Is(expZ);
+        cpu.PSW_s.Is(expS);
+        cpu.PSW_o.Is(expO);
     }
 
     [Test]
@@ -884,10 +937,36 @@ public class RXv1InstrunctionTest {
         cpu.PC.Is((uint)(prevPC + src));
     }
 
-    // [Test]
+    [Test]
     public void BRK_Test() {
-        throw new NotImplementedException();
-        // TODO 実装する
+        var random = TestContext.CurrentContext.Random;
+        var intb = random.NextUInt(ramBeginAddress, ramBeginAddress + 1024);
+        var interruptTable = random.NextUInt(ramBeginAddress + 3_000, ramBeginAddress + 10_000);
+        memory.Write(intb, 4, interruptTable);
+        cpu.INTB = intb;
+        var prevPC = cpu.PC;
+        var prevSP = cpu.SP;
+        var afterPC = prevPC + 1;
+        cpu.PSW_c = random.NextBool();
+        cpu.PSW_z = random.NextBool();
+        cpu.PSW_s = random.NextBool();
+        cpu.PSW_o = random.NextBool();
+        var prevPSW = cpu.PSW;
+        RunOpcode(BRK);
+        var nextPC = interruptTable;
+        cpu.PC.Is(nextPC);
+        cpu.PSW_u.Is(false);
+        cpu.PSW_i.Is(false);
+        cpu.PSW_c = random.NextBool();
+        cpu.PSW_z = random.NextBool();
+        cpu.PSW_s = random.NextBool();
+        cpu.PSW_o = random.NextBool();
+        busManager.Read(cpu.SP, 4).Is(afterPC);
+        busManager.Read(cpu.SP + 4, 4).Is(prevPSW);
+        RunOpcode(RTE);
+        cpu.PC.Is(afterPC);
+        cpu.PSW.Is(prevPSW);
+        cpu.SP.Is(prevSP);
     }
 
     [TestCase(0, 2u, 3u)]
@@ -1619,9 +1698,40 @@ public class RXv1InstrunctionTest {
         cpu.Registers[rd].Is(unchecked((uint)result));
     }
 
-    //[Test]
-    public void INT_Test() {
-        throw new NotImplementedException();
+    [Test]
+    public void INT_Test([Random(0, 255, 10)]byte src) {
+        var random = TestContext.CurrentContext.Random;
+        var intb = random.NextUInt(ramBeginAddress, ramBeginAddress + 1024);
+        var interruptTable = Enumerable.Range(0, 256)
+            .Select(_ => random.NextUInt(ramBeginAddress + 3_000, ramBeginAddress + 10_000))
+            .ToArray();
+        for (uint i = 0; i < 256; i++) {
+            memory.Write(intb + i * 4, 4, interruptTable[i]);
+        }
+        cpu.INTB = intb;
+        var prevPC = cpu.PC;
+        var prevSP = cpu.SP;
+        var afterPC = prevPC + 3;
+        cpu.PSW_c = random.NextBool();
+        cpu.PSW_z = random.NextBool();
+        cpu.PSW_s = random.NextBool();
+        cpu.PSW_o = random.NextBool();
+        var prevPSW = cpu.PSW;
+        RunOpcode(INT(src));
+        var nextPC = interruptTable[src];
+        cpu.PC.Is(nextPC);
+        cpu.PSW_u.Is(false);
+        cpu.PSW_i.Is(false);
+        cpu.PSW_c = random.NextBool();
+        cpu.PSW_z = random.NextBool();
+        cpu.PSW_s = random.NextBool();
+        cpu.PSW_o = random.NextBool();
+        busManager.Read(cpu.SP, 4).Is(afterPC);
+        busManager.Read(cpu.SP + 4, 4).Is(prevPSW);
+        RunOpcode(RTE);
+        cpu.PC.Is(afterPC);
+        cpu.PSW.Is(prevPSW);
+        cpu.SP.Is(prevSP);
     }
 
     [Test]
@@ -2908,7 +3018,81 @@ public class RXv1InstrunctionTest {
         cpu.Registers[rd].Is(result);
     }
 
-    public void RMPA_Test() {}
+    public static object[][] RMPA_TestData() {
+        return new object[][] {
+            new object[] { MemEx.B, 0u, 0u, 0u, 1u, new[] { 1u }, new[] { 0xFFu }, 0xFFFF_FFFFu, 0xFFFF_FFFFu, 0xFFFF_FFFFu, true, false },
+            new object[] { MemEx.B, 0u, 0u, 0u, 1u, new[] { 0xFFu }, new[] { 1u }, 0xFFFF_FFFFu, 0xFFFF_FFFFu, 0xFFFF_FFFFu, true, false },
+            new object[] { MemEx.B, 0u, 0u, 0u, 1u, new[] { 0xFFu }, new[] { 0xFF }, 0u, 0u, 0x1u, false, false },
+
+            new object[] { MemEx.W, 0u, 0u, 0u, 1u, new[] { 1u }, new[] { 0xFFFFu }, 0xFFFF_FFFFu, 0xFFFF_FFFFu, 0xFFFF_FFFFu, true, false },
+            new object[] { MemEx.W, 0u, 0u, 0u, 1u, new[] { 0xFFFFu }, new[] { 1u }, 0xFFFF_FFFFu, 0xFFFF_FFFFu, 0xFFFF_FFFFu, true, false },
+            new object[] { MemEx.W, 0u, 0u, 0u, 1u, new[] { 0xFFFFu }, new[] { 0xFFFF }, 0u, 0u, 0x1u, false, false },
+
+            new object[] { MemEx.L, 0u, 0u, 0u, 1u, new[] { 0xFFFF_FFFFu }, new[] { 1u }, 0xFFFF_FFFFu, 0xFFFF_FFFFu, 0xFFFF_FFFFu, true, false },
+            new object[] { MemEx.L, 0u, 0u, 0u, 1u, new[] { 1u }, new[] { 0xFFFF_FFFFu }, 0xFFFF_FFFFu, 0xFFFF_FFFFu, 0xFFFF_FFFFu, true, false },
+
+            new object[] { MemEx.L, 0u, 0x7FFF_FFFFu, 0xFFFF_FFFDu, 1u, new[] { 1u }, new[] { 1u }, 0u, 0x7FFF_FFFFu, 0xFFFF_FFFEu, false, false },
+            new object[] { MemEx.L, 0u, 0x7FFF_FFFFu, 0xFFFF_FFFEu, 1u, new[] { 1u }, new[] { 1u }, 0u, 0x7FFF_FFFFu, 0xFFFF_FFFFu, false, false },
+            new object[] { MemEx.L, 0u, 0x7FFF_FFFFu, 0xFFFF_FFFFu, 1u, new[] { 1u }, new[] { 1u }, 0u, 0x8000_0000u, 0x0000_0000u, false, true },
+
+            new object[] { MemEx.L, 0u, 0xFFFF_FFFFu, 0xFFFF_FFFFu, 1u, new[] { 0x7FFF_FFFFu }, new[] { 0x7FFF_FFFFu }, 1u, 0x3FFF_FFFFu, 0u, false, true },
+            new object[] { MemEx.L, 0x3FFFu, 0xFFFF_FFFFu, 0xFFFF_FFFFu, 1u, new[] { 0x7FFF_FFFFu }, new[] { 0x7FFF_FFFFu }, 0x4000u, 0x3FFF_FFFFu, 0u, false, true },
+            new object[] { MemEx.L, 0x4000u, 0u, 0xFu, 1u, new[] { 0xFFFF_FFFFu }, new[] { 0xFu }, 0x4000u, 0u, 0u, false, true },
+            new object[] { MemEx.L, 0x8000u, 0u, 0x0u, 1u, new[] { 0x7FFF_FFFFu }, new[] { 0u }, 0xFFFF_8000u, 0u, 0u, true, true },
+
+            new object[] { MemEx.L, 0xFFFF_FFFFu, 0x8000_0000u, 0x0000_0001u, 1u, new[] { 0xFFFF_FFFFu }, new[] { 1u }, 0xFFFF_FFFFu, 0x8000_0000u, 0x0000_0000u, true, false },
+            new object[] { MemEx.L, 0xFFFF_FFFFu, 0x8000_0000u, 0x0000_0002u, 1u, new[] { 0xFFFF_FFFFu }, new[] { 2u }, 0xFFFF_FFFFu, 0x8000_0000u, 0x0000_0000u, true, false },
+            new object[] { MemEx.L, 0xFFFF_FFFFu, 0x8000_0000u, 0x0000_0001u, 1u, new[] { 1u }, new[] { 0xFFFF_FFFFu }, 0xFFFF_FFFFu, 0x8000_0000u, 0x0000_0000u, true, false },
+            new object[] { MemEx.L, 0xFFFF_FFFFu, 0x8000_0000u, 0x0000_0002u, 1u, new[] { 2u }, new[] { 0xFFFF_FFFFu }, 0xFFFF_FFFFu, 0x8000_0000u, 0x0000_0000u, true, false },
+
+            new object[] { MemEx.L, 0xFFFF_FFFFu, 0x8000_0000u, 0x0000_0000u, 1u, new[] { 0xFFFF_FFFFu }, new[] { 1u }, 0xFFFF_FFFFu, 0x7FFF_FFFFu, 0xFFFF_FFFFu, true, true },
+        };
+    }
+
+    [Test]
+    [TestCaseSource(nameof(RMPA_TestData))]
+    public void RMPA_Test(
+        MemEx sz,
+        uint initialR6, uint initialR5, uint initialR4, uint count,
+        uint[] a, uint[] b,
+        uint expR6, uint expR5, uint expR4, bool expS, bool expO) {
+
+        void SetValues(MemEx size, uint beginAddr, uint[] values) {
+            var byteSize = 1 << (int)size;
+            for (int i = 0; i < values.Length; i++) {
+                busManager.Write(beginAddr + (uint)(i * byteSize), byteSize, values[i]);
+            }
+        }
+
+        var random = TestContext.CurrentContext.Random;
+        cpu.Registers[6] = initialR6;
+        cpu.Registers[5] = initialR5;
+        cpu.Registers[4] = initialR4;
+        cpu.PSW_s = random.NextBool();
+        cpu.PSW_o = random.NextBool();
+        SetValues(sz, ramBeginAddress, a);
+        SetValues(sz, ramBeginAddress + 64, b);
+
+        cpu.Registers[1] = ramBeginAddress;
+        cpu.Registers[2] = ramBeginAddress + 64;
+        cpu.Registers[3] = count;
+
+        var prevPC = cpu.PC;
+        for (uint i = 1; i < count; i++) {
+            RunOpcode(RMPA(sz));
+            // PCが進まないことを確認する
+            cpu.PC.Is(prevPC);
+        }
+        // 終了後プログラムカウンターが進んでいることを確認する
+        RunOpcode(RMPA(sz));
+        cpu.PC.Is(prevPC + 2);
+
+        cpu.Registers[6].Is(expR6);
+        cpu.Registers[5].Is(expR5);
+        cpu.Registers[4].Is(expR4);
+        cpu.PSW_s.Is(expS);
+        cpu.PSW_o.Is(expO);
+    }
 
     [Test]
     [TestCase(false, 0x8000_0001u, 0x0000_0002u,  true, false, false)]
@@ -3179,78 +3363,87 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
-    [TestCase( true, false, false, false, Cnd.GEU, 1u)]
-    [TestCase(false,  true,  true,  true, Cnd.GEU, 0u)]
-    [TestCase(false,  true, false, false, Cnd.EQ , 1u)]
-    [TestCase( true, false,  true,  true, Cnd.EQ , 0u)]
-    [TestCase( true, false, false, false, Cnd.GTU, 1u)]
-    [TestCase( true, false,  true,  true, Cnd.GTU, 1u)]
-    [TestCase( true,  true,  true,  true, Cnd.GTU, 0u)]
-    [TestCase(false, false,  true,  true, Cnd.GTU, 0u)]
-    [TestCase(false,  true,  true,  true, Cnd.GTU, 0u)]
-    [TestCase(false, false,  true, false, Cnd.PZ , 0u)]
-    [TestCase( true,  true, false,  true, Cnd.PZ , 1u)]
-    [TestCase(false, false,  true,  true, Cnd.GE , 1u)]
-    [TestCase(false, false, false, false, Cnd.GE , 1u)]
-    [TestCase(false, false,  true, false, Cnd.GE , 0u)]
-    [TestCase(false, false, false,  true, Cnd.GE , 0u)]
-    [TestCase( true,  true, false,  true, Cnd.GE , 0u)]
-    [TestCase(false, false,  true,  true, Cnd.GT , 1u)]
-    [TestCase(false, false, false, false, Cnd.GT , 1u)]
-    [TestCase(false, false,  true, false, Cnd.GT , 0u)]
-    [TestCase(false, false, false,  true, Cnd.GT , 0u)]
-    [TestCase(false,  true,  true, false, Cnd.GT , 0u)]
-    [TestCase(false,  true, false,  true, Cnd.GT , 0u)]
-    [TestCase( true,  true, false,  true, Cnd.GT , 0u)]
-    [TestCase(false, false, false,  true, Cnd.O  , 1u)]
-    [TestCase( true,  true,  true, false, Cnd.O  , 0u)]
-    [TestCase(false,  true,  true,  true, Cnd.LTU, 1u)]
-    [TestCase( true, false, false, false, Cnd.LTU, 0u)]
-    [TestCase( true, false,  true,  true, Cnd.NE , 1u)]
-    [TestCase(false,  true, false, false, Cnd.NE , 0u)]
-    [TestCase(false,  true,  true,  true, Cnd.LEU, 1u)]
-    [TestCase(false, false,  true,  true, Cnd.LEU, 1u)]
-    [TestCase(false,  true, false, false, Cnd.LEU, 1u)]
-    [TestCase( true, false, false, false, Cnd.LEU, 0u)]
-    [TestCase( true, false, false, false, Cnd.LEU, 0u)]
-    [TestCase( true, false, true,   true, Cnd.LEU, 0u)]
-    [TestCase(false,  true,  true,  true, Cnd.LEU, 1u)]
-    [TestCase(false, false, false, false, Cnd.LEU, 1u)]
-    [TestCase(false, false,  true, false, Cnd.LE , 1u)]
-    [TestCase(false, false, false,  true, Cnd.LE , 1u)]
-    [TestCase(false,  true,  true, false, Cnd.LE , 1u)]
-    [TestCase(false,  true, false,  true, Cnd.LE , 1u)]
-    [TestCase(false,  true,  true,  true, Cnd.LE , 1u)]
-    [TestCase( true,  true, false, false, Cnd.LE , 1u)]
-    [TestCase(false, false,  true,  true, Cnd.LE , 0u)]
-    [TestCase(false, false, false, false, Cnd.LE , 0u)]
-    [TestCase( true, false,  true,  true, Cnd.LE , 0u)]
-    [TestCase( true, false, false, false, Cnd.LE , 0u)]
-    [TestCase(false, false,  true, false, Cnd.LT , 1u)]
-    [TestCase(false, false, false,  true, Cnd.LT , 1u)]
-    [TestCase( true,  true,  true, false, Cnd.LT , 1u)]
-    [TestCase(false, false,  true,  true, Cnd.LT , 0u)]
-    [TestCase(false, false, false, false, Cnd.LT , 0u)]
-    [TestCase( true,  true, false, false, Cnd.LT , 0u)]
-    [TestCase(false, false, false,  true, Cnd.NO , 0u)]
-    [TestCase( true,  true,  true,  true, Cnd.NO , 0u)]
-    [TestCase(false, false, false, false, Cnd.NO , 1u)]
-    [TestCase( true,  true,  true, false, Cnd.NO , 1u)]
-    public void SCCnd_Test(
+    [TestCase( true, false, false, false, Cnd.GEU, 1)]
+    [TestCase(false,  true,  true,  true, Cnd.GEU, 0)]
+    [TestCase(false,  true, false, false, Cnd.EQ , 1)]
+    [TestCase( true, false,  true,  true, Cnd.EQ , 0)]
+    [TestCase( true, false, false, false, Cnd.GTU, 1)]
+    [TestCase( true, false,  true,  true, Cnd.GTU, 1)]
+    [TestCase( true,  true,  true,  true, Cnd.GTU, 0)]
+    [TestCase(false, false,  true,  true, Cnd.GTU, 0)]
+    [TestCase(false,  true,  true,  true, Cnd.GTU, 0)]
+    [TestCase(false, false,  true, false, Cnd.PZ , 0)]
+    [TestCase( true,  true, false,  true, Cnd.PZ , 1)]
+    [TestCase(false, false,  true,  true, Cnd.GE , 1)]
+    [TestCase(false, false, false, false, Cnd.GE , 1)]
+    [TestCase(false, false,  true, false, Cnd.GE , 0)]
+    [TestCase(false, false, false,  true, Cnd.GE , 0)]
+    [TestCase( true,  true, false,  true, Cnd.GE , 0)]
+    [TestCase(false, false,  true,  true, Cnd.GT , 1)]
+    [TestCase(false, false, false, false, Cnd.GT , 1)]
+    [TestCase(false, false,  true, false, Cnd.GT , 0)]
+    [TestCase(false, false, false,  true, Cnd.GT , 0)]
+    [TestCase(false,  true,  true, false, Cnd.GT , 0)]
+    [TestCase(false,  true, false,  true, Cnd.GT , 0)]
+    [TestCase( true,  true, false,  true, Cnd.GT , 0)]
+    [TestCase(false, false, false,  true, Cnd.O  , 1)]
+    [TestCase( true,  true,  true, false, Cnd.O  , 0)]
+    [TestCase(false,  true,  true,  true, Cnd.LTU, 1)]
+    [TestCase( true, false, false, false, Cnd.LTU, 0)]
+    [TestCase( true, false,  true,  true, Cnd.NE , 1)]
+    [TestCase(false,  true, false, false, Cnd.NE , 0)]
+    [TestCase(false,  true,  true,  true, Cnd.LEU, 1)]
+    [TestCase(false, false,  true,  true, Cnd.LEU, 1)]
+    [TestCase(false,  true, false, false, Cnd.LEU, 1)]
+    [TestCase( true, false, false, false, Cnd.LEU, 0)]
+    [TestCase( true, false, false, false, Cnd.LEU, 0)]
+    [TestCase( true, false, true,   true, Cnd.LEU, 0)]
+    [TestCase(false,  true,  true,  true, Cnd.LEU, 1)]
+    [TestCase(false, false, false, false, Cnd.LEU, 1)]
+    [TestCase(false, false,  true, false, Cnd.LE , 1)]
+    [TestCase(false, false, false,  true, Cnd.LE , 1)]
+    [TestCase(false,  true,  true, false, Cnd.LE , 1)]
+    [TestCase(false,  true, false,  true, Cnd.LE , 1)]
+    [TestCase(false,  true,  true,  true, Cnd.LE , 1)]
+    [TestCase( true,  true, false, false, Cnd.LE , 1)]
+    [TestCase(false, false,  true,  true, Cnd.LE , 0)]
+    [TestCase(false, false, false, false, Cnd.LE , 0)]
+    [TestCase( true, false,  true,  true, Cnd.LE , 0)]
+    [TestCase( true, false, false, false, Cnd.LE , 0)]
+    [TestCase(false, false,  true, false, Cnd.LT , 1)]
+    [TestCase(false, false, false,  true, Cnd.LT , 1)]
+    [TestCase( true,  true,  true, false, Cnd.LT , 1)]
+    [TestCase(false, false,  true,  true, Cnd.LT , 0)]
+    [TestCase(false, false, false, false, Cnd.LT , 0)]
+    [TestCase( true,  true, false, false, Cnd.LT , 0)]
+    [TestCase(false, false, false,  true, Cnd.NO , 0)]
+    [TestCase( true,  true,  true,  true, Cnd.NO , 0)]
+    [TestCase(false, false, false, false, Cnd.NO , 1)]
+    [TestCase( true,  true,  true, false, Cnd.NO , 1)]
+    public void SCCnd_mem_Test(
         bool psw_c, bool psw_z, bool psw_s, bool psw_o,
-        Cnd condition, uint result) {
+        Cnd condition, byte result) {
+
         var random = TestContext.CurrentContext.Random;
+        var initial = random.NextUInt();
+        MemEx sz = (MemEx)random.Next(0, 3);
         var rd = random.Next(1, 16);
+        var dsp = GetRandomStdRegAddressing((Reg)rd, sz, LengthOfDisplacement.RefReg, LengthOfDisplacement.Reg);
+        var expected = sz switch {
+            MemEx.B => (initial & 0xFFFF_FF00) | result,
+            MemEx.W => (initial & 0xFFFF_0000) | result,
+            _ => result
+        };
+        
         cpu.PSW_c = psw_c;
         cpu.PSW_z = psw_z;
         cpu.PSW_s = psw_s;
         cpu.PSW_o = psw_o;
-        cpu.Registers[rd] = 0xFF;
-        RunOpcode(SCC(condition, (Reg)rd));
-        cpu.Registers[rd].Is(result);
+        StoreRandomDest(dsp, 0, 300, initial);
+        RunOpcode(SCC(condition, dsp));
+        LoadData(cpu.Registers, busManager, dsp.LD, (int)MemEx.L, dsp.Displacement, dsp.TargetReg)
+            .Is(expected);
     }
-
-    // public void SCCnd_Test() {}
 
     [Test]
     public void SCMPU_Equal_Test([Random(1, 20, 5)]int length) {

@@ -216,14 +216,6 @@ namespace RX {
         };
 
         /// <summary>
-        /// 即値を符号拡張もしくはゼロ拡張します。
-        /// </summary>
-        static uint ImmediateValueExpantion(uint sz, uint value) {
-            var memOps = MemOps.Span[(int)sz];
-            return SignExtension(memOps.IsSigned, value, memOps.Size);
-        }
-
-        /// <summary>
         /// value が符号ありの場合、符号拡張を行います。
         /// それ以外は、ゼロ拡張として扱うので何もせずにそのまま返します。
         /// </summary>
@@ -469,12 +461,16 @@ namespace RX {
                 PSW_pm = false;
             }
 
-            var readAddr = (baseAddr + (uint)(exceptionEntryNumber * 4));
+            var readAddr = baseAddr + (uint)(exceptionEntryNumber * 4);
             PC = bus.Read(readAddr, 4);
         }
 
         static bool IsNegativeValue(uint x) {
             return (x & (1 << 31)) != 0;
+        }
+
+        static bool IsNegativeValue64(ulong x) {
+            return (x & (1ul << 63)) != 0;
         }
 
         /// <summary>
@@ -537,15 +533,17 @@ namespace RX {
         }
 
         uint OpABS(uint src) {
-            var result = (uint)Math.Abs((int)src);
+            var result = IsNegativeValue(src) ? ~src + 1 : src;
+            var resultIsNegative = IsNegativeValue(result);
             PSW_z = result == 0;
-            PSW_s = result >> 31 == 1;
-            PSW_o = src == 0x80000000;
+            PSW_s = resultIsNegative;
+            PSW_o = resultIsNegative;
             return result;
         }
 
         uint OpADC(uint a, uint b) {
             var result = unchecked(a + b + (PSW_c ? 1u : 0u));
+            AddFlags(b, a, result);
             return result;
         }
 
@@ -757,14 +755,14 @@ namespace RX {
 
         void OpINT(uint src) {
             var tmp0 = PSW;
-            this.PSW_u = false;
-            this.PSW_i = false;
-            this.PSW_pm = false;
+            PSW_u = false;
+            PSW_i = false;
+            PSW_pm = false;
             var tmp1 = PC + 3;
             PC = bus.Read(INTB + src * 4, 4);
-            SP = SP - 4;
+            SP -= 4;
             bus.Write(SP, 4, tmp0);
-            SP = SP - 4;
+            SP -= 4;
             bus.Write(SP, 4, tmp1);
         }
 
@@ -959,43 +957,43 @@ namespace RX {
                 ((src & (0xFF << 8)) >> 8);
         }
 
-        void OpRMPA(uint size) {
+        bool OpRMPA(uint size) {
             if (Registers[3] == 0) {
-                return;
+                return true;
             }
             var n = 1 << (int)size;
             ulong resultL =
-                Registers[5] << 32 |
+                (ulong)Registers[5] << 32 |
                 Registers[4];
-            uint resultH = Registers[6];
-            PSW_o = false;
+            short resultH = unchecked((short)Registers[6]);
 
-            while (Registers[3] != 0) {
-                long tmp0 = bus.Read(Registers[1], n);
-                long tmp1 = bus.Read(Registers[2], n);
-                long tmp3 = tmp0 * tmp1;
-                ulong prev = resultL;
-                resultL += (ulong)tmp3;
-                // carry / bollow
-                if (tmp3 < 0) {
-                    if (prev > resultL) {
-                        resultH--;
-                    }
-                } else {
-                    if (prev < resultL) {
-                        resultH++;
-                    }
+            long tmp0 = unchecked((int)LoadSourceOperand(0, size, 1, ReadOnlySpan<uint>.Empty));
+            long tmp1 = unchecked((int)LoadSourceOperand(0, size, 2, ReadOnlySpan<uint>.Empty));
+            long tmp3 = tmp0 * tmp1;
+            ulong prev = resultL;
+            resultL = unchecked(resultL + (ulong)tmp3);
+
+            if (tmp3 < 0) {
+                if (resultL > prev) {
+                    resultH--;
                 }
-
-                Registers[1] += (uint)n;
-                Registers[2] += (uint)n;
-                Registers[3]--;
             }
-            PSW_s = (resultH >> 31) != 0;
-            PSW_o = resultH != 0 && resultH != unchecked((uint)-1);
-            Registers[6] = resultH;
+            else {
+                if (resultL < prev) {
+                    resultH++;
+                }
+            }
+            PSW_s = resultH < 0;
+            PSW_o = !(resultH == 0 && !IsNegativeValue64(resultL)) &&
+                !(resultH == -1 && IsNegativeValue64(resultL));
+
+            Registers[1] += (uint)n;
+            Registers[2] += (uint)n;
+            Registers[3]--;
+            Registers[6] = unchecked((uint)(int)resultH);
             Registers[5] = (uint)(resultL >> 32);
             Registers[4] = (uint)(resultL & 0xffffffff);
+            return Registers[3] == 0;
         }
 
         uint OpROLC(uint dest) {
@@ -1659,6 +1657,7 @@ namespace RX {
                 }
                 case OpCode.INT:
                     OpINT(operand[0]);
+                    shouldIncrementPC = false;
                     break;
                 case OpCode.ITOF_ub_rs: {
                     var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
@@ -1991,7 +1990,7 @@ namespace RX {
                     shouldIncrementPC = OpSMOVF();
                     break;
                 case OpCode.RMPA:
-                    OpRMPA(operand[0]);
+                    shouldIncrementPC = OpRMPA(operand[0]);
                     break;
                 case OpCode.ROLC: {
                     ref var dest = ref Registers[operand[0]];

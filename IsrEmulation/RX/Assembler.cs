@@ -920,7 +920,7 @@ namespace RX {
             if (size == MemEx.UW) {
                 throw new ArgumentException($"actual: {size}");
             }
-            return Create(OpCode.RMPA);
+            return Create(OpCode.RMPA, (uint)size);
         }
 
         public static Instruction32 ROLC(Reg dest) =>
@@ -979,21 +979,17 @@ namespace RX {
             return Create(OpCode.SBB_rr, (uint)src.TargetReg, (uint)dest);
         }
 
-        public static Instruction32 SCC(Cnd condition, Reg dest) {
-            if (condition == Cnd.RA_B) {
-                throw new ArgumentException($"actual: {condition}");
-            }
-            return Create(OpCode.SCCnd, (uint)MemEx.L, (uint)dest, (uint)condition, (uint)LengthOfDisplacement.Reg);
-        }
-
         public static Instruction32 SCC(Cnd condition, StdRegAddressing dest) {
-            if (dest.Memex is null or MemEx.UW) {
+            if (dest.Memex is MemEx.UW) {
                 throw new ArgumentException($"actual: {dest.Memex}");
             }
             if (condition == Cnd.RA_B) {
                 throw new ArgumentException($"actual: {condition}");
             }
-            return Create(OpCode.SCCnd, (uint)dest.Memex, (uint)dest.TargetReg, (uint)condition, (uint)dest.LD, dest.Displacement);
+            var sz = dest.LD == LengthOfDisplacement.Reg
+                ? MemEx.L
+                : dest.Memex!.Value;
+            return Create(OpCode.SCCnd, (uint)sz, (uint)dest.TargetReg, (uint)condition, (uint)dest.LD, dest.Displacement);
         }
 
         public static readonly Instruction32 SCMPU =

@@ -339,6 +339,7 @@ public class BusManager : IBus32 {
     public uint Read(uint address, int size) {
         foreach (var t in rangedMapping)
         {
+            // TODO アドレスがまたがったときの対策をする
             if (t.beginAddress <= address && address <= t.endAddress) {
                 var targetAddress = address - t.beginAddress;
                 return t.target.Read(targetAddress, size);
@@ -354,8 +355,9 @@ public class BusManager : IBus32 {
     public void Write(uint address, int size, uint value) {
         foreach (var t in rangedMapping)
         {
+            // TODO アドレスがまたがったときの対策をする
             if (t.beginAddress <= address && address <= t.endAddress) {
-                t.target.Write(address, size, value);
+                t.target.Write(address - t.beginAddress, size, value);
                 return;
             }
         }
