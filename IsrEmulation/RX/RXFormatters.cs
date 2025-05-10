@@ -27,13 +27,13 @@ namespace RX {
             };
         }
 
-        public void Deserialize(ref Reader reader, Queue<uint> result) {
+        public void Deserialize(ref Reader reader, List<uint> result) {
             var x = reader.ReadUInteger(liReadSize);
             var li = (x >> shift) & 0b11;
             var byteLength = GetLIByteLength(li);
             var immediate = reader.ReadInteger(byteLength);
-            result.Enqueue(li);
-            result.Enqueue(immediate);
+            result.Add(li);
+            result.Add(immediate);
         }
 
         public void Serialize(Queue<uint> result, ref AssemblyWriter writer) {
@@ -70,18 +70,18 @@ namespace RX {
             };
         }
 
-        public void Deserialize(ref Reader reader, Queue<uint> result) {
+        public void Deserialize(ref Reader reader, List<uint> result) {
             var x = reader.ReadUInteger(dspReadSize);
             var ld = (x >> shift) & 0b11;
             var byteLength = GetDspByteLength(ld);
 
             if (byteLength == 0) {
-                result.Enqueue(ld);
+                result.Add(ld);
             }
             else {
                 var dsp = reader.ReadUInteger(byteLength);
-                result.Enqueue(ld);
-                result.Enqueue(dsp);
+                result.Add(ld);
+                result.Add(dsp);
             }
         }
 
@@ -115,7 +115,7 @@ namespace RX {
             this.shiftB = shiftB;
         }
 
-        public void Deserialize(ref Reader reader, Queue<uint> result) {
+        public void Deserialize(ref Reader reader, List<uint> result) {
             var x = reader.ReadUInteger(dspReadSize);
             var ldA = (x >> shiftA) & 0b11;
             var ldB = (x >> shiftB) & 0b11;
@@ -129,10 +129,10 @@ namespace RX {
                 ? 0
                 : reader.ReadUInteger(byteLengthB);
 
-            result.Enqueue(ldA);
-            result.Enqueue(dspA);
-            result.Enqueue(ldB);
-            result.Enqueue(dspB);
+            result.Add(ldA);
+            result.Add(dspA);
+            result.Add(ldB);
+            result.Add(dspB);
         }
 
         public void Serialize(Queue<uint> result, ref AssemblyWriter writer) {

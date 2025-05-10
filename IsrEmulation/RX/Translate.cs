@@ -3,10 +3,13 @@ using LEUInt = RX.LEUIntegerFormatter;
 using LEInt = RX.LEIntegerFormatter;
 using Skip = RX.SkipFormatter;
 using BEUConnection = RX.BEUBitConnectionFormatter;
+using System.Buffers;
 
 namespace RX {
 
     public class Translate {
+
+        public static readonly Translate Instance = new();
 
         readonly IAssemblyCode32Formatter opCodeFormatter;
 
@@ -26,7 +29,7 @@ namespace RX {
                 operandFormatter ?? EmptyFormatter.Instance);
         }
 
-        public Translate() {
+        Translate() {
 
             var mov_rm = new Composite(new LEUInt(4, 2, 1), new BEUConnection(2, new[] { (1, 3), (4, 7) }), new LEUInt(12, 3, 2), new LEUInt(8, 3, 2), new Skip(2));
             var mov_mr = new Composite(new LEUInt(4, 2, 1), new BEUConnection(2, new[] { (1, 3), (4, 7) }), new LEUInt(12, 3, 2), new LEUInt(8, 3, 2), new Skip(2));
@@ -702,7 +705,7 @@ namespace RX {
             opCodeFormatter.Serialize(queue, ref writer);
         }
 
-        public void ParseAssembly(ref Reader reader, Queue<uint> result) {
+        public void ParseAssembly(ref Reader reader, List<uint> result) {
             opCodeFormatter.Deserialize(ref reader, result);
         }
     }

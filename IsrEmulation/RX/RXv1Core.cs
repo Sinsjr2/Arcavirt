@@ -1,34 +1,37 @@
+using CPU;
 using Pheripheral;
 using Util;
 
 namespace RX {
-    public class RXv1Core : CPU.ILeveledISRNotify {
+    public class RXv1Core : CPU.ILeveledISRNotify, IInstructionStep {
         public readonly uint[] Registers = new uint[16];
 
-        uint isp;
-        public uint ISP {
+        public uint ISP;
+
+        public uint ConvertedISP {
             set {
                 if (PSW_u) {
-                    isp = value;
+                    ISP = value;
                 }
                 else {
                     Registers[0] = value;
                 }
             }
-            get => PSW_u ? isp : Registers[0];
+            get => PSW_u ? ISP : Registers[0];
         }
 
-        uint usp;
-        public uint USP {
+        public uint USP;
+
+        public uint ConvertedUSP {
             set {
                 if (PSW_u) {
                     Registers[0] = value;
                 }
                 else {
-                    usp = value;
+                    USP = value;
                 }
             }
-            get => PSW_u ? Registers[0] : usp;
+            get => PSW_u ? Registers[0] : USP;
         }
         public uint INTB;
         public uint EXTB;
@@ -54,12 +57,12 @@ namespace RX {
                 }
                 psw_u = value;
                 if (value) {
-                    isp = Registers[0];
-                    Registers[0] = usp;
+                    ISP = Registers[0];
+                    Registers[0] = USP;
                 }
                 else {
-                    usp = Registers[0];
-                    Registers[0] = isp;
+                    USP = Registers[0];
+                    Registers[0] = ISP;
                 }
             }
         }
@@ -168,12 +171,28 @@ namespace RX {
 
         public bool Waiting { get; private set; }
 
+        public double CycleNanoSec { get; }
+
         readonly GPIO.OutputSignalBit isrAck = new("isrAck");
 
-        readonly IBus32 bus;
+        public readonly IBus32 Bus;
 
-        public RXv1Core(IBus32 bus) {
-            this.bus = bus;
+        readonly List<uint> operandWorking = new();
+
+        /// <summary>
+        /// プログラムカウンターのブレークポイント
+        /// このアドレスと一致すると停止します。
+        /// </summary>
+        public readonly HashSet<uint> PcBreakpoints = new();
+
+        /// <summary>
+        /// ブレーク命令や設定されたブレークポイントに一致した時に呼び出します。
+        /// </summary>
+        public event Action? OnBreak;
+
+        public RXv1Core(IBus32 bus, double cycleNanoSec = 1.0 / 120_000_000.0) {
+            Bus = bus;
+            CycleNanoSec = cycleNanoSec;
         }
 
         uint CalcDspAddr(uint dsp, int reg) {
@@ -238,29 +257,29 @@ namespace RX {
         uint LoadSourceOperand(uint ld, uint mi, uint rs, ReadOnlySpan<uint> dsp) {
             if (ld == 0) {
                 var memOp = MemOps.Span[(int)mi];
-                return SignExtension(memOp.IsSigned, bus.Read(Registers[rs], 1 << memOp.Size), memOp.Size);
+                return SignExtension(memOp.IsSigned, Bus.Read(Registers[rs], 1 << memOp.Size), memOp.Size);
             }
             if (ld < 3) {
                 var memOp = MemOps.Span[(int)mi];
                 var addr = ReadIndexAddr((int)ld, dsp[0], (int)rs);
-                return SignExtension(memOp.IsSigned, bus.Read(addr, 1 << memOp.Size), memOp.Size);
+                return SignExtension(memOp.IsSigned, Bus.Read(addr, 1 << memOp.Size), memOp.Size);
             }
             return Registers[rs];
         }
 
         uint LoadUnsignedSourceOperand(uint ld, uint sz, ReadOnlySpan<uint> dsp, uint rs) {
             if (ld == 0) {
-                return bus.Read(Registers[rs], 1 << (int)sz);
+                return Bus.Read(Registers[rs], 1 << (int)sz);
             }
             if (ld < 3) {
                 var addr = ReadIndexAddr((int)ld, dsp[0], (int)rs);
-                return bus.Read(addr, 1 << (int)sz);
+                return Bus.Read(addr, 1 << (int)sz);
             }
             return BitOperation.GetLowerBits(Registers[rs], 1u << (int)sz);
         }
 
         uint LoadUnsignedSourceOperand(uint sz, uint dsp, uint rs) {
-            return bus.Read(CalcDspAddr(dsp, (int)rs), 1 << (int)sz);
+            return Bus.Read(CalcDspAddr(dsp, (int)rs), 1 << (int)sz);
         }
 
         uint LoadSourceOperand(uint sz, uint dsp, uint rs) {
@@ -270,13 +289,13 @@ namespace RX {
         void StoreDestOperand(uint mi, uint rd, uint ld, ReadOnlySpan<uint> dsp, uint value) {
             if (ld == 0) {
                 var memOp = MemOps.Span[(int)mi];
-                bus.Write(Registers[rd], 1 << memOp.Size, value);
+                Bus.Write(Registers[rd], 1 << memOp.Size, value);
                 return;
             }
             if (ld < 3) {
                 var memOp = MemOps.Span[(int)mi];
                 var addr = ReadIndexAddr((int)ld, dsp[0], (int)rd);
-                bus.Write(addr, 1 << memOp.Size, value);
+                Bus.Write(addr, 1 << memOp.Size, value);
                 return;
             }
             Registers[rd] = value;
@@ -290,7 +309,7 @@ namespace RX {
                 (uint)MemEx.L => 4,
                 _ => throw new ArgumentException($"not supported sz. actual: {sz}")
             };
-            bus.Write(addr, size, value);
+            Bus.Write(addr, size, value);
         }
 
         void SetPSWFlag(uint cb, bool value) {
@@ -326,7 +345,7 @@ namespace RX {
                     // reserved
                     break;
                 case (uint)ControlReg.USP:
-                    USP = value;
+                    ConvertedUSP = value;
                     break;
                 case (uint)ControlReg.FPSW:
                     FPSW = value;
@@ -344,7 +363,7 @@ namespace RX {
                     BPC = value;
                     break;
                 case (uint)ControlReg.ISP:
-                    ISP = value;
+                    ConvertedISP = value;
                     break;
                 case (uint)ControlReg.FINTV:
                     FINTV = value;
@@ -365,7 +384,7 @@ namespace RX {
                 case 0b0001:
                     return PC;
                 case 0b0010:
-                    return USP;
+                    return ConvertedUSP;
                 case 0b0011:
                     return FPSW;
                 case 0b0100:
@@ -379,7 +398,7 @@ namespace RX {
                 case 0b1001:
                     return BPC;
                 case 0b1010:
-                    return ISP;
+                    return ConvertedISP;
                 case 0b1011:
                     return FINTV;
                 case 0b1100:
@@ -453,16 +472,16 @@ namespace RX {
             }
             else {
                 SP -= (uint)4;
-                bus.Write(SP, 4, PC);
+                Bus.Write(SP, 4, PC);
                 SP -= (uint)4;
-                bus.Write(SP, 4, PSW);
+                Bus.Write(SP, 4, PSW);
                 PSW_u = false;
                 PSW_i = false;
                 PSW_pm = false;
             }
 
             var readAddr = baseAddr + (uint)(exceptionEntryNumber * 4);
-            PC = bus.Read(readAddr, 4);
+            PC = Bus.Read(readAddr, 4);
         }
 
         static bool IsNegativeValue(uint x) {
@@ -608,11 +627,12 @@ namespace RX {
             this.PSW_i = false;
             this.PSW_pm = false;
             var tmp1 = PC + 1;
-            PC = bus.Read(INTB, 4);
+            PC = Bus.Read(INTB, 4);
             SP = SP - 4;
-            bus.Write(SP, 4, tmp0);
+            Bus.Write(SP, 4, tmp0);
             SP = SP - 4;
-            bus.Write(SP, 4, tmp1);
+            Bus.Write(SP, 4, tmp1);
+            OnBreak?.Invoke();
         }
 
         byte OpBSET_m(uint src, byte dest) {
@@ -625,7 +645,7 @@ namespace RX {
 
         void OpBSR(uint src, uint n) {
             SP -= 4;
-            bus.Write(SP, 4, PC + n);
+            Bus.Write(SP, 4, PC + n);
             PC += src;
         }
 
@@ -759,11 +779,11 @@ namespace RX {
             PSW_i = false;
             PSW_pm = false;
             var tmp1 = PC + 3;
-            PC = bus.Read(INTB + src * 4, 4);
+            PC = Bus.Read(INTB + src * 4, 4);
             SP -= 4;
-            bus.Write(SP, 4, tmp0);
+            Bus.Write(SP, 4, tmp0);
             SP -= 4;
-            bus.Write(SP, 4, tmp1);
+            Bus.Write(SP, 4, tmp1);
         }
 
         uint OpITOF(uint src) {
@@ -787,7 +807,7 @@ namespace RX {
 
         void OpJSR(uint src) {
             SP -= 4;
-            bus.Write(SP, 4, PC + 2);
+            Bus.Write(SP, 4, PC + 2);
             PC = src;
         }
 
@@ -886,13 +906,13 @@ namespace RX {
         }
 
         uint OpPOP() {
-            var tmp = bus.Read(SP, 4);
+            var tmp = Bus.Read(SP, 4);
             SP += 4;
             return tmp;
         }
 
         void OpPOPC(uint dest) {
-            var tmp = bus.Read(SP, 4);
+            var tmp = Bus.Read(SP, 4);
             SP += 4;
             SetControlRegister(dest, tmp);
         }
@@ -900,7 +920,7 @@ namespace RX {
         void OpPOPM(uint dest, uint dest2) {
             // TODO dest に 0が入った場合を考慮する
             for (int i = (int)dest;i <= dest2; i++) {
-                uint tmp = bus.Read(SP, 4);
+                uint tmp = Bus.Read(SP, 4);
                 SP += 4;
                 Registers[i] = tmp;
             }
@@ -909,13 +929,13 @@ namespace RX {
         void OpPUSH(uint size, uint src) {
             var length = 1 << (int)size;
             SP -= 4;
-            bus.Write(SP, length, src);
+            Bus.Write(SP, length, src);
         }
 
         void OpPUSHC(uint src) {
             uint tmp = GetControlRegister(src);
             SP -= 4;
-            bus.Write(SP, 4, tmp);
+            Bus.Write(SP, 4, tmp);
         }
 
         void OpPUSHM(uint src, uint src2) {
@@ -923,7 +943,7 @@ namespace RX {
             for (int i = (int)src2; i >= src; i--) {
                 uint tmp = Registers[i];
                 SP -= 4;
-                bus.Write(SP, 4, tmp);
+                Bus.Write(SP, 4, tmp);
             }
         }
 
@@ -1063,9 +1083,9 @@ namespace RX {
                 RunException(EXTB, (byte)RXCoreExceptions.PrivilegedInstructionException, false);
                 return;
             }
-            PC = bus.Read(SP, 4);
+            PC = Bus.Read(SP, 4);
             SP += 4;
-            var tmp = bus.Read(SP, 4);
+            var tmp = Bus.Read(SP, 4);
             SP += 4;
             PSW = tmp;
             if (PSW_pm) {
@@ -1086,25 +1106,25 @@ namespace RX {
         }
 
         void OpRTS() {
-            PC = bus.Read(SP, 4);
+            PC = Bus.Read(SP, 4);
             SP += 4;
         }
 
         void OpRTSD(uint src)
         {
             SP += src;
-            PC = bus.Read(SP, 4);
+            PC = Bus.Read(SP, 4);
             SP += 4;
         }
 
         void OpRTSD(uint src, uint dest, uint dest2) {
             SP += src - (dest2 - dest + 1) * 4;
             for (int i = (int)dest; i <= (int)dest2; i++) {
-                var tmp = bus.Read(SP, 4);
+                var tmp = Bus.Read(SP, 4);
                 SP += 4;
                 Registers[i] = tmp;
             }
-            PC = bus.Read(SP, 4);
+            PC = Bus.Read(SP, 4);
             SP += 4;
         }
 
@@ -1146,8 +1166,8 @@ namespace RX {
 
         bool OpSCMPU() {
             if (Registers[3] != 0) {
-                byte tmp0 = (byte)bus.Read(Registers[1]++, 1);
-                byte tmp1 = (byte)bus.Read(Registers[2]++, 1);
+                byte tmp0 = (byte)Bus.Read(Registers[1]++, 1);
+                byte tmp1 = (byte)Bus.Read(Registers[2]++, 1);
                 Registers[3]--;
                 PSW_c = tmp0 - tmp1 >= 0;
                 PSW_z = tmp0 == tmp1;
@@ -1195,8 +1215,8 @@ namespace RX {
 
         bool OpSMOVB() {
             if (Registers[3] != 0) {
-                uint tmp = bus.Read(Registers[2], 1);
-                bus.Write(Registers[1], 1, tmp);
+                uint tmp = Bus.Read(Registers[2], 1);
+                Bus.Write(Registers[1], 1, tmp);
                 Registers[1]--;
                 Registers[2]--;
                 Registers[3]--;
@@ -1207,8 +1227,8 @@ namespace RX {
 
         bool OpSMOVF() {
             if (Registers[3] != 0) {
-                uint tmp = bus.Read(Registers[2], 1);
-                bus.Write(Registers[1], 1, tmp);
+                uint tmp = Bus.Read(Registers[2], 1);
+                Bus.Write(Registers[1], 1, tmp);
                 Registers[1]++;
                 Registers[2]++;
                 Registers[3]--;
@@ -1219,8 +1239,8 @@ namespace RX {
 
         bool OpSMOVU() {
             if (Registers[3] != 0) {
-                uint tmp = bus.Read(Registers[2], 1);
-                bus.Write(Registers[1], 1, tmp);
+                uint tmp = Bus.Read(Registers[2], 1);
+                Bus.Write(Registers[1], 1, tmp);
                 Registers[1]++;
                 Registers[2]++;
                 Registers[3]--;
@@ -1235,7 +1255,7 @@ namespace RX {
         bool OpSSTR(uint size) {
             if (Registers[3] != 0) {
                 uint byteLength = 1u << (int)size;
-                bus.Write(Registers[1], (int)byteLength, Registers[2]);
+                Bus.Write(Registers[1], (int)byteLength, Registers[2]);
                 Registers[1] += byteLength;
                 Registers[3]--;
                 return Registers[3] == 0;
@@ -1260,7 +1280,7 @@ namespace RX {
         bool OpSUNTIL(uint size) {
             if (Registers[3] != 0) {
                 var byteLength = 1u << (int)size;
-                var tmp = bus.Read(Registers[1], (int)byteLength);
+                var tmp = Bus.Read(Registers[1], (int)byteLength);
                 Registers[1] += byteLength;
                 Registers[3]--;
                 PSW_c = tmp >=  Registers[2];
@@ -1276,7 +1296,7 @@ namespace RX {
         bool OpSWHILE(uint size) {
             if (Registers[3] != 0) {
                 var byteLength = 1u << (int)size;
-                var tmp = bus.Read(Registers[1], (int)byteLength);
+                var tmp = Bus.Read(Registers[1], (int)byteLength);
                 Registers[1] += byteLength;
                 Registers[3]--;
                 PSW_c = tmp >= Registers[2];
@@ -1309,6 +1329,13 @@ namespace RX {
         }
 
         public void ExecuteInstruction(OpCode opCode, ReadOnlySpan<uint> operand, uint opSize) {
+            // ブレークポイントが設定されていないときは処理速度アップのために
+            // ハッシュを検索しない
+            if (PcBreakpoints.Count != 0 && PcBreakpoints.Contains(PC)) {
+                Waiting = true;
+                OnBreak?.Invoke();
+                return;
+            }
             var shouldIncrementPC = true;
             switch (opCode) {
                 case OpCode.ABS_rd: {
@@ -1760,7 +1787,7 @@ namespace RX {
                     var ri = Registers[operand[1]];
                     var rb = Registers[operand[2]];
                     var addr = rb + (ri << sz);
-                    Registers[operand[3]] = SignExtension(true, bus.Read(addr, 1 << sz), sz);
+                    Registers[operand[3]] = SignExtension(true, Bus.Read(addr, 1 << sz), sz);
                     break;
                 }
                 case OpCode.MOV_r_dsp:
@@ -1775,7 +1802,7 @@ namespace RX {
                     var ri = Registers[operand[1]];
                     var rb = Registers[operand[2]];
                     var addr = rb + ( ri << sz);
-                    bus.Write(addr, 1 << sz, Registers[operand[3]]);
+                    Bus.Write(addr, 1 << sz, Registers[operand[3]]);
                     break;
                 }
                 case OpCode.MOV_mm:
@@ -1800,7 +1827,7 @@ namespace RX {
                         addr -= sz;
                         dest = addr;
                     }
-                    bus.Write(addr, (int)sz, Registers[operand[3]]);
+                    Bus.Write(addr, (int)sz, Registers[operand[3]]);
                     break;
                 }
                 case OpCode.MOV_pr: {
@@ -1821,7 +1848,7 @@ namespace RX {
                         addr -= sz;
                         src = addr;
                     }
-                    Registers[operand[3]] = SignExtension(true, bus.Read(addr, (int)sz), (int)operand[1]);
+                    Registers[operand[3]] = SignExtension(true, Bus.Read(addr, (int)sz), (int)operand[1]);
                     break;
                 }
                 case OpCode.MOVU_dsp5_mr:
@@ -1835,7 +1862,7 @@ namespace RX {
                     var ri = Registers[operand[1]];
                     var rb = Registers[operand[2]];
                     var addr = rb + (ri << sz);
-                    Registers[operand[3]] = bus.Read(addr, 1 << sz);
+                    Registers[operand[3]] = Bus.Read(addr, 1 << sz);
                     break;
                 }
                 case OpCode.MOVU_pr: {
@@ -1852,7 +1879,7 @@ namespace RX {
                         addr -= sz;
                         src = addr;
                     }
-                    Registers[operand[3]] = bus.Read(addr, (int)sz);
+                    Registers[operand[3]] = Bus.Read(addr, (int)sz);
                     break;
                 }
                 case OpCode.MUL_4ir: {
@@ -2213,11 +2240,44 @@ namespace RX {
                     break;
                 }
                 default:
+                    Console.WriteLine($"Unknown opcode: {opCode}");
                     break;
             }
             if (shouldIncrementPC) {
                 PC += opSize;
             }
+        }
+
+        public void Reset() {
+            ISP = 0;
+            USP = 0;
+            PC = Bus.Read(0xFFFFFFFC, 4);
+            PSW_c = false;
+            PSW_z = false;
+            PSW_s = false;
+            PSW_o = false;
+            PSW_i = false;
+            PSW_u = false;
+            PSW_pm = false;
+            PSW_ipl = 0;
+            FPSW = 0;
+        }
+
+        public int NextStep() {
+            var reader = new Reader(Bus, PC);
+            operandWorking.Clear();
+            var prevPos = reader.Position;
+            Translate.Instance.ParseAssembly(ref reader, operandWorking);
+            var afterPos = reader.Position;
+            var opSize = afterPos - prevPos;
+            var parsed = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(operandWorking);
+            ExecuteInstruction((OpCode)parsed[0], parsed[1..], opSize);
+            // TDDO 命令ごとのクロック数を考慮する必要あり
+            return 1;
+        }
+
+        public void Stop() {
+            this.Waiting = true;
         }
     }
 }

@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Diagnostics.CodeAnalysis;
 using Pheripheral;
 
 namespace RX {
@@ -153,7 +154,29 @@ namespace RX {
                     throw new InvalidOperationException($"size is not supported. {size}");
             }
         }
+    }
 
+    public ref struct SpanReader<T> {
+        Span<T> target;
+        int pos = 0;
+
+        public SpanReader(Span<T> target) : this() {
+            this.target = target;
+        }
+
+        /// <summary>
+        /// 現在の位置の値を取り出し、進めます。
+        /// 取り出せないときは、falseを返します。
+        /// </summary>
+        public bool TryRead([MaybeNullWhen(false)] out T result) {
+            if (target.Length <= pos) {
+                result = default;
+                return false;
+            }
+            result = target[pos];
+            pos++;
+            return true;
+        }
     }
 
     public ref struct AssemblyWriter {
@@ -244,7 +267,7 @@ namespace RX {
 
     public interface IAssemblyCode32Formatter {
         void Serialize(Queue<uint> result, ref AssemblyWriter writer);
-        void Deserialize(ref Reader reader, Queue<uint> result);
+        void Deserialize(ref Reader reader, List<uint> result);
     }
 
     // public interface IOpCode32 : IAssemblyCode32Formatter {
@@ -443,20 +466,20 @@ namespace RX {
             formatter.Operand.Serialize(result, ref writer);
         }
 
-        public void Deserialize(ref Reader reader, Queue<uint> result) {
+        public void Deserialize(ref Reader reader, List<uint> result) {
             uint code = reader.FetchU32();
             var sub = formatters[code & 0xFFFF];
             if (sub == null) {
-                result.Enqueue(unknownOpcodeKind);
+                result.Add(unknownOpcodeKind);
                 return;
             }
             if (sub.Length == 1) {
-                result.Enqueue(sub[0].OpCode.OpCodeKind);
+                result.Add(sub[0].OpCode.OpCodeKind);
                 sub[0].Operand.Deserialize(ref reader, result);
                 return;
             }
             var pair = sub[(code >> 16) & 0xFF];
-            result.Enqueue(pair.OpCode.OpCodeKind);
+            result.Add(pair.OpCode.OpCodeKind);
             pair.Operand.Deserialize(ref reader, result);
         }
     }
@@ -479,7 +502,7 @@ namespace RX {
             writer.Skip(skipByte);
         }
 
-        public void Deserialize(ref Reader reader, Queue<uint> result) {
+        public void Deserialize(ref Reader reader, List<uint> result) {
             reader.ReadUInteger(skipByte);
         }
     }
@@ -505,7 +528,7 @@ namespace RX {
             }
         }
 
-        public void Deserialize(ref Reader reader, Queue<uint> result) {
+        public void Deserialize(ref Reader reader, List<uint> result) {
             foreach (var formatter in formatters) {
                 formatter.Deserialize(ref reader, result);
             }
@@ -543,10 +566,10 @@ namespace RX {
             writer.SetMaskedUInteger(byteLength, mask << shift, value << shift);
         }
 
-        public void Deserialize(ref Reader reader, Queue<uint> result) {
+        public void Deserialize(ref Reader reader, List<uint> result) {
             var integer = reader.FetchUInteger(byteLength);
             var masked = mask & (integer >> shift);
-            result.Enqueue(masked);
+            result.Add(masked);
         }
     }
 
@@ -583,10 +606,10 @@ namespace RX {
             writer.SetMaskedUInteger(byteLength, mask << shift, value << shift);
         }
 
-        public void Deserialize(ref Reader reader, Queue<uint> result) {
+        public void Deserialize(ref Reader reader, List<uint> result) {
             int integer = (int)reader.FetchUInteger(byteLength);
             var masked = (integer << (32 - (shift + bitLength))) >> (32 - bitLength);
-            result.Enqueue((uint)masked);
+            result.Add((uint)masked);
         }
     }
 
@@ -624,12 +647,12 @@ namespace RX {
                 BinaryPrimitives.ReverseEndianness(value << shift) >> ((4 - byteLength) * 8));
         }
 
-        public void Deserialize(ref Reader reader, Queue<uint> result) {
+        public void Deserialize(ref Reader reader, List<uint> result) {
             uint integer = BinaryPrimitives.ReverseEndianness(
                 reader.FetchUInteger(byteLength))
                 >> ((4 - byteLength) * 8);
             var masked = mask & (integer >> shift);
-            result.Enqueue(masked);
+            result.Add(masked);
         }
     }
 
@@ -641,7 +664,7 @@ namespace RX {
 
         EmptyFormatter() {}
 
-        public void Deserialize(ref Reader reader, Queue<uint> result) {
+        public void Deserialize(ref Reader reader, List<uint> result) {
         }
 
         public void Serialize(Queue<uint> result, ref AssemblyWriter writer) {
@@ -673,13 +696,13 @@ namespace RX {
                 .ToArray();
         }
 
-        public void Deserialize(ref Reader reader, Queue<uint> result) {
+        public void Deserialize(ref Reader reader, List<uint> result) {
             var x = reader.FetchUInteger(readLength);
             uint shifted = 0;
             foreach (var pattern in calcPatterns.Span) {
                 shifted |= (x & pattern.mask) >> pattern.shift;
             }
-            result.Enqueue(shifted);
+            result.Add(shifted);
         }
 
         public void Serialize(Queue<uint> result, ref AssemblyWriter writer) {
@@ -719,7 +742,7 @@ namespace RX {
                 .ToArray();
         }
 
-        public void Deserialize(ref Reader reader, Queue<uint> result) {
+        public void Deserialize(ref Reader reader, List<uint> result) {
             var x = BinaryPrimitives.ReverseEndianness(reader.FetchUInteger(readLength)) >>
                 ((4 - readLength) * 8);
             uint shifted = 0;
@@ -728,7 +751,7 @@ namespace RX {
                 shifted |= ((x & pattern.mask) >> pattern.shift) << pos;
                 pos += pattern.bitLength;
             }
-            result.Enqueue(shifted);
+            result.Add(shifted);
         }
 
         public void Serialize(Queue<uint> result, ref AssemblyWriter writer) {

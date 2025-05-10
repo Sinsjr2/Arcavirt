@@ -17,7 +17,7 @@ public class RXv1InstrunctionTest {
     BusManager busManager;
 
     // 毎回インスタンスを作ると重いため
-    static readonly Translate rxv1Translate = new();
+    readonly Translate rxv1Translate = Translate.Instance;
 
     uint ramBeginAddress;
     uint ramEndAddress;
@@ -152,12 +152,12 @@ public class RXv1InstrunctionTest {
         }
         var reader = new Reader(busManager, cpu.PC);
         var prevPos = reader.Position;
-        var queue = new Queue<uint>();
-        rxv1Translate.ParseAssembly(ref reader, queue);
+        var list = new List<uint>();
+        rxv1Translate.ParseAssembly(ref reader, list);
         var afterPos = reader.Position;
         var opSize = afterPos - prevPos;
 
-        var instArgs = queue.ToArray();
+        var instArgs = list.ToArray();
         cpu.ExecuteInstruction((OpCode)instArgs[0], instArgs.AsSpan(1), opSize);
     }
 
@@ -2489,11 +2489,11 @@ public class RXv1InstrunctionTest {
         switch (a)
         {
             case ControlReg.PSW  : cpu.PSW   = input; break;
-            case ControlReg.USP  : cpu.USP   = input; break;
+            case ControlReg.USP  : cpu.ConvertedUSP   = input; break;
             case ControlReg.FPSW : cpu.FPSW  = input; break;
             case ControlReg.BPSW : cpu.BPSW  = input; break;
             case ControlReg.BPC  : cpu.BPC   = input; break;
-            case ControlReg.ISP  : cpu.ISP   = input; break;
+            case ControlReg.ISP  : cpu.ConvertedISP   = input; break;
             case ControlReg.FINTV: cpu.FINTV = input; break;
             case ControlReg.INTB : cpu.INTB  = input; break;
             default: Assert.Fail(); break;
@@ -2566,11 +2566,11 @@ public class RXv1InstrunctionTest {
         var regValue = b switch
         {
             ControlReg.PSW => cpu.PSW,
-            ControlReg.USP => cpu.USP,
+            ControlReg.USP => cpu.ConvertedUSP,
             ControlReg.FPSW => cpu.FPSW,
             ControlReg.BPSW => cpu.BPSW,
             ControlReg.BPC => cpu.BPC,
-            ControlReg.ISP => cpu.ISP,
+            ControlReg.ISP => cpu.ConvertedISP,
             ControlReg.FINTV => cpu.FINTV,
             ControlReg.INTB => cpu.INTB,
             _ => throw new ArgumentException(b.ToString())
@@ -2595,11 +2595,11 @@ public class RXv1InstrunctionTest {
         var regValue = b switch
         {
             ControlReg.PSW => cpu.PSW,
-            ControlReg.USP => cpu.USP,
+            ControlReg.USP => cpu.ConvertedUSP,
             ControlReg.FPSW => cpu.FPSW,
             ControlReg.BPSW => cpu.BPSW,
             ControlReg.BPC => cpu.BPC,
-            ControlReg.ISP => cpu.ISP,
+            ControlReg.ISP => cpu.ConvertedISP,
             ControlReg.FINTV => cpu.FINTV,
             ControlReg.INTB => cpu.INTB,
             _ => throw new ArgumentException(b.ToString())
@@ -2842,11 +2842,11 @@ public class RXv1InstrunctionTest {
         var regValue = src switch
         {
             ControlReg.PSW => cpu.PSW,
-            ControlReg.USP => cpu.USP,
+            ControlReg.USP => cpu.ConvertedUSP,
             ControlReg.FPSW => cpu.FPSW,
             ControlReg.BPSW => cpu.BPSW,
             ControlReg.BPC => cpu.BPC,
-            ControlReg.ISP => cpu.ISP,
+            ControlReg.ISP => cpu.ConvertedISP,
             ControlReg.FINTV => cpu.FINTV,
             ControlReg.INTB => cpu.INTB,
             _ => throw new ArgumentException(src.ToString())
@@ -2936,7 +2936,7 @@ public class RXv1InstrunctionTest {
                 cpu.PSW = value;
                 break;
             case ControlReg.USP:
-                cpu.USP = value;
+                cpu.ConvertedUSP = value;
                 break;
             case ControlReg.FPSW:
                 cpu.FPSW = value;
@@ -2948,7 +2948,7 @@ public class RXv1InstrunctionTest {
                 cpu.BPC = value;
                 break;
             case ControlReg.ISP:
-                cpu.ISP = value;
+                cpu.ConvertedISP = value;
                 break;
             case ControlReg.FINTV:
                 cpu.FINTV = value;

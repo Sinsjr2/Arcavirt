@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IsrEmulation", "IsrEmulatio
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IsrEmulationTest", "IsrEmulationTest\IsrEmulationTest.csproj", "{F67159B6-6BEF-40BD-935B-253D55D687E3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lancher", "Lancher\Lancher.csproj", "{0CFCFE88-D95A-43C4-8B8E-14C76C6673E2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -30,5 +32,9 @@ Global
 		{F67159B6-6BEF-40BD-935B-253D55D687E3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F67159B6-6BEF-40BD-935B-253D55D687E3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F67159B6-6BEF-40BD-935B-253D55D687E3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0CFCFE88-D95A-43C4-8B8E-14C76C6673E2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0CFCFE88-D95A-43C4-8B8E-14C76C6673E2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0CFCFE88-D95A-43C4-8B8E-14C76C6673E2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0CFCFE88-D95A-43C4-8B8E-14C76C6673E2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
