@@ -21,9 +21,9 @@ namespace GraphLogger {
         }
 
         void AddData() {
-            var time = clock.Nanos;
-            positionLogger.Add(time, motor.Position);
-            speedLogger.Add(time, motor.Speed);
+            var sec = clock.Nanos / 1000_000_000;
+            positionLogger.Add(sec, motor.Position);
+            speedLogger.Add(sec, motor.Speed);
         }
 
         /// <summary>

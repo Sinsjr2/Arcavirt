@@ -69,9 +69,28 @@ public class StepperDriver {
         return targetPosition;
     }
 
+    public void SetMinVelocity(int velocity) {
+        startVelocity = velocity;
+        SetTargetPosition(GetTargetPosition());
+    }
+
+    public void SetMaxVelocity(int velocity) {
+        maxVelocity = velocity;
+        SetTargetPosition(GetTargetPosition());
+    }
+
+    public void SetAcceleration(int acc) {
+        this.acc = acc;
+        SetTargetPosition(GetTargetPosition());
+    }
+
+    public void SetDeceleration(int dec) {
+        this.dec = dec;
+        SetTargetPosition(GetTargetPosition());
+    }
+
     public void SetTargetPosition(int targetPosition) {
         // 同じ位置であると動かす必要なし
-        // TODO 逆回転禁止モードを追加する
         if (targetPosition == currentPosition) {
             return;
         }

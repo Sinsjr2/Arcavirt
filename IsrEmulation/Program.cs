@@ -1,7 +1,11 @@
 ﻿// See https://aka.ms/new-console-template for more information
 using System.Diagnostics;
+using System.Globalization;
+using System.Reflection.Emit;
 using Clock;
+using IsrEmulation.StepperCommand;
 using ScottPlot;
+using ScottPlot.TickGenerators;
 
 public class MotorSignalContext {
     public readonly List<int> Time = new();
@@ -37,7 +41,19 @@ public class BitLogger {
 
 internal class Program {
 
-     static void Main() {
+     static void Main(string[] args) {
+        if (args.Length != 0) {
+            switch (args[0]) {
+                case "stepperTimingDiagram":
+                    DrawStepperTimingDiagram(args[1..]);
+                    return;
+                case "stepperProfiledSeedTimingDiagram":
+                    DrawStepperProfiledSeedTimingDiagram(args[1..]);
+                    return;
+            }
+            Console.WriteLine("stepperTimingDiagram or stepperProfiledSeedTimingDiagram");
+            return;
+        }
          var clock = new SimulationClock();
          var sim = new Simulator(clock);
         var irqList = new CPU.ISRActions();
@@ -85,8 +101,6 @@ internal class Program {
             sim.Step();
         }
 
-
-        plot.Render();
         plot.SavePng("quickstart.png", 400, 300);
     }
 
@@ -119,8 +133,6 @@ internal class Program {
         var transportMotor1 = new StepperController(contexts[0].StepClockGenerator, dirSignal => contexts[0].Motor.CCW_CW = dirSignal);
         contexts[0].StepClockGenerator.OnCompareMatchTriggerB += transportMotor1.OnCompareMatched;
 
-        // var transportMotor2 = new StepperController(contexts[1].StepClockGenerator, dirSignal => contexts[1].Motor.CCW_CW = dirSignal);
-        // contexts[1].StepClockGenerator.OnCompareMatchTriggerB += transportMotor2.OnCompareMatched;
         var transportManager = new TransportBeltManager(new TransportBelt(10, 500));
         int? prevPos = 0;
         void UpdateNextStopPos() {
@@ -165,24 +177,6 @@ internal class Program {
 
         UpdateNextStopPos();
 
-        // transportMotor1.SetTargetPosition(40);
-        // transportMotor1.OnChangedPosition += OnCangedPos;
-        // void OnCangedPos() {
-        //     if (35 <= transportMotor1.GetCurrentPosition()) {
-        //         transportMotor1.OnChangedPosition -= OnCangedPos;
-        //         transportMotor1.SetTargetPosition(100);
-        //     }
-        // }
-
-        // transportMotor2.SetTargetPosition(80);
-        // transportMotor2.OnChangedPosition += OnCangedPos2;
-        // void OnCangedPos2() {
-        //     if (70 <= transportMotor2.GetCurrentPosition()) {
-        //         transportMotor2.OnChangedPosition -= OnCangedPos2;
-        //         transportMotor2.SetTargetPosition(140);
-        //     }
-        // }
-
         var timers = new List<PWMTimer> { allowTransportDelay };
 
         for (tickCount = 0; tickCount < 1000000; tickCount++) {
@@ -206,6 +200,138 @@ internal class Program {
         }
         //Console.WriteLine(string.Join("\n", stepperPositions));
         myPlot.SavePng("quickstart.png", 400, 300);
+    }
+
+    public record DrawTimingDiagramArgument(
+        float PwmFreq, int Acceleration, int Deceleration, int MinVelocity, int MaxVelocity, int Step);
+
+    static string DrawStepperTimingDiagramHelp => "pwmFreq acceleration deceleration minVelocity maxVelocity step";
+
+    static readonly int ParseDrawTimingDiagramArgumentLength = 6;
+
+    static DrawTimingDiagramArgument? ParseDrawTimingDiagramArguments(string[] args) {
+        if (args.Length != ParseDrawTimingDiagramArgumentLength) {
+            return null;
+        }
+        return new DrawTimingDiagramArgument(
+            PwmFreq: float.Parse(args[0], CultureInfo.InvariantCulture),
+            Acceleration: int.Parse(args[1], CultureInfo.InvariantCulture),
+            Deceleration: int.Parse(args[2], CultureInfo.InvariantCulture),
+            MinVelocity: int.Parse(args[3], CultureInfo.InvariantCulture),
+            MaxVelocity: int.Parse(args[4], CultureInfo.InvariantCulture),
+            Step: int.Parse(args[5], CultureInfo.InvariantCulture));
+    }
+
+    static void DrawStepperTimingDiagram(string[] args) {
+        var option_ = ParseDrawTimingDiagramArguments(args);
+        if (option_ == null) {
+            Console.WriteLine(DrawStepperTimingDiagramHelp);
+            return;
+        }
+        var option = option_;
+        var clock = new SimulationClock();
+        var sim = new Simulator(clock);
+        var irqList = new CPU.ISRActions();
+        var pwm = new Pheripheral.PWM(clock, irqList, 1, option.PwmFreq);
+        var port1 = new Pheripheral.GPIO8Bit();
+        var gpioDirDriver = new GPOutput1BitDriver(port1, 0, 0);
+        var pwmTimerDriver = new PWMTimerDriver(pwm, 0, option.PwmFreq);
+        var stepperDriver = new StepperDriver(pwmTimerDriver, gpioDirDriver);
+        irqList.SetCallback(1, stepperDriver.OnCompareMatchedISR);
+        var stepperMot1 = new Device.StepperMotor(clock, pwm, port1.Pins[0], 100);
+
+        var plot = new Plot();
+        plot.Font.Set(Fonts.Monospace);
+        var motorLogger1 = new GraphLogger.StepperMotorLogger(
+            clock, stepperMot1,
+            plot.Add.DataLogger(),
+            plot.Add.DataLogger());
+
+        motorLogger1.StartLog();
+
+        gpioDirDriver.ChangeToOutput();
+
+        stepperDriver.SetAcceleration(option.Acceleration);
+        stepperDriver.SetDeceleration(option.Deceleration);
+        stepperDriver.SetMinVelocity(option.MinVelocity);
+        stepperDriver.SetMaxVelocity(option.MaxVelocity);
+        stepperDriver.SetTargetPosition(option.Step);
+        while (stepperDriver.IsRunning) {
+            sim.Step();
+        }
+
+        plot.XLabel("sec");
+        plot.SavePng("timing_diagram.png", 400, 300);
+    }
+
+    static string DrawStepperProfiledSeedTimingDiagramHelp =>
+        DrawStepperTimingDiagramHelp + " (position newVelocity)*";
+
+    record DrawStepperProfiledSeedTimingDiagramArguments(
+        DrawTimingDiagramArgument StepperSetting, IReadOnlyList<ChangeVelocityCommand> ChangeCommands);
+
+    static DrawStepperProfiledSeedTimingDiagramArguments? ParseDrawStepperProfiledSeedTimingDiagramArguments(string[] args) {
+        var stepperSetting = ParseDrawTimingDiagramArguments([.. args.Take(ParseDrawTimingDiagramArgumentLength)]);
+        if (stepperSetting == null) {
+            return null;
+        }
+        var remainingArgs = args.Skip(ParseDrawTimingDiagramArgumentLength).ToArray();
+        var commands = new List<ChangeVelocityCommand>();
+        for (int i = 0; i < remainingArgs.Length; i += 2) {
+            commands.Add(
+                new ChangeVelocityCommand(
+                    Position: int.Parse(remainingArgs[i], CultureInfo.InvariantCulture),
+                    NewVelocity: int.Parse(remainingArgs[i + 1], CultureInfo.InvariantCulture)));
+        }
+        return new DrawStepperProfiledSeedTimingDiagramArguments(stepperSetting, commands);
+    }
+
+    /// <summary>
+    /// 任意の区間で速度に変化をもたせた場合のタイミング図を描画します。
+    /// </summary>
+    static void DrawStepperProfiledSeedTimingDiagram(string[] args) {
+        var option = ParseDrawStepperProfiledSeedTimingDiagramArguments(args);
+        if (option == null) {
+            Console.WriteLine(DrawStepperProfiledSeedTimingDiagramHelp);
+            return;
+        }
+
+        var clock = new SimulationClock();
+        var sim = new Simulator(clock);
+        var irqList = new CPU.ISRActions();
+        var pwm = new Pheripheral.PWM(clock, irqList, 1, option.StepperSetting.PwmFreq);
+        var port1 = new Pheripheral.GPIO8Bit();
+        var gpioDirDriver = new GPOutput1BitDriver(port1, 0, 0);
+        var pwmTimerDriver = new PWMTimerDriver(pwm, 0, option.StepperSetting.PwmFreq);
+        var stepperDriver = new StepperDriver(pwmTimerDriver, gpioDirDriver);
+        var stepperInterpreter = new StepperInterpreter(stepperDriver);
+        irqList.SetCallback(1, stepperDriver.OnCompareMatchedISR);
+        var stepperMot1 = new Device.StepperMotor(clock, pwm, port1.Pins[0], 100);
+
+        var plot = new Plot();
+        plot.Font.Set(Fonts.Monospace);
+        var motorLogger1 = new GraphLogger.StepperMotorLogger(
+            clock, stepperMot1,
+            plot.Add.DataLogger(),
+            plot.Add.DataLogger());
+
+        motorLogger1.StartLog();
+
+        gpioDirDriver.ChangeToOutput();
+
+        stepperDriver.SetAcceleration(option.StepperSetting.Acceleration);
+        stepperDriver.SetDeceleration(option.StepperSetting.Deceleration);
+        stepperDriver.SetMinVelocity(option.StepperSetting.MinVelocity);
+        stepperInterpreter.MaxVelocity = option.StepperSetting.MaxVelocity;
+        stepperInterpreter.SetVelocityProfile(option.ChangeCommands);
+        stepperInterpreter.StartMove(option.StepperSetting.Step);
+        while (stepperDriver.IsRunning) {
+            sim.Step();
+        }
+
+        plot.XLabel("sec");
+        plot.SavePng("profiled_seed_timing_diagram.png", 400, 300);
+
     }
 }
 
