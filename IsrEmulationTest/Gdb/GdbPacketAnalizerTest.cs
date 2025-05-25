@@ -47,15 +47,23 @@ public class MockMethod<TArgument, TReturn> {
     }
 }
 
-public class DummyGdbSingleThreadStub : IGDBSingleThread, ISingleThreadResume, ISingleThreadRangeStep, ISingleThreadStep {
+public class DummyGdbSingleThreadStub :
+    IGDBSingleThread, ISingleThreadResume, ISingleThreadRangeStep, ISingleThreadStep,
+    IBreakPoint, IHardWareBreakPoint, ISoftWareBreakPoint, IWatchPoint {
 
     public ISingleThreadResume? ResumeObject { get; set; } = null;
 
-    public ISingleThreadStep? StepObject => throw new NotImplementedException();
+    public ISingleThreadStep? StepObject { get; set; } = null;
 
     public ISingleThreadRangeStep? RangeStepObject => throw new NotImplementedException();
 
     public int NumOfRegisters { get; set; } = 0;
+
+    public IHardWareBreakPoint? HwBreakPointObject => this;
+
+    public ISoftWareBreakPoint? SwBreakPointObject => this;
+
+    public IWatchPoint? WatchPointObject => this;
 
     public readonly MockMethod<(ulong start, ulong end), Unit> RangeStepMethod = new(Unit.Default);
 
@@ -65,11 +73,23 @@ public class DummyGdbSingleThreadStub : IGDBSingleThread, ISingleThreadResume, I
 
     public readonly MockMethod<(ulong? address, byte? signal), Unit> ResumeMethod = new(Unit.Default);
 
-    public readonly MockMethod<byte?, Unit> StepMethod = new(Unit.Default);
+    public readonly MockMethod<(ulong? address, byte? signal) , Unit> StepMethod = new(Unit.Default);
 
     public readonly MockMethod<(ulong startAddr, string values), bool> WriteMemoryMethod = new(true);
 
     public readonly MockMethod<(int i, string value), int> WriteRegisterMethod = new (0);
+
+    public readonly MockMethod<(ulong address, uint length), bool> AddHwBreakPointMethod = new(true);
+
+    public readonly MockMethod<(ulong address, uint length), bool> RemoveHwBreakPointMethod = new(true);
+
+    public readonly MockMethod<(ulong address, uint length), bool> AddSwBreakPointMethod = new(true);
+
+    public readonly MockMethod<(ulong address, uint length), bool> RemoveSwBreakPointMethod = new(true);
+
+    public readonly MockMethod<(ulong address, ulong length, BreakWatchKind kind), bool> AddWatchPointMethod = new(true);
+
+    public readonly MockMethod<(ulong address, ulong length, BreakWatchKind kind), bool> RemoveWatchPointMethod = new(true);
 
     public void RangeStep(ulong start, ulong end) {
         RangeStepMethod.Call((start, end));
@@ -99,8 +119,8 @@ public class DummyGdbSingleThreadStub : IGDBSingleThread, ISingleThreadResume, I
         ResumeMethod.Call((address, signal));
     }
 
-    public void Step(byte? signal = null) {
-        StepMethod.Call(signal);
+    public void Step(ulong? address, byte? signal = null) {
+        StepMethod.Call((address, signal));
     }
 
     public bool WriteMemory(ulong startAddr, ReadOnlySpan<char> values) {
@@ -110,9 +130,33 @@ public class DummyGdbSingleThreadStub : IGDBSingleThread, ISingleThreadResume, I
     public int WriteRegisters(int i, ReadOnlySpan<char> value) {
         return WriteRegisterMethod.Call((i, new string(value)));
     }
+
+    public bool AddHwBreakPoint(ulong address, uint length) {
+        return AddHwBreakPointMethod.Call((address, length));
+    }
+
+    public bool RemoveHwBreakPoint(ulong address, uint length) {
+        return RemoveHwBreakPointMethod.Call((address, length));
+    }
+
+    public bool AddSwBreakPoint(ulong address, uint length) {
+        return AddSwBreakPointMethod.Call((address, length));
+    }
+
+    public bool RemoveSwBreakPoint(ulong address, uint length) {
+        return RemoveSwBreakPointMethod.Call((address, length));
+    }
+
+    public bool AddWatchPoint(ulong address, ulong length, BreakWatchKind kind) {
+        return AddWatchPointMethod.Call((address, length, kind));
+    }
+
+    public bool RemoveWatchPoint(ulong address, ulong length, BreakWatchKind kind) {
+        return RemoveWatchPointMethod.Call((address, length, kind));
+    }
 }
 
-public class DummyGdbStub : IGdbStub, IBreakPoint, IHardWareBreakPoint, ISoftWareBreakPoint, IHardWareWatchPoint {
+public class DummyGdbStub : IGdbStub, IBreakPoint, IHardWareBreakPoint, ISoftWareBreakPoint, IWatchPoint {
 
     public IBreakPoint? BreakpointObject { get; set; } = null;
 
@@ -124,13 +168,13 @@ public class DummyGdbStub : IGdbStub, IBreakPoint, IHardWareBreakPoint, ISoftWar
 
     public ISoftWareBreakPoint? SwBreakPointObject { get; set; } = null;
 
-    public IHardWareWatchPoint? HwWatchPointObject { get; set; } = null;
+    public IWatchPoint? WatchPointObject { get; set; } = null;
     
     public event Action? OnBreak;
 
     public readonly MockMethod<(ulong address, uint kind), bool> AddHwBreakPointMethod = new(true);
 
-    public readonly MockMethod<(ulong address, ulong length, BreakWatchKind kind), bool> AddHwWatchPointMethod = new(true);
+    public readonly MockMethod<(ulong address, ulong lengthh, BreakWatchKind kind), bool> AddWatchPointMethod = new(true);
 
     public readonly MockMethod<(ulong address, uint kind), bool> AddSwBreakPointMethod = new(true);
 
@@ -138,7 +182,7 @@ public class DummyGdbStub : IGdbStub, IBreakPoint, IHardWareBreakPoint, ISoftWar
 
     public readonly MockMethod<(ulong address, uint kind), bool> RemoveHwBreakPointMethod = new(true);
 
-    public readonly MockMethod<(ulong addressm, ulong length, BreakWatchKind kind), bool> RemoveHwWatchPointMethod = new(true);
+    public readonly MockMethod<(ulong address, ulong length, BreakWatchKind kind), bool> RemoveHwWatchPointMethod = new(true);
 
     public readonly MockMethod<(ulong address, uint kind), bool> RemoveSwBreakPointMethod = new(true);
 
@@ -150,8 +194,8 @@ public class DummyGdbStub : IGdbStub, IBreakPoint, IHardWareBreakPoint, ISoftWar
         return AddHwBreakPointMethod.Call((address, kind));
     }
 
-    public bool AddHwWatchPoint(ulong address, ulong length, BreakWatchKind kind) {
-        return AddHwWatchPointMethod.Call((address, length, kind));
+    public bool AddWatchPoint(ulong address, ulong length, BreakWatchKind kind) {
+        return AddWatchPointMethod.Call((address, length, kind));
     }
 
     public bool AddSwBreakPoint(ulong address, uint kind) {
@@ -166,7 +210,7 @@ public class DummyGdbStub : IGdbStub, IBreakPoint, IHardWareBreakPoint, ISoftWar
         return RemoveHwBreakPointMethod.Call((address, kind));
     }
 
-    public bool RemoveHwWatchPoint(ulong address, ulong length, BreakWatchKind kind) {
+    public bool RemoveWatchPoint(ulong address, ulong length, BreakWatchKind kind) {
         return RemoveHwWatchPointMethod.Call((address, length, kind));
     }
 
@@ -296,17 +340,18 @@ public class GdbPacketAnalizerTest {
         var expectedResponse = "+$S05#b8";
         var stub = new DummyGdbStub();
         var singleThreadStub = new DummyGdbSingleThreadStub();
-        singleThreadStub.ResumeObject = singleThreadStub;
         stub.ThreadObject = singleThreadStub;
+        singleThreadStub.ResumeObject = singleThreadStub;
+        singleThreadStub.StepObject = singleThreadStub;
         var task = OneCommandTest(stub, src, expectedResponse, token);
         while (true) {
             token.ThrowIfCancellationRequested();
-            if (singleThreadStub.ResumeMethod.ArgumentHistory.Any()) {
+            if (singleThreadStub.StepMethod.ArgumentHistory.Any()) {
                 break;
             }
             await Task.Yield();
         }
-        singleThreadStub.ResumeMethod.ArgumentHistory.Is([(null, null)]);
+        singleThreadStub.StepMethod.ArgumentHistory.Is([(null, null)]);
         stub.RunOnBreak();
         await task;
     }
@@ -318,28 +363,151 @@ public class GdbPacketAnalizerTest {
         var stub = new DummyGdbStub();
         var singleThreadStub = new DummyGdbSingleThreadStub();
         singleThreadStub.ResumeObject = singleThreadStub;
+        singleThreadStub.StepObject = singleThreadStub;
         stub.ThreadObject = singleThreadStub;
         var task = OneCommandTest(stub, src, expectedResponse, token);
         while (true) {
             token.ThrowIfCancellationRequested();
-            if (singleThreadStub.ResumeMethod.ArgumentHistory.Count != 0) {
+            if (singleThreadStub.StepMethod.ArgumentHistory.Count != 0) {
                 break;
             }
             await Task.Yield();
         }
-        singleThreadStub.ResumeMethod.ArgumentHistory.Is([(0xABCD1234, null)]);
+        singleThreadStub.StepMethod.ArgumentHistory.Is([(0xABCD1234, null)]);
         stub.RunOnBreak();
         await task;
     }
 
+    [Test]
     public async Task Command_c_Test(CancellationToken token) {
         var src = "c";
-        var expectedResponse = "+$S05#b8";
+        var expectedResponse = "";
         var stub = new DummyGdbStub();
         var singleThreadStub = new DummyGdbSingleThreadStub();
         stub.ThreadObject = singleThreadStub;
+        singleThreadStub.ResumeObject = singleThreadStub;
         await OneCommandTest(stub, src, expectedResponse, token);
-        singleThreadStub.WriteMemoryMethod.ArgumentHistory.Count.Is(0);
+        singleThreadStub.ResumeMethod.ArgumentHistory.Is([(null, null)]);
+    }
+
+    [Test]
+    public async Task Command_Z0_Test(CancellationToken token) {
+        var src = "Z0,12ABCDFF,1";
+        var expectedResponse = "+$OK#9a";
+        var stub = new DummyGdbStub();
+        var singleThreadStub = new DummyGdbSingleThreadStub();
+        stub.BreakpointObject = singleThreadStub;
+        stub.SwBreakPointObject = singleThreadStub;
+        await OneCommandTest(stub, src, expectedResponse, token);
+        singleThreadStub.AddSwBreakPointMethod.ArgumentHistory.Is([(0x12ABCDFFu, 1)]);
+    }
+
+    [Test]
+    public async Task Command_z0_Test(CancellationToken token) {
+        var src = "z0,FFA98765,4";
+        var expectedResponse = "+$OK#9a";
+        var stub = new DummyGdbStub();
+        var singleThreadStub = new DummyGdbSingleThreadStub();
+        stub.BreakpointObject = singleThreadStub;
+        stub.SwBreakPointObject = singleThreadStub;
+        await OneCommandTest(stub, src, expectedResponse, token);
+        singleThreadStub.RemoveSwBreakPointMethod.ArgumentHistory.Is([(0xFFA98765u, 4)]);
+    }
+
+    [Test]
+    public async Task Command_Z1_Test(CancellationToken token) {
+        var src = "Z1,3456789A,2";
+        var expectedResponse = "+$OK#9a";
+        var stub = new DummyGdbStub();
+        var singleThreadStub = new DummyGdbSingleThreadStub();
+        stub.BreakpointObject = singleThreadStub;
+        stub.SwBreakPointObject = singleThreadStub;
+        await OneCommandTest(stub, src, expectedResponse, token);
+        singleThreadStub.AddHwBreakPointMethod.ArgumentHistory.Is([(0x3456789Au, 2)]);
+    }
+
+    [Test]
+    public async Task Command_z1_Test(CancellationToken token) {
+        var src = "z1,456789AB,1";
+        var expectedResponse = "+$OK#9a";
+        var stub = new DummyGdbStub();
+        var singleThreadStub = new DummyGdbSingleThreadStub();
+        stub.BreakpointObject = singleThreadStub;
+        stub.SwBreakPointObject = singleThreadStub;
+        await OneCommandTest(stub, src, expectedResponse, token);
+        singleThreadStub.RemoveHwBreakPointMethod.ArgumentHistory.Is([(0x456789ABu, 1)]);
+    }
+
+    [Test]
+    public async Task Command_Z2_Test(CancellationToken token) {
+        var src = "Z2,56789ABC,8";
+        var expectedResponse = "+$OK#9a";
+        var stub = new DummyGdbStub();
+        var singleThreadStub = new DummyGdbSingleThreadStub();
+        stub.BreakpointObject = singleThreadStub;
+        stub.SwBreakPointObject = singleThreadStub;
+        await OneCommandTest(stub, src, expectedResponse, token);
+        singleThreadStub.AddWatchPointMethod.ArgumentHistory.Is([(0x56789ABCu, 8, BreakWatchKind.Write)]);
+    }
+
+    [Test]
+    public async Task Command_z2_Test(CancellationToken token) {
+        var src = "z2,789ABCDE,4";
+        var expectedResponse = "+$OK#9a";
+        var stub = new DummyGdbStub();
+        var singleThreadStub = new DummyGdbSingleThreadStub();
+        stub.BreakpointObject = singleThreadStub;
+        stub.SwBreakPointObject = singleThreadStub;
+        await OneCommandTest(stub, src, expectedResponse, token);
+        singleThreadStub.RemoveWatchPointMethod.ArgumentHistory.Is([(0x789ABCDEu, 4, BreakWatchKind.Write)]);
+    }
+
+    [Test]
+    public async Task Command_Z3_Test(CancellationToken token) {
+        var src = "Z3,9ABCDEF0,10";
+        var expectedResponse = "+$OK#9a";
+        var stub = new DummyGdbStub();
+        var singleThreadStub = new DummyGdbSingleThreadStub();
+        stub.BreakpointObject = singleThreadStub;
+        stub.SwBreakPointObject = singleThreadStub;
+        await OneCommandTest(stub, src, expectedResponse, token);
+        singleThreadStub.AddWatchPointMethod.ArgumentHistory.Is([(0x9ABCDEF0u, 16, BreakWatchKind.Read)]);
+    }
+
+    [Test]
+    public async Task Command_z3_Test(CancellationToken token) {
+        var src = "z3,BCDEF012,20";
+        var expectedResponse = "+$OK#9a";
+        var stub = new DummyGdbStub();
+        var singleThreadStub = new DummyGdbSingleThreadStub();
+        stub.BreakpointObject = singleThreadStub;
+        stub.SwBreakPointObject = singleThreadStub;
+        await OneCommandTest(stub, src, expectedResponse, token);
+        singleThreadStub.RemoveWatchPointMethod.ArgumentHistory.Is([(0xBCDEF012u, 32, BreakWatchKind.Read)]);
+    }
+
+    [Test]
+    public async Task Command_Z4_Test(CancellationToken token) {
+        var src = "Z4,DEF0,1";
+        var expectedResponse = "+$OK#9a";
+        var stub = new DummyGdbStub();
+        var singleThreadStub = new DummyGdbSingleThreadStub();
+        stub.BreakpointObject = singleThreadStub;
+        stub.SwBreakPointObject = singleThreadStub;
+        await OneCommandTest(stub, src, expectedResponse, token);
+        singleThreadStub.AddWatchPointMethod.ArgumentHistory.Is([(0xDEF0u, 1, BreakWatchKind.ReadWrite)]);
+    }
+
+    [Test]
+    public async Task Command_z4_Test(CancellationToken token) {
+        var src = "z4,DEF0,2";
+        var expectedResponse = "+$OK#9a";
+        var stub = new DummyGdbStub();
+        var singleThreadStub = new DummyGdbSingleThreadStub();
+        stub.BreakpointObject = singleThreadStub;
+        stub.SwBreakPointObject = singleThreadStub;
+        await OneCommandTest(stub, src, expectedResponse, token);
+        singleThreadStub.RemoveWatchPointMethod.ArgumentHistory.Is([(0xDEF0u, 2, BreakWatchKind.ReadWrite)]);
     }
 
     static async ValueTask WriteAll(ChannelCommunication target, ReadOnlyMemory<byte> src, CancellationToken token) {
@@ -360,12 +528,16 @@ public class GdbPacketAnalizerTest {
         var encode = Encoding.UTF8;
         var received = new StringBuilder();
         bool isCalled = false;
+        if (expected.Length == 0) {
+            // 何も到達していないことを確認するために少し待機した後に読み出す
+            await Task.Delay(10, token);
+            target.TryGetWriteBuffer(out _).Is(false);
+        }
         for (; received.Length < expected.Length;) {
             isCalled = true;
             var buf = await target.WaitWriteBuffer(token);
             received.Append(encode.GetChars(buf.ToArray()));
             target.CompleteWriteNotify();
-            Console.Error.WriteLine(received.ToString());
             received.ToString().Is(new string(expected.AsSpan(0, received.Length)));
         }
         // TODO バッファーを開放する前に終了しないようにするため応急処置

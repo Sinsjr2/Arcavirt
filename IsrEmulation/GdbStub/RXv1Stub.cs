@@ -89,7 +89,7 @@ public class RXv1Stub : IGdbStub, IGDBSingleThread, IBreakPoint, IHardWareBreakP
 
     public ISoftWareBreakPoint? SwBreakPointObject => this;
 
-    public IHardWareWatchPoint? HwWatchPointObject => null;
+    public IWatchPoint? WatchPointObject => null;
 
     public event Action? OnBreak;
 

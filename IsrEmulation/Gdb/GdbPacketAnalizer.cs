@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Text;
+using Gdb.BreakPoint;
 using Gdb.Thread.SingleThread;
 using Microsoft.Extensions.Logging;
 
@@ -202,9 +203,28 @@ public class GdbPacketAnalizer {
         return false;
     }
 
-    bool TryResume(ReadOnlyMemory<char> cmd) {
+    bool TryStep(ReadOnlyMemory<char> cmd) {
         var gdbReader = new GdbMessageReader(cmd);
         if (!gdbReader.TryReadIfExpChar('s')) {
+            return false;
+        }
+        ulong? address = gdbReader.TryReadHexUIntegerBE(out var x) ? x : null;
+        switch (targetStub.ThreadObject) {
+            case IGDBSingleThread singleThread: {
+                var stepObject = singleThread.ResumeObject?.StepObject;
+                if (stepObject is not null) {
+                    stepObject.Step(address, null);
+                    return true;
+                }
+                break;
+            }
+        }
+        return false;
+    }
+
+    bool TryResume(ReadOnlyMemory<char> cmd) {
+        var gdbReader = new GdbMessageReader(cmd);
+        if (!gdbReader.TryReadIfExpChar('c')) {
             return false;
         }
         ulong? address = gdbReader.TryReadHexUIntegerBE(out var x) ? x : null;
@@ -215,14 +235,132 @@ public class GdbPacketAnalizer {
                     resumeObject.Resume(address, null);
                     return true;
                 }
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool TryAddBreakPoint(StringBuilder response, ReadOnlyMemory<char> cmd) {
+        var gdbReader = new GdbMessageReader(cmd);
+        if (!gdbReader.TryReadIfExpChar('Z')) {
+            return false;
+        }
+        if (!gdbReader.TryReadHexUIntegerBE(out var type) ||
+            !gdbReader.TryReadIfExpChar(',') ||
+            !gdbReader.TryReadHexUIntegerBE(out var address) ||
+            !gdbReader.TryReadIfExpChar(',') ||
+            !gdbReader.TryReadHexUIntegerBE(out var kind)) {
+            return false;
+        }
+        bool isSuccess = false;
+        switch (type) {
+            case 0: {
+                var swBreakPoint = targetStub.BreakpointObject?.SwBreakPointObject;
+                if (swBreakPoint != null) {
+                    swBreakPoint.AddSwBreakPoint(address, (uint)kind);
+                    isSuccess = true;
+                }
+                break;
+            }
+            case 1: {
+                var hwBreakPoint = targetStub.BreakpointObject?.HwBreakPointObject;
+                if (hwBreakPoint != null) {
+                    hwBreakPoint.AddHwBreakPoint(address, (uint)kind);
+                    isSuccess = true;
+                }
+                break;
+            }
+            case 2: {
+                var watchPoint = targetStub.BreakpointObject?.WatchPointObject;
+                if (watchPoint != null) {
+                    watchPoint.AddWatchPoint(address, kind, BreakWatchKind.Write);
+                    isSuccess = true;
+                }
+                break;
+            }
+            case 3: {
+                var watchPoint = targetStub.BreakpointObject?.WatchPointObject;
+                if (watchPoint != null) {
+                    watchPoint.AddWatchPoint(address, kind, BreakWatchKind.Read);
+                    isSuccess = true;
+                }
+                break;
+            }
+            case 4: {
+                var watchPoint = targetStub.BreakpointObject?.WatchPointObject;
+                if (watchPoint != null) {
+                    watchPoint.AddWatchPoint(address, kind, BreakWatchKind.ReadWrite);
+                    isSuccess = true;
+                }
                 break;
             }
         }
-        return false;
+        if (isSuccess) {
+            GDBUtils.GDBMessage(response, "OK");
+        }
+        return isSuccess;
     }
 
-    bool TryAddBreakPoint(StringBuilder response, ReadOnlySpan<char> cmd) {
-        return false;
+    bool TryRemoveBreakPoint(StringBuilder response, ReadOnlyMemory<char> cmd) {
+        var gdbReader = new GdbMessageReader(cmd);
+        if (!gdbReader.TryReadIfExpChar('z')) {
+            return false;
+        }
+        if (!gdbReader.TryReadHexUIntegerBE(out var type) ||
+            !gdbReader.TryReadIfExpChar(',') ||
+            !gdbReader.TryReadHexUIntegerBE(out var address) ||
+            !gdbReader.TryReadIfExpChar(',') ||
+            !gdbReader.TryReadHexUIntegerBE(out var kind)) {
+            return false;
+        }
+        bool isSuccess = false;
+        switch (type) {
+            case 0: {
+                var swBreakPoint = targetStub.BreakpointObject?.SwBreakPointObject;
+                if (swBreakPoint != null) {
+                    swBreakPoint.RemoveSwBreakPoint(address, (uint)kind);
+                    isSuccess = true;
+                }
+                break;
+            }
+            case 1: {
+                var hwBreakPoint = targetStub.BreakpointObject?.HwBreakPointObject;
+                if (hwBreakPoint != null) {
+                    hwBreakPoint.RemoveHwBreakPoint(address, (uint)kind);
+                    isSuccess = true;
+                }
+                break;
+            }
+            case 2: {
+                var watchPoint = targetStub.BreakpointObject?.WatchPointObject;
+                if (watchPoint != null) {
+                    watchPoint.RemoveWatchPoint(address, kind, BreakWatchKind.Write);
+                    isSuccess = true;
+                }
+                break;
+            }
+            case 3: {
+                var watchPoint = targetStub.BreakpointObject?.WatchPointObject;
+                if (watchPoint != null) {
+                    watchPoint.RemoveWatchPoint(address, kind, BreakWatchKind.Read);
+                    isSuccess = true;
+                }
+                break;
+            }
+            case 4: {
+                var watchPoint = targetStub.BreakpointObject?.WatchPointObject;
+                if (watchPoint != null) {
+                    watchPoint.RemoveWatchPoint(address, kind, BreakWatchKind.ReadWrite);
+                    isSuccess = true;
+                }
+                break;
+            }
+        }
+        if (isSuccess) {
+            GDBUtils.GDBMessage(response, "OK");
+        }
+        return isSuccess;
     }
 
     void ProcessGDBMessage(StringBuilder response, ReadOnlyMemory<char> cmd, StringBuilder workingBuf) {
@@ -300,11 +438,10 @@ public class GdbPacketAnalizer {
                 }
                 break;
             case 'c':
-                // if (!this.Target.Executing) {
-                //     this.Target.Execute();
-                // }
-                GDBUtils.GDBMessage(response, "OK");
-                return;
+                if (TryResume(cmd)) {
+                    return;
+                }
+                break;
             case 'g':
                 if (TryReadAllRegisters(response, cmd.Span, workingBuf)) {
                     return;
@@ -334,12 +471,17 @@ public class GdbPacketAnalizer {
                     return;
                 }
             case 'Z':
-                //targetStub.BreakpointObject?.
+                if (TryAddBreakPoint(response, cmd)) {
+                    return;
+                }
                 break;
             case 'z':
+                if (TryRemoveBreakPoint(response, cmd)) {
+                    return;
+                }
                 break;
             case 's':
-                if (TryResume(cmd)) {
+                if (TryStep(cmd)) {
                     return;
                 }
                 break;

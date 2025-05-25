@@ -34,6 +34,10 @@ public class ChannelCommunication : IStreamCommunication {
         await writeCompleteNotify.Reader.ReadAsync(token);
     }
 
+    public bool TryGetWriteBuffer(out ReadOnlyMemory<byte> result) {
+        return writeChannel.Reader.TryRead(out result);
+    }
+
     public async ValueTask<ReadOnlyMemory<byte>> WaitWriteBuffer(CancellationToken token) {
         return await writeChannel.Reader.ReadAsync(token);
     }

@@ -1,5 +1,5 @@
 namespace Gdb.Thread.SingleThread;
 
 public interface ISingleThreadStep {
-    void RangeStep(ulong start, ulong end);
+    void Step(ulong? address, byte? signal = null);
 }
