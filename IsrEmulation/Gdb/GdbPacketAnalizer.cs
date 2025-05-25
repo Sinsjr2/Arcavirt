@@ -214,12 +214,7 @@ public class GdbPacketAnalizer {
         return false;
     }
 
-    bool TryResume(ReadOnlyMemory<char> cmd) {
-        var gdbReader = new GdbMessageReader(cmd);
-        if (!gdbReader.TryReadIfExpChar('c')) {
-            return false;
-        }
-        ulong? address = gdbReader.TryReadHexUIntegerBE(out var x) ? x : null;
+    bool TryResume(ulong? address, byte? signal) {
         switch (targetStub.ThreadObject) {
             case IGDBSingleThread singleThread: {
                 var resumeObject = singleThread.ResumeObject;
@@ -231,6 +226,15 @@ public class GdbPacketAnalizer {
             }
         }
         return true;
+    }
+
+    bool TryExecuteCommand_C(ReadOnlyMemory<char> cmd) {
+        var gdbReader = new GdbMessageReader(cmd);
+        if (!gdbReader.TryReadIfExpChar('c')) {
+            return false;
+        }
+        ulong? address = gdbReader.TryReadHexUIntegerBE(out var x) ? x : null;
+        return TryResume(address, null);
     }
 
     bool TryAddBreakPoint(StringBuilder response, ReadOnlyMemory<char> cmd) {
@@ -412,9 +416,7 @@ public class GdbPacketAnalizer {
                     return;
                 }
                 if (cmd.Span.StartsWith("vCont;c")) {
-                    // if (!this.Target.Executing) {
-                    //     this.Target.Execute();
-                    // }
+                    TryResume(null, null);
                     return;
                 }
                 if (cmd.Span.StartsWith("vCont;t")) {
@@ -427,7 +429,7 @@ public class GdbPacketAnalizer {
                 }
                 break;
             case 'c':
-                if (TryResume(cmd)) {
+                if (TryExecuteCommand_C(cmd)) {
                     return;
                 }
                 break;
