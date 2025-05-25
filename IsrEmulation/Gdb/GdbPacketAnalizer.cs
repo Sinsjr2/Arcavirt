@@ -114,14 +114,6 @@ public class GdbPacketAnalizer {
         return initialBuf.Length - buf.Length;
     }
 
-    void OnBreakpoint() {
-        try {
-            //onResponse(GDBUtils.GDBMessage(Constants.STOP_REPLY_TRAP));
-        } catch (Exception) {
-            RemoveConnection(/*this*/);
-        }
-    }
-
     static readonly string STOP_REPLY_SIGINT = "S02";
     static readonly string STOP_REPLY_TRAP = "S05";
 
@@ -364,9 +356,6 @@ public class GdbPacketAnalizer {
     }
 
     void ProcessGDBMessage(StringBuilder response, ReadOnlyMemory<char> cmd, StringBuilder workingBuf) {
-        //var rp2040 = this.Target.RP2040;
-        //var core = rp2040.Core;
-
         if (cmd.Span.SequenceEqual("Hg0")) {
             GDBUtils.GDBMessage(response, "OK");
             return;
@@ -489,18 +478,6 @@ public class GdbPacketAnalizer {
 
         GDBUtils.GDBMessage(response, "");
         return;
-    }
-
-    void AddConnection(/*GDBConnection connection*/) {
-        //var rp2040 = this.Target.RP2040;
-        //this.connections.Add(connection);
-        // rp2040.OnBreak = () => {
-        //     this.Target.Stop();
-        //     rp2040.Core.PC -= rp2040.Core.BreakRewind;
-        //     foreach (var conn in this.connections) {
-        //         conn.OnBreakpoint();
-        //     }
-        // };
     }
 
     void RemoveConnection(/*GDBConnection connection*/) {
