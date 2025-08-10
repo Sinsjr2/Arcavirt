@@ -1,6 +1,5 @@
-using System.Runtime.InteropServices;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using CPU;
 using Gdb;
 using Gdb.BreakPoint;
 using Gdb.Thread;
@@ -9,9 +8,12 @@ using RX;
 
 namespace GdbStub;
 
-public class RXv1Stub : IGdbStub, IGDBSingleThread, IBreakPoint, IHardWareBreakPoint, ISoftWareBreakPoint {
+public class RXv1Stub : IGdbStub,
+    IGDBSingleThread, IBreakPoint, IHardWareBreakPoint, ISoftWareBreakPoint, ISingleThreadResume, IGdbCustomCommand, ISingleThreadStep {
 
-    readonly RXv1Core rxCore;
+    readonly InstructionLoop<RXv1Core> instructionLoop;
+
+    RXv1Core rxCore => instructionLoop.Target;
 
     public IBreakPoint? BreakpointObject => this;
 
@@ -81,7 +83,7 @@ public class RXv1Stub : IGdbStub, IGDBSingleThread, IBreakPoint, IHardWareBreakP
 </feature>
 """;
 
-    public ISingleThreadResume? ResumeObject => null;
+    public ISingleThreadResume? ResumeObject => this;
 
     public int NumOfRegisters => 26;
 
@@ -91,47 +93,54 @@ public class RXv1Stub : IGdbStub, IGDBSingleThread, IBreakPoint, IHardWareBreakP
 
     public IWatchPoint? WatchPointObject => null;
 
+    public ISingleThreadStep? StepObject => this;
+
+    public ISingleThreadRangeStep? RangeStepObject => null;
+
+    public IGdbCustomCommand? GdbCustomCommandObject => this;
+
     public event Action? OnBreak;
 
-    public RXv1Stub(RXv1Core rxCore) {
-        this.rxCore = rxCore;
+    public RXv1Stub(InstructionLoop<RXv1Core> instructionLoop) {
+        this.instructionLoop = instructionLoop;
+        instructionLoop.Target.OnBreak += () => OnBreak?.Invoke();
     }
 
     public int WriteRegisters(int i, ReadOnlySpan<char> value) {
         switch (i) {
             case < 0:
                 return 0;
-            case <= 15 when GDBUtils.TryDecodeHexUInt32BE(value, out var x, out var len):
+            case <= 15 when GDBUtils.TryDecodeHexUInt32LE(value, out var x, out var len):
                 rxCore.Registers[i] = x;
                 return len;
-            case 16 when GDBUtils.TryDecodeHexUInt32BE(value, out var x, out var len):
+            case 16 when GDBUtils.TryDecodeHexUInt32LE(value, out var x, out var len):
                 rxCore.USP = x;
                 return len;
-            case 17 when GDBUtils.TryDecodeHexUInt32BE(value, out var x, out var len):
+            case 17 when GDBUtils.TryDecodeHexUInt32LE(value, out var x, out var len):
                 rxCore.ISP = x;
                 return len;
-            case 18 when GDBUtils.TryDecodeHexUInt32BE(value, out var x, out var len):
+            case 18 when GDBUtils.TryDecodeHexUInt32LE(value, out var x, out var len):
                 rxCore.PSW = x;
                 return len;
-            case 19 when GDBUtils.TryDecodeHexUInt32BE(value, out var x, out var len):
+            case 19 when GDBUtils.TryDecodeHexUInt32LE(value, out var x, out var len):
                 rxCore.PC = x;
                 return len;
-            case 20 when GDBUtils.TryDecodeHexUInt32BE(value, out var x, out var len):
+            case 20 when GDBUtils.TryDecodeHexUInt32LE(value, out var x, out var len):
                 rxCore.INTB = x;
                 return len;
-            case 21 when GDBUtils.TryDecodeHexUInt32BE(value, out var x, out var len):
+            case 21 when GDBUtils.TryDecodeHexUInt32LE(value, out var x, out var len):
                 rxCore.BPSW = x;
                 return len;
-            case 22 when GDBUtils.TryDecodeHexUInt32BE(value, out var x, out var len):
+            case 22 when GDBUtils.TryDecodeHexUInt32LE(value, out var x, out var len):
                 rxCore.BPC = x;
                 return len;
-            case 23 when GDBUtils.TryDecodeHexUInt32BE(value, out var x, out var len):
+            case 23 when GDBUtils.TryDecodeHexUInt32LE(value, out var x, out var len):
                 rxCore.FINTV = x;
                 return len;
-            case 24 when GDBUtils.TryDecodeHexUInt32BE(value, out var x, out var len):
+            case 24 when GDBUtils.TryDecodeHexUInt32LE(value, out var x, out var len):
                 rxCore.FPSW = x;
                 return len;
-            case 25 when GDBUtils.TryDecodeHexUInt64BE(value, out var x, out var len):
+            case 25 when GDBUtils.TryDecodeHexUInt64LE(value, out var x, out var len):
                 rxCore.Acc = x;
                 return len;
             default:
@@ -142,17 +151,17 @@ public class RXv1Stub : IGdbStub, IGDBSingleThread, IBreakPoint, IHardWareBreakP
     int IGDBSingleThread.ReadRegister(int i, StringBuilder result) {
         switch (i) {
             case < 0: return 0;
-            case <= 15: return GDBUtils.EncodeHexUInt32BE(result, rxCore.Registers[i]);
-            case 16: return GDBUtils.EncodeHexUInt32BE(result, rxCore.USP);
-            case 17: return GDBUtils.EncodeHexUInt32BE(result, rxCore.ISP);
-            case 18: return GDBUtils.EncodeHexUInt32BE(result, rxCore.PSW);
-            case 19: return GDBUtils.EncodeHexUInt32BE(result, rxCore.PC);
-            case 20: return GDBUtils.EncodeHexUInt32BE(result, rxCore.INTB);
-            case 21: return GDBUtils.EncodeHexUInt32BE(result, rxCore.BPSW);
-            case 22: return GDBUtils.EncodeHexUInt32BE(result, rxCore.BPC);
-            case 23: return GDBUtils.EncodeHexUInt32BE(result, rxCore.FINTV);
-            case 24: return GDBUtils.EncodeHexUInt32BE(result, rxCore.FPSW);
-            case 25: return GDBUtils.EncodeHexUInt64BE(result, rxCore.Acc);
+            case <= 15: return GDBUtils.EncodeHexUInt32LE(result, rxCore.Registers[i]);
+            case 16: return GDBUtils.EncodeHexUInt32LE(result, rxCore.USP);
+            case 17: return GDBUtils.EncodeHexUInt32LE(result, rxCore.ISP);
+            case 18: return GDBUtils.EncodeHexUInt32LE(result, rxCore.PSW);
+            case 19: return GDBUtils.EncodeHexUInt32LE(result, rxCore.PC);
+            case 20: return GDBUtils.EncodeHexUInt32LE(result, rxCore.INTB);
+            case 21: return GDBUtils.EncodeHexUInt32LE(result, rxCore.BPSW);
+            case 22: return GDBUtils.EncodeHexUInt32LE(result, rxCore.BPC);
+            case 23: return GDBUtils.EncodeHexUInt32LE(result, rxCore.FINTV);
+            case 24: return GDBUtils.EncodeHexUInt32LE(result, rxCore.FPSW);
+            case 25: return GDBUtils.EncodeHexUInt64LE(result, rxCore.Acc);
             default: return 0;
         }
     }
@@ -183,6 +192,7 @@ public class RXv1Stub : IGdbStub, IGDBSingleThread, IBreakPoint, IHardWareBreakP
     }
 
     public void HandleCtrlC() {
+        instructionLoop.Stop();
         rxCore.Stop();
     }
 
@@ -202,19 +212,49 @@ public class RXv1Stub : IGdbStub, IGDBSingleThread, IBreakPoint, IHardWareBreakP
         return true;
     }
 
-    public bool AddHwBreakPoint(ulong address, uint kind) {
+    public bool AddHwBreakPoint(ulong address, uint length) {
         return AddBreakPoint(address);
     }
 
-    public bool RemoveHwBreakPoint(ulong address, uint kind) {
+    public bool RemoveHwBreakPoint(ulong address, uint length) {
         return RemoveBreakPoint(address);
     }
 
-    public bool AddSwBreakPoint(ulong address, uint kind) {
+    public bool AddSwBreakPoint(ulong address, uint length) {
         return AddBreakPoint(address);
     }
 
-    public bool RemoveSwBreakPoint(ulong address, uint kind) {
-         return RemoveBreakPoint(address);
-   }
+    public bool RemoveSwBreakPoint(ulong address, uint length) {
+        return RemoveBreakPoint(address);
+    }
+
+    public void Resume(ulong? address, byte? signal) {
+        if (address.HasValue) {
+            rxCore.PC = unchecked((uint)address);
+        }
+        instructionLoop.Target.Start();
+        instructionLoop.Start();
+        instructionLoop.Target.NextStep(true);
+    }
+
+    public void Step(ulong? address, byte? signal = null) {
+        if (address.HasValue) {
+            rxCore.PC = (uint)address.Value & 0xFFFF_FFFF;
+        }
+        instructionLoop.Target.NextStep(true);
+        OnBreak?.Invoke();
+    }
+
+
+    public void RunCustomCommand(StringBuilder result, string command) {
+        switch (command) {
+            case "reset":
+                rxCore.Reset();
+                break;
+            case "user_reset":
+                rxCore.Reset();
+                break;
+        }
+        result.Append("OK");
+    }
 }

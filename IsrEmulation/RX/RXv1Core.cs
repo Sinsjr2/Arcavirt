@@ -12,8 +12,7 @@ namespace RX {
             set {
                 if (PSW_u) {
                     ISP = value;
-                }
-                else {
+                } else {
                     Registers[0] = value;
                 }
             }
@@ -26,8 +25,7 @@ namespace RX {
             set {
                 if (PSW_u) {
                     Registers[0] = value;
-                }
-                else {
+                } else {
                     USP = value;
                 }
             }
@@ -59,8 +57,7 @@ namespace RX {
                 if (value) {
                     ISP = Registers[0];
                     Registers[0] = USP;
-                }
-                else {
+                } else {
                     USP = Registers[0];
                     Registers[0] = ISP;
                 }
@@ -301,7 +298,7 @@ namespace RX {
             Registers[rd] = value;
         }
 
-        void StoreDestOperand(uint sz, uint dsp,  uint rd, uint value) {
+        void StoreDestOperand(uint sz, uint dsp, uint rd, uint value) {
             var addr = CalcDspAddr(dsp, (int)rd);
             var size = sz switch {
                 (uint)MemEx.B => 1,
@@ -469,8 +466,7 @@ namespace RX {
                 PSW_i = false;
                 PSW_pm = false;
                 PC = FINTV;
-            }
-            else {
+            } else {
                 SP -= (uint)4;
                 Bus.Write(SP, 4, PC);
                 SP -= (uint)4;
@@ -540,13 +536,12 @@ namespace RX {
             PSW_z = result == 0;
         }
 
-         void NotFlags(uint result) {
+        void NotFlags(uint result) {
             PSW_s = IsNegativeValue(result);
             PSW_z = result == 0;
         }
 
-        void XorFlags(uint result)
-        {
+        void XorFlags(uint result) {
             PSW_s = IsNegativeValue(result);
             PSW_z = result == 0;
         }
@@ -589,8 +584,7 @@ namespace RX {
         void OpBCnd(uint condition, uint src, uint opSize) {
             if (CheckCondition(condition)) {
                 PC += src;
-            }
-            else {
+            } else {
                 PC += opSize;
             }
         }
@@ -919,7 +913,7 @@ namespace RX {
 
         void OpPOPM(uint dest, uint dest2) {
             // TODO dest に 0が入った場合を考慮する
-            for (int i = (int)dest;i <= dest2; i++) {
+            for (int i = (int)dest; i <= dest2; i++) {
                 uint tmp = Bus.Read(SP, 4);
                 SP += 4;
                 Registers[i] = tmp;
@@ -952,11 +946,9 @@ namespace RX {
             tmp += 0x0000000080000000;
             if (tmp > (long)0x00007FFF00000000) {
                 Acc = 0x00007FFF00000000;
-            }
-            else if (tmp < unchecked((long)0xFFFF800000000000)) {
+            } else if (tmp < unchecked((long)0xFFFF800000000000)) {
                 Acc = 0xFFFF800000000000;
-            }
-            else {
+            } else {
                 Acc = (ulong)tmp & 0xFFFFFFFF00000000;
             }
         }
@@ -997,8 +989,7 @@ namespace RX {
                 if (resultL > prev) {
                     resultH--;
                 }
-            }
-            else {
+            } else {
                 if (resultL < prev) {
                     resultH++;
                 }
@@ -1020,8 +1011,7 @@ namespace RX {
             var result = dest << 1;
             if (!PSW_c) {
                 result &= 0xFFFFFFFE;
-            }
-            else {
+            } else {
                 result |= 0x00000001;
             }
             PSW_c = (dest >> 31) != 0;
@@ -1034,8 +1024,7 @@ namespace RX {
             var result = dest >> 1;
             if (!PSW_c) {
                 result &= 0x7FFFFFFF;
-            }
-            else {
+            } else {
                 result |= 0x80000000;
             }
             PSW_c = (dest & 1) != 0;
@@ -1110,8 +1099,7 @@ namespace RX {
             SP += 4;
         }
 
-        void OpRTSD(uint src)
-        {
+        void OpRTSD(uint src) {
             SP += src;
             PC = Bus.Read(SP, 4);
             SP += 4;
@@ -1131,8 +1119,7 @@ namespace RX {
         uint OpSAT(uint dest) {
             if (PSW_o && PSW_s) {
                 return 0x7FFFFFFF;
-            }
-            else if (PSW_o && !PSW_s) {
+            } else if (PSW_o && !PSW_s) {
                 return 0x80000000;
             }
             return dest;
@@ -1143,8 +1130,7 @@ namespace RX {
                 Registers[6] = 0x00000000;
                 Registers[5] = 0x7fffffff;
                 Registers[4] = 0xffffffff;
-            }
-            else if (PSW_o && PSW_s) {
+            } else if (PSW_o && PSW_s) {
                 Registers[6] = 0xffffffff;
                 Registers[5] = 0x80000000;
                 Registers[4] = 0x00000000;
@@ -1283,7 +1269,7 @@ namespace RX {
                 var tmp = Bus.Read(Registers[1], (int)byteLength);
                 Registers[1] += byteLength;
                 Registers[3]--;
-                PSW_c = tmp >=  Registers[2];
+                PSW_c = tmp >= Registers[2];
                 PSW_z = tmp == Registers[2];
                 if (tmp == Registers[2]) {
                     return true;
@@ -1328,92 +1314,94 @@ namespace RX {
             return result;
         }
 
-        public void ExecuteInstruction(OpCode opCode, ReadOnlySpan<uint> operand, uint opSize) {
+        public void ExecuteInstruction(OpCode opCode, ReadOnlySpan<uint> operand, uint opSize, bool disableBreakPoint = false) {
             // ブレークポイントが設定されていないときは処理速度アップのために
             // ハッシュを検索しない
-            if (PcBreakpoints.Count != 0 && PcBreakpoints.Contains(PC)) {
-                Waiting = true;
-                OnBreak?.Invoke();
-                return;
+            if (!disableBreakPoint) {
+                if (PcBreakpoints.Count != 0 && PcBreakpoints.Contains(PC)) {
+                    Waiting = true;
+                    OnBreak?.Invoke();
+                    return;
+                }
             }
             var shouldIncrementPC = true;
             switch (opCode) {
                 case OpCode.ABS_rd: {
-                    ref var rd = ref Registers[operand[0]];
-                    rd = OpABS(rd);
-                }
+                        ref var rd = ref Registers[operand[0]];
+                        rd = OpABS(rd);
+                    }
                     break;
                 case OpCode.ABS_rs_rd: {
-                    Registers[operand[1]] = OpABS(Registers[operand[0]]);
-                    break;
-                }
+                        Registers[operand[1]] = OpABS(Registers[operand[0]]);
+                        break;
+                    }
                 case OpCode.ADC_ir: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpADC(operand[2], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpADC(operand[2], dest);
+                        break;
+                    }
                 case OpCode.ADC_rr: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpADC(Registers[operand[0]], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpADC(Registers[operand[0]], dest);
+                        break;
+                    }
                 case OpCode.ADC_mr: {
-                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
-                    ref var dest = ref Registers[operand[2]];
-                    dest = OpADC(src, dest);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                        ref var dest = ref Registers[operand[2]];
+                        dest = OpADC(src, dest);
+                        break;
+                    }
                 case OpCode.ADD_4irr: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpADD(operand[0], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpADD(operand[0], dest);
+                        break;
+                    }
                 case OpCode.ADD_ub_rs_mr: {
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpADD(src, dest);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpADD(src, dest);
+                        break;
+                    }
                 case OpCode.ADD_mr: {
-                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
-                    ref var dest = ref Registers[operand[2]];
-                    dest = OpADD(src, dest);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                        ref var dest = ref Registers[operand[2]];
+                        dest = OpADD(src, dest);
+                        break;
+                    }
                 case OpCode.ADD_irrr: {
-                    Registers[operand[1]] = OpADD(operand[3], Registers[operand[0]]);
-                    break;
-                }
+                        Registers[operand[1]] = OpADD(operand[3], Registers[operand[0]]);
+                        break;
+                    }
                 case OpCode.ADD_rrr: {
-                    Registers[operand[0]] = OpADD(Registers[operand[1]], Registers[operand[2]]);
-                    break;
-                }
+                        Registers[operand[0]] = OpADD(Registers[operand[1]], Registers[operand[2]]);
+                        break;
+                    }
                 case OpCode.AND_4ir: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpAND(operand[0], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpAND(operand[0], dest);
+                        break;
+                    }
                 case OpCode.AND_ir: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpAND(operand[2], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpAND(operand[2], dest);
+                        break;
+                    }
                 case OpCode.AND_ub_rs_mr: {
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpAND(src, dest);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpAND(src, dest);
+                        break;
+                    }
                 case OpCode.AND_mr: {
-                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
-                    ref var dest = ref Registers[operand[2]];
-                    dest = OpAND(src, dest);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                        ref var dest = ref Registers[operand[2]];
+                        dest = OpAND(src, dest);
+                        break;
+                    }
                 case OpCode.AND_rrr: {
-                    Registers[operand[0]] = OpAND(Registers[operand[1]], Registers[operand[2]]);
-                    break;
-                }
+                        Registers[operand[0]] = OpAND(Registers[operand[1]], Registers[operand[2]]);
+                        break;
+                    }
                 case OpCode.BCLR_im:
                     StoreDestOperand((uint)MemEx.B, operand[0], operand[2], operand.Slice(3),
                                      OpBCLR_m(operand[1], (byte)LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3))));
@@ -1423,32 +1411,32 @@ namespace RX {
                                      OpBCLR_m(Registers[operand[1]], (byte)LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3))));
                     break;
                 case OpCode.BCLR_ir: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpBCLR_r(operand[0], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpBCLR_r(operand[0], dest);
+                        break;
+                    }
                 case OpCode.BCLR_rr: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpBCLR_r(Registers[operand[1]], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpBCLR_r(Registers[operand[1]], dest);
+                        break;
+                    }
                 case OpCode.BCnd_s: {
-                    var src = operand[1] < 3 ? operand[1] + 8 : operand[1];
-                    OpBCnd(operand[0], src, opSize);
-                    shouldIncrementPC = false;
-                    break;
-                }
+                        var src = operand[1] < 3 ? operand[1] + 8 : operand[1];
+                        OpBCnd(operand[0], src, opSize);
+                        shouldIncrementPC = false;
+                        break;
+                    }
                 case OpCode.BCnd_b:
                 case OpCode.BCnd_w:
                     OpBCnd(operand[0], operand[1], opSize);
                     shouldIncrementPC = false;
                     break;
                 case OpCode.BRA_s: {
-                    var src = operand[0] < 3 ? operand[0] + 8 : operand[0];
-                    OpBRA(src);
-                    shouldIncrementPC = false;
-                    break;
-                }
+                        var src = operand[0] < 3 ? operand[0] + 8 : operand[0];
+                        OpBRA(src);
+                        shouldIncrementPC = false;
+                        break;
+                    }
                 case OpCode.BRA_b:
                     OpBRA(operand[0]);
                     shouldIncrementPC = false;
@@ -1469,30 +1457,30 @@ namespace RX {
                     StoreDestOperand((uint)MemEx.B, operand[1], operand[3], operand.Slice(4), OpBMCnd_m(operand[2], operand[0], LoadSourceOperand(operand[3], 4, operand[1], operand.Slice(4))));
                     break;
                 case OpCode.BMCnd_ir: {
-                    ref var dest = ref Registers[operand[2]];
-                    dest = OpBMCnd_r(operand[1], operand[0], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[2]];
+                        dest = OpBMCnd_r(operand[1], operand[0], dest);
+                        break;
+                    }
                 case OpCode.BNOT_im:
                     StoreDestOperand((uint)MemEx.B, operand[1], operand[2], operand.Slice(3),
                                      OpBNOT_m(operand[0], (byte)LoadSourceOperand(operand[2], 4, operand[1], operand.Slice(3))));
                     break;
                 case OpCode.BNOT_rm: {
-                    StoreDestOperand(4, operand[0], operand[2], operand.Slice(3),
-                                     OpBNOT_r(Registers[operand[1]], (byte)LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3))));
-                    break;
-                }
+                        StoreDestOperand(4, operand[0], operand[2], operand.Slice(3),
+                                         OpBNOT_r(Registers[operand[1]], (byte)LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3))));
+                        break;
+                    }
                 case OpCode.BNOT_ir: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpBNOT_r(operand[0], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpBNOT_r(operand[0], dest);
+                        break;
+                    }
                 case OpCode.BNOT_rr: {
-                    ref var dest = ref Registers[operand[0]];
-                    var src = Registers[operand[1]];
-                    dest = OpBNOT_r(src, dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        var src = Registers[operand[1]];
+                        dest = OpBNOT_r(src, dest);
+                        break;
+                    }
                 case OpCode.BRK:
                     OpBRK();
                     break;
@@ -1506,17 +1494,17 @@ namespace RX {
 
                     break;
                 case OpCode.BSET_ir: {
-                    ref var dest = ref Registers[operand[1]];
-                    var src = operand[0];
-                    dest = OpBSET_r(src, dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        var src = operand[0];
+                        dest = OpBSET_r(src, dest);
+                        break;
+                    }
                 case OpCode.BSET_rr: {
-                    ref var dest = ref Registers[operand[0]];
-                    var src = Registers[operand[1]];
-                    dest = OpBSET_r(src, dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        var src = Registers[operand[1]];
+                        dest = OpBSET_r(src, dest);
+                        break;
+                    }
                 case OpCode.BSR_w:
                     OpBSR(operand[0], 3);
                     shouldIncrementPC = false;
@@ -1554,148 +1542,148 @@ namespace RX {
                     OpSUB(operand[2], Registers[operand[0]]);
                     break;
                 case OpCode.CMP_ub_rs_mr: {
-                    var dest = Registers[operand[1]];
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
-                    OpSUB(src, dest);
-                    break;
-                }
+                        var dest = Registers[operand[1]];
+                        var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                        OpSUB(src, dest);
+                        break;
+                    }
                 case OpCode.CMP_mr: {
-                    var dest = Registers[operand[2]];
-                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
-                    OpSUB(src, dest);
-                    break;
-                }
+                        var dest = Registers[operand[2]];
+                        var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                        OpSUB(src, dest);
+                        break;
+                    }
                 case OpCode.DIV_ir: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpDIV(operand[2], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpDIV(operand[2], dest);
+                        break;
+                    }
                 case OpCode.DIV_ub_rs_mr: {
-                    ref var dest = ref Registers[operand[1]];
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
-                    dest = OpDIV(src, dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                        dest = OpDIV(src, dest);
+                        break;
+                    }
                 case OpCode.DIV_mr: {
-                    ref var dest = ref Registers[operand[2]];
-                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
-                    dest = OpDIV(src, dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[2]];
+                        var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                        dest = OpDIV(src, dest);
+                        break;
+                    }
                 case OpCode.DIVU_ir: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpDIVU(operand[2], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpDIVU(operand[2], dest);
+                        break;
+                    }
                 case OpCode.DIVU_ub_rs_mr: {
-                    ref var dest = ref Registers[operand[1]];
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
-                    dest = OpDIVU(src, dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                        dest = OpDIVU(src, dest);
+                        break;
+                    }
                 case OpCode.DIVU_mr: {
-                    ref var dest = ref Registers[operand[2]];
-                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
-                    dest = OpDIVU(src, dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[2]];
+                        var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                        dest = OpDIVU(src, dest);
+                        break;
+                    }
                 case OpCode.EMUL_ir:
                     OpEMUL(operand[2], operand[0]);
                     break;
                 case OpCode.EMUL_ub_rs_mr: {
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
-                    OpEMUL(src, operand[1]);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                        OpEMUL(src, operand[1]);
+                        break;
+                    }
                 case OpCode.EMUL_mr: {
-                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
-                    OpEMUL(src, operand[2]);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                        OpEMUL(src, operand[2]);
+                        break;
+                    }
                 case OpCode.EMULU_ir:
                     OpEMULU(operand[2], operand[0]);
                     break;
                 case OpCode.EMULU_ub_rs_mr: {
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
-                    OpEMULU(src, operand[1]);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                        OpEMULU(src, operand[1]);
+                        break;
+                    }
                 case OpCode.EMULU_mr: {
-                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
-                    OpEMULU(src, operand[2]);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                        OpEMULU(src, operand[2]);
+                        break;
+                    }
                 case OpCode.FADD_ir: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpFADD(operand[1], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpFADD(operand[1], dest);
+                        break;
+                    }
                 case OpCode.FADD_mr: {
-                    var src = LoadUnsignedSourceOperand(operand[2], 2, operand.Slice(3), operand[0]);
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpFADD(src, dest);
-                    break;
-                }
+                        var src = LoadUnsignedSourceOperand(operand[2], 2, operand.Slice(3), operand[0]);
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpFADD(src, dest);
+                        break;
+                    }
                 case OpCode.FCMP_ir:
                     OpFCMP(operand[1], Registers[operand[0]]);
                     break;
                 case OpCode.FCMP_mr: {
-                    var src = LoadUnsignedSourceOperand(operand[2], 2, operand.Slice(3), operand[0]);
-                    OpFCMP(src, Registers[operand[1]]);
-                    break;
-                }
+                        var src = LoadUnsignedSourceOperand(operand[2], 2, operand.Slice(3), operand[0]);
+                        OpFCMP(src, Registers[operand[1]]);
+                        break;
+                    }
                 case OpCode.FDIV_ir: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpFDIV(operand[1], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpFDIV(operand[1], dest);
+                        break;
+                    }
                 case OpCode.FDIV_mr: {
-                    var src = LoadUnsignedSourceOperand(operand[2], 2, operand.Slice(3), operand[0]);
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpFDIV(src, dest);
-                    break;
-                }
+                        var src = LoadUnsignedSourceOperand(operand[2], 2, operand.Slice(3), operand[0]);
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpFDIV(src, dest);
+                        break;
+                    }
                 case OpCode.FMUL_ir: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpFMUL(operand[1], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpFMUL(operand[1], dest);
+                        break;
+                    }
                 case OpCode.FMUL_mr: {
-                    var src = LoadUnsignedSourceOperand(operand[2], 2, operand.Slice(3), operand[0]);
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpFMUL(src, dest);
-                    break;
-                }
+                        var src = LoadUnsignedSourceOperand(operand[2], 2, operand.Slice(3), operand[0]);
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpFMUL(src, dest);
+                        break;
+                    }
                 case OpCode.FSUB_ir: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpFSUB(operand[1], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpFSUB(operand[1], dest);
+                        break;
+                    }
                 case OpCode.FSUB_mr: {
-                    var src = LoadUnsignedSourceOperand(operand[2], 2, operand.Slice(3), operand[0]);
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpFSUB(src, dest);
-                    break;
-                }
+                        var src = LoadUnsignedSourceOperand(operand[2], 2, operand.Slice(3), operand[0]);
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpFSUB(src, dest);
+                        break;
+                    }
                 case OpCode.FTOI: {
-                    var src = LoadUnsignedSourceOperand(operand[2], 2, operand.Slice(3), operand[0]);
-                    Registers[operand[1]] = OpFTOI(src);
-                    break;
-                }
+                        var src = LoadUnsignedSourceOperand(operand[2], 2, operand.Slice(3), operand[0]);
+                        Registers[operand[1]] = OpFTOI(src);
+                        break;
+                    }
                 case OpCode.INT:
                     OpINT(operand[0]);
                     shouldIncrementPC = false;
                     break;
                 case OpCode.ITOF_ub_rs: {
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
-                    Registers[operand[1]] = OpITOF(src);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                        Registers[operand[1]] = OpITOF(src);
+                        break;
+                    }
                 case OpCode.ITOF_mr: {
-                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
-                    Registers[operand[2]] = OpITOF(src);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                        Registers[operand[2]] = OpITOF(src);
+                        break;
+                    }
                 case OpCode.JMP:
                     OpJMP(Registers[operand[0]]);
                     shouldIncrementPC = false;
@@ -1711,39 +1699,39 @@ namespace RX {
                     OpMACLO(Registers[operand[0]], Registers[operand[1]]);
                     break;
                 case OpCode.MAX_ir: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpMAX(operand[2], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpMAX(operand[2], dest);
+                        break;
+                    }
                 case OpCode.MAX_ub_rs_mr: {
-                    ref var dest = ref Registers[operand[1]];
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
-                    dest = OpMAX(src, dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                        dest = OpMAX(src, dest);
+                        break;
+                    }
                 case OpCode.MAX_mr: {
-                    ref var dest = ref Registers[operand[2]];
-                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
-                    dest = OpMAX(src, dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[2]];
+                        var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                        dest = OpMAX(src, dest);
+                        break;
+                    }
                 case OpCode.MIN_ir: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpMIN(operand[2], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpMIN(operand[2], dest);
+                        break;
+                    }
                 case OpCode.MIN_ub_rs_mr: {
-                    ref var dest = ref Registers[operand[1]];
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
-                    dest = OpMIN(src, dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                        dest = OpMIN(src, dest);
+                        break;
+                    }
                 case OpCode.MIN_mr: {
-                    ref var dest = ref Registers[operand[2]];
-                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
-                    dest = OpMIN(src, dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[2]];
+                        var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                        dest = OpMIN(src, dest);
+                        break;
+                    }
                 case OpCode.MOV_rm:
                     StoreDestOperand(operand[0], operand[1], operand[2], Registers[operand[3]]);
                     break;
@@ -1779,78 +1767,76 @@ namespace RX {
                         (int)operand[0]);
                     break;
                 case OpCode.MOV_ar: {
-                    if (operand[0] == 3) {
-                        // 非対応のサイズ
-                        return;
+                        if (operand[0] == 3) {
+                            // 非対応のサイズ
+                            return;
+                        }
+                        var sz = (int)operand[0];
+                        var ri = Registers[operand[1]];
+                        var rb = Registers[operand[2]];
+                        var addr = rb + (ri << sz);
+                        Registers[operand[3]] = SignExtension(true, Bus.Read(addr, 1 << sz), sz);
+                        break;
                     }
-                    var sz = (int)operand[0];
-                    var ri = Registers[operand[1]];
-                    var rb = Registers[operand[2]];
-                    var addr = rb + (ri << sz);
-                    Registers[operand[3]] = SignExtension(true, Bus.Read(addr, 1 << sz), sz);
-                    break;
-                }
                 case OpCode.MOV_r_dsp:
                     StoreDestOperand(operand[0], operand[1], operand[3], operand.Slice(4), Registers[operand[2]]);
                     break;
                 case OpCode.MOV_ra: {
-                    if (operand[0] == 3) {
-                        // 非対応のサイズ
-                        return;
+                        if (operand[0] == 3) {
+                            // 非対応のサイズ
+                            return;
+                        }
+                        var sz = (int)operand[0];
+                        var ri = Registers[operand[1]];
+                        var rb = Registers[operand[2]];
+                        var addr = rb + (ri << sz);
+                        Bus.Write(addr, 1 << sz, Registers[operand[3]]);
+                        break;
                     }
-                    var sz = (int)operand[0];
-                    var ri = Registers[operand[1]];
-                    var rb = Registers[operand[2]];
-                    var addr = rb + ( ri << sz);
-                    Bus.Write(addr, 1 << sz, Registers[operand[3]]);
-                    break;
-                }
                 case OpCode.MOV_mm:
                     StoreDestOperand(operand[0], operand[2], operand[5], operand.Slice(6, 1),
                                     LoadUnsignedSourceOperand(operand[3], operand[0], operand.Slice(4, 1), operand[1]));
                     break;
                 case OpCode.MOV_rp: {
-                    if (operand[1] == 3) {
-                        // 非対応のサイズ
+                        if (operand[1] == 3) {
+                            // 非対応のサイズ
+                            break;
+                        }
+                        ref var dest = ref Registers[operand[2]];
+                        var sz = 1u << (int)operand[1];
+                        var ad = operand[0];
+                        var addr = dest;
+                        if (ad == 0) {
+                            // post increment
+                            dest = addr + sz;
+                        } else if (ad == 1) {
+                            // pre decrement
+                            addr -= sz;
+                            dest = addr;
+                        }
+                        Bus.Write(addr, (int)sz, Registers[operand[3]]);
                         break;
                     }
-                    ref var dest = ref Registers[operand[2]];
-                    var sz = 1u << (int)operand[1];
-                    var ad = operand[0];
-                    var addr = dest;
-                    if (ad == 0) {
-                        // post increment
-                        dest = addr + sz;
-                    }
-                    else if (ad == 1) {
-                        // pre decrement
-                        addr -= sz;
-                        dest = addr;
-                    }
-                    Bus.Write(addr, (int)sz, Registers[operand[3]]);
-                    break;
-                }
                 case OpCode.MOV_pr: {
-                    if (operand[1] == 3) {
-                        // 非対応のサイズ
+                        if (operand[1] == 3) {
+                            // 非対応のサイズ
+                            break;
+                        }
+                        ref var src = ref Registers[operand[2]];
+                        var sz = 1u << (int)operand[1];
+                        var ad = operand[0];
+                        var addr = src;
+                        // post increment
+                        if (ad == 2) {
+                            src = addr + sz;
+                        } else if (ad == 3) {
+                            // pre decrement
+                            addr -= sz;
+                            src = addr;
+                        }
+                        Registers[operand[3]] = SignExtension(true, Bus.Read(addr, (int)sz), (int)operand[1]);
                         break;
                     }
-                    ref var src = ref Registers[operand[2]];
-                    var sz = 1u << (int)operand[1];
-                    var ad = operand[0];
-                    var addr = src;
-                    // post increment
-                    if (ad == 2) {
-                        src = addr + sz;
-                    }
-                    else if (ad == 3) {
-                        // pre decrement
-                        addr -= sz;
-                        src = addr;
-                    }
-                    Registers[operand[3]] = SignExtension(true, Bus.Read(addr, (int)sz), (int)operand[1]);
-                    break;
-                }
                 case OpCode.MOVU_dsp5_mr:
                     Registers[operand[3]] = LoadUnsignedSourceOperand(operand[0], operand[1], operand[2]);
                     break;
@@ -1858,52 +1844,51 @@ namespace RX {
                     Registers[operand[2]] = LoadUnsignedSourceOperand(operand[3], operand[0], operand.Slice(4), operand[1]);
                     break;
                 case OpCode.MOVU_ar: {
-                    var sz = (int)operand[0];
-                    var ri = Registers[operand[1]];
-                    var rb = Registers[operand[2]];
-                    var addr = rb + (ri << sz);
-                    Registers[operand[3]] = Bus.Read(addr, 1 << sz);
-                    break;
-                }
+                        var sz = (int)operand[0];
+                        var ri = Registers[operand[1]];
+                        var rb = Registers[operand[2]];
+                        var addr = rb + (ri << sz);
+                        Registers[operand[3]] = Bus.Read(addr, 1 << sz);
+                        break;
+                    }
                 case OpCode.MOVU_pr: {
-                    ref var src = ref Registers[operand[2]];
-                    var sz = 1u << (int)operand[1];
-                    var ad = operand[0];
-                    var addr = src;
-                    // post increment
-                    if (ad == 2) {
-                        src = addr + sz;
+                        ref var src = ref Registers[operand[2]];
+                        var sz = 1u << (int)operand[1];
+                        var ad = operand[0];
+                        var addr = src;
+                        // post increment
+                        if (ad == 2) {
+                            src = addr + sz;
+                        } else if (ad == 3) {
+                            // pre decrement
+                            addr -= sz;
+                            src = addr;
+                        }
+                        Registers[operand[3]] = Bus.Read(addr, (int)sz);
+                        break;
                     }
-                    else if (ad == 3) {
-                        // pre decrement
-                        addr -= sz;
-                        src = addr;
-                    }
-                    Registers[operand[3]] = Bus.Read(addr, (int)sz);
-                    break;
-                }
                 case OpCode.MUL_4ir: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpMUL(operand[0], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpMUL(operand[0], dest);
+                        break;
+                    }
                 case OpCode.MUL_ir: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpMUL(operand[2], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpMUL(operand[2], dest);
+                        break;
+                    }
                 case OpCode.MUL_ub_rs_mr: {
-                    ref var dest = ref Registers[operand[1]];
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
-                    dest = OpMUL(src, dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                        dest = OpMUL(src, dest);
+                        break;
+                    }
                 case OpCode.MUL_mr: {
-                    ref var dest = ref Registers[operand[2]];
-                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
-                    dest = OpMUL(src, dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[2]];
+                        var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                        dest = OpMUL(src, dest);
+                        break;
+                    }
                 case OpCode.MUL_rrr:
                     Registers[operand[0]] = OpMUL(Registers[operand[1]], Registers[operand[2]]);
                     break;
@@ -1938,10 +1923,10 @@ namespace RX {
                     OpMVTIPL(operand[0]);
                     break;
                 case OpCode.NEG_rd: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpNEG(dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpNEG(dest);
+                        break;
+                    }
                 case OpCode.NEG_rs_rd:
                     Registers[operand[1]] = OpNEG(Registers[operand[0]]);
                     break;
@@ -1949,35 +1934,35 @@ namespace RX {
                     // do nothing.
                     break;
                 case OpCode.NOT_rd: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpNOT(dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpNOT(dest);
+                        break;
+                    }
                 case OpCode.NOT_rs_rd:
                     Registers[operand[1]] = OpNOT(Registers[operand[0]]);
                     break;
                 case OpCode.OR_4ir: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpOR(operand[0], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpOR(operand[0], dest);
+                        break;
+                    }
                 case OpCode.OR_ir: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpOR(operand[2], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpOR(operand[2], dest);
+                        break;
+                    }
                 case OpCode.OR_ub_rs_mr: {
-                    ref var dest = ref Registers[operand[1]];
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
-                    dest = OpOR(src, dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                        dest = OpOR(src, dest);
+                        break;
+                    }
                 case OpCode.OR_mr: {
-                    ref var dest = ref Registers[operand[2]];
-                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
-                    dest = OpOR(src, dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[2]];
+                        var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                        dest = OpOR(src, dest);
+                        break;
+                    }
                 case OpCode.OR_rrr:
                     Registers[operand[0]] = OpOR(Registers[operand[1]], Registers[operand[2]]);
                     break;
@@ -1994,10 +1979,10 @@ namespace RX {
                     OpPUSH(operand[0], Registers[operand[1]]);
                     break;
                 case OpCode.PUSH_m: {
-                    var src = LoadSourceOperand(operand[2], operand[1], operand[0], operand.Slice(3));
-                    OpPUSH(operand[1], src);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[2], operand[1], operand[0], operand.Slice(3));
+                        OpPUSH(operand[1], src);
+                        break;
+                    }
                 case OpCode.PUSHC:
                     OpPUSHC(operand[0]);
                     break;
@@ -2020,41 +2005,41 @@ namespace RX {
                     shouldIncrementPC = OpRMPA(operand[0]);
                     break;
                 case OpCode.ROLC: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpROLC(dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpROLC(dest);
+                        break;
+                    }
                 case OpCode.RORC: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpRORC(dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpRORC(dest);
+                        break;
+                    }
                 case OpCode.ROTL_ir: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpROTL(operand[0], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpROTL(operand[0], dest);
+                        break;
+                    }
                 case OpCode.ROTL_rr: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpROTL(Registers[operand[0]], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpROTL(Registers[operand[0]], dest);
+                        break;
+                    }
                 case OpCode.ROTR_ir: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpROTR(operand[0], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpROTR(operand[0], dest);
+                        break;
+                    }
                 case OpCode.ROTR_rr: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpROTR(Registers[operand[0]], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpROTR(Registers[operand[0]], dest);
+                        break;
+                    }
                 case OpCode.ROUND: {
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpROUND(src);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpROUND(src);
+                        break;
+                    }
                 case OpCode.RTE:
                     OpRTE();
                     shouldIncrementPC = false;
@@ -2076,24 +2061,24 @@ namespace RX {
                     shouldIncrementPC = false;
                     break;
                 case OpCode.SAT: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpSAT(dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpSAT(dest);
+                        break;
+                    }
                 case OpCode.SATR:
                     OpSATR();
                     break;
                 case OpCode.SBB_rr: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpSBB(Registers[operand[0]], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpSBB(Registers[operand[0]], dest);
+                        break;
+                    }
                 case OpCode.SBB_mr: {
-                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
-                    ref var dest = ref Registers[operand[2]];
-                    dest = OpSBB(src, dest);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                        ref var dest = ref Registers[operand[2]];
+                        dest = OpSBB(src, dest);
+                        break;
+                    }
                 case OpCode.SCCnd:
                     StoreDestOperand(operand[0], operand[1], operand[3], operand.Slice(4), OpSCCnd(operand[2]));
                     break;
@@ -2101,47 +2086,47 @@ namespace RX {
                     OpSETPSW(operand[0]);
                     break;
                 case OpCode.SHAR_5irr: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpSHAR(operand[0], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpSHAR(operand[0], dest);
+                        break;
+                    }
                 case OpCode.SHAR_irr: {
-                    Registers[operand[2]] = OpSHAR(operand[0], Registers[operand[1]]);
-                    break;
-                }
+                        Registers[operand[2]] = OpSHAR(operand[0], Registers[operand[1]]);
+                        break;
+                    }
                 case OpCode.SHAR_rr: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpSHAR(Registers[operand[0]], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpSHAR(Registers[operand[0]], dest);
+                        break;
+                    }
                 case OpCode.SHLL_5irr: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpSHLL(operand[0], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpSHLL(operand[0], dest);
+                        break;
+                    }
                 case OpCode.SHLL_irr: {
-                    Registers[operand[2]] = OpSHLL(operand[0], Registers[operand[1]]);
-                    break;
-                }
+                        Registers[operand[2]] = OpSHLL(operand[0], Registers[operand[1]]);
+                        break;
+                    }
                 case OpCode.SHLL_rr: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpSHLL(Registers[operand[0]], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpSHLL(Registers[operand[0]], dest);
+                        break;
+                    }
                 case OpCode.SHLR_5irr: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpSHLR(operand[0], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpSHLR(operand[0], dest);
+                        break;
+                    }
                 case OpCode.SHLR_irr: {
-                    Registers[operand[2]] = OpSHLR(operand[0], Registers[operand[1]]);
-                    break;
-                }
+                        Registers[operand[2]] = OpSHLR(operand[0], Registers[operand[1]]);
+                        break;
+                    }
                 case OpCode.SHLR_rr: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpSHLR(Registers[operand[0]], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpSHLR(Registers[operand[0]], dest);
+                        break;
+                    }
                 case OpCode.SMOVB:
                     shouldIncrementPC = OpSMOVB();
                     break;
@@ -2149,32 +2134,32 @@ namespace RX {
                     shouldIncrementPC = OpSSTR(operand[0]);
                     break;
                 case OpCode.STNZ: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpSTNZ(operand[2], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpSTNZ(operand[2], dest);
+                        break;
+                    }
                 case OpCode.STZ: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpSTZ(operand[2], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpSTZ(operand[2], dest);
+                        break;
+                    }
                 case OpCode.SUB_ir: {
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpSUB(operand[0], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpSUB(operand[0], dest);
+                        break;
+                    }
                 case OpCode.SUB_ub_rs_mr: {
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpSUB(src, dest);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpSUB(src, dest);
+                        break;
+                    }
                 case OpCode.SUB_mr: {
-                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
-                    ref var dest = ref Registers[operand[2]];
-                    dest = OpSUB(src, dest);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                        ref var dest = ref Registers[operand[2]];
+                        dest = OpSUB(src, dest);
+                        break;
+                    }
                 case OpCode.SUB_rrr:
                     Registers[operand[0]] = OpSUB(Registers[operand[1]], Registers[operand[2]]);
                     break;
@@ -2194,51 +2179,51 @@ namespace RX {
                     OpTST(operand[2], Registers[operand[0]]);
                     break;
                 case OpCode.TST_ub_rs_mr: {
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
-                    OpTST(src, Registers[operand[1]]);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                        OpTST(src, Registers[operand[1]]);
+                        break;
+                    }
                 case OpCode.TST_mr: {
-                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
-                    OpTST(src, Registers[operand[2]]);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                        OpTST(src, Registers[operand[2]]);
+                        break;
+                    }
                 case OpCode.WAIT:
                     OpWAIT();
                     break;
                 case OpCode.XCHG_ub_rs_mr: {
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
-                    ref var dest = ref Registers[operand[1]];
-                    var tmp = dest;
-                    dest = src;
-                    StoreDestOperand(4, operand[0], operand[2], operand.Slice(3), tmp);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                        ref var dest = ref Registers[operand[1]];
+                        var tmp = dest;
+                        dest = src;
+                        StoreDestOperand(4, operand[0], operand[2], operand.Slice(3), tmp);
+                        break;
+                    }
                 case OpCode.XCHG_mr: {
-                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
-                    ref var dest = ref Registers[operand[2]];
-                    var tmp = dest;
-                    dest = src;
-                    StoreDestOperand(operand[0], operand[1], operand[3], operand.Slice(4), tmp);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                        ref var dest = ref Registers[operand[2]];
+                        var tmp = dest;
+                        dest = src;
+                        StoreDestOperand(operand[0], operand[1], operand[3], operand.Slice(4), tmp);
+                        break;
+                    }
                 case OpCode.XOR_ir: {
-                    ref var dest = ref Registers[operand[0]];
-                    dest = OpXOR(operand[2], dest);
-                    break;
-                }
+                        ref var dest = ref Registers[operand[0]];
+                        dest = OpXOR(operand[2], dest);
+                        break;
+                    }
                 case OpCode.XOR_ub_rs_mr: {
-                    var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
-                    ref var dest = ref Registers[operand[1]];
-                    dest = OpXOR(src, dest);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[2], 4, operand[0], operand.Slice(3));
+                        ref var dest = ref Registers[operand[1]];
+                        dest = OpXOR(src, dest);
+                        break;
+                    }
                 case OpCode.XOR_mr: {
-                    var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
-                    ref var dest = ref Registers[operand[2]];
-                    dest = OpXOR(src, dest);
-                    break;
-                }
+                        var src = LoadSourceOperand(operand[3], operand[0], operand[1], operand.Slice(4));
+                        ref var dest = ref Registers[operand[2]];
+                        dest = OpXOR(src, dest);
+                        break;
+                    }
                 default:
                     Console.WriteLine($"Unknown opcode: {opCode}");
                     break;
@@ -2246,6 +2231,7 @@ namespace RX {
             if (shouldIncrementPC) {
                 PC += opSize;
             }
+            // Console.WriteLine($"PC 0x{PC:X}");
         }
 
         public void Reset() {
@@ -2261,9 +2247,14 @@ namespace RX {
             PSW_pm = false;
             PSW_ipl = 0;
             FPSW = 0;
+            Waiting = false;
         }
 
         public int NextStep() {
+            return NextStep(false);
+        }
+
+        public int NextStep(bool disableBreakPoint) {
             var reader = new Reader(Bus, PC);
             operandWorking.Clear();
             var prevPos = reader.Position;
@@ -2271,13 +2262,18 @@ namespace RX {
             var afterPos = reader.Position;
             var opSize = afterPos - prevPos;
             var parsed = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(operandWorking);
-            ExecuteInstruction((OpCode)parsed[0], parsed[1..], opSize);
+            ExecuteInstruction((OpCode)parsed[0], parsed[1..], opSize, disableBreakPoint);
             // TDDO 命令ごとのクロック数を考慮する必要あり
             return 1;
         }
 
         public void Stop() {
             this.Waiting = true;
+            OnBreak?.Invoke();
+        }
+
+        public void Start() {
+            this.Waiting = false;
         }
     }
 }

@@ -1,4 +1,5 @@
 namespace Gdb;
+
 public struct GdbMessageReader {
     readonly ReadOnlyMemory<char> buffer;
 
@@ -52,7 +53,11 @@ public struct GdbMessageReader {
     /// expectedが空のときはtrueを返します。
     /// </summary>
     public bool TryReadIfExpString(ReadOnlySpan<char> expected) {
-        bool equals = buffer[position..].Span.SequenceEqual(expected);
+        var remaingStr = buffer[position..];
+        if (remaingStr.Length < expected.Length) {
+            return false;
+        }
+        bool equals = remaingStr.Slice(0, expected.Length).Span.SequenceEqual(expected);
         if (!equals) {
             return false;
         }

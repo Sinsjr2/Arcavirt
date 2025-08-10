@@ -169,7 +169,9 @@ public class DummyGdbStub : IGdbStub, IBreakPoint, IHardWareBreakPoint, ISoftWar
     public ISoftWareBreakPoint? SwBreakPointObject { get; set; } = null;
 
     public IWatchPoint? WatchPointObject { get; set; } = null;
-    
+
+    public IGdbCustomCommand? GdbCustomCommandObject { get; set; } = null;
+
     public event Action? OnBreak;
 
     public readonly MockMethod<(ulong address, uint kind), bool> AddHwBreakPointMethod = new(true);
@@ -457,7 +459,6 @@ public class GdbPacketAnalizerTest {
         var stub = new DummyGdbStub();
         var singleThreadStub = new DummyGdbSingleThreadStub();
         stub.BreakpointObject = singleThreadStub;
-        stub.SwBreakPointObject = singleThreadStub;
         await OneCommandTest(stub, src, expectedResponse, token);
         singleThreadStub.RemoveWatchPointMethod.ArgumentHistory.Is([(0x789ABCDEu, 4, BreakWatchKind.Write)]);
     }
@@ -469,7 +470,6 @@ public class GdbPacketAnalizerTest {
         var stub = new DummyGdbStub();
         var singleThreadStub = new DummyGdbSingleThreadStub();
         stub.BreakpointObject = singleThreadStub;
-        stub.SwBreakPointObject = singleThreadStub;
         await OneCommandTest(stub, src, expectedResponse, token);
         singleThreadStub.AddWatchPointMethod.ArgumentHistory.Is([(0x9ABCDEF0u, 16, BreakWatchKind.Read)]);
     }
@@ -481,7 +481,6 @@ public class GdbPacketAnalizerTest {
         var stub = new DummyGdbStub();
         var singleThreadStub = new DummyGdbSingleThreadStub();
         stub.BreakpointObject = singleThreadStub;
-        stub.SwBreakPointObject = singleThreadStub;
         await OneCommandTest(stub, src, expectedResponse, token);
         singleThreadStub.RemoveWatchPointMethod.ArgumentHistory.Is([(0xBCDEF012u, 32, BreakWatchKind.Read)]);
     }
@@ -493,7 +492,6 @@ public class GdbPacketAnalizerTest {
         var stub = new DummyGdbStub();
         var singleThreadStub = new DummyGdbSingleThreadStub();
         stub.BreakpointObject = singleThreadStub;
-        stub.SwBreakPointObject = singleThreadStub;
         await OneCommandTest(stub, src, expectedResponse, token);
         singleThreadStub.AddWatchPointMethod.ArgumentHistory.Is([(0xDEF0u, 1, BreakWatchKind.ReadWrite)]);
     }
@@ -505,9 +503,17 @@ public class GdbPacketAnalizerTest {
         var stub = new DummyGdbStub();
         var singleThreadStub = new DummyGdbSingleThreadStub();
         stub.BreakpointObject = singleThreadStub;
-        stub.SwBreakPointObject = singleThreadStub;
         await OneCommandTest(stub, src, expectedResponse, token);
         singleThreadStub.RemoveWatchPointMethod.ArgumentHistory.Is([(0xDEF0u, 2, BreakWatchKind.ReadWrite)]);
+    }
+
+    [Test]
+    public async Task Command_vCont_t_Test(CancellationToken token) {
+        var src = "vCont;t";
+        var expectedResponse = "";
+        var stub = new DummyGdbStub();
+        await OneCommandTest(stub, src, expectedResponse, token);
+        stub.HandleCtrlCMethod.ArgumentHistory.Is([Unit.Default]);
     }
 
     static async ValueTask WriteAll(ChannelCommunication target, ReadOnlyMemory<byte> src, CancellationToken token) {

@@ -12,6 +12,9 @@ public class GdbPacketAnalizer {
 
     readonly ILogger logger;
 
+    bool canNotifyBreak = false;
+    bool breaked = false;
+
     public GdbPacketAnalizer(IGdbStub targetStub, ILogger logger) {
         this.targetStub = targetStub;
         this.logger = logger;
@@ -31,10 +34,20 @@ public class GdbPacketAnalizer {
         var encoding = Encoding.UTF8;
         var workingBuf = new StringBuilder();
 
-        var sb = new StringBuilder("+");
+        // var sb = new StringBuilder("%Stop:T02thread:p1.1;core:0;#d1");
+        var sb = new StringBuilder();
         GDBUtils.GDBMessage(sb, STOP_REPLY_TRAP);
         var stopReplySigint = encoding.GetBytes(sb.ToString());
         async void OnBreak() {
+            logger.LogInformation("break");
+            breaked = true;
+            if (!canNotifyBreak) {
+                return;
+            }
+            canNotifyBreak = false;
+            if (logger.IsEnabled(LogLevel.Debug)) {
+                logger.LogDebug(sb.ToString());
+            }
             await targetCommunication.Write(stopReplySigint, token);
         }
         try {
@@ -62,6 +75,13 @@ public class GdbPacketAnalizer {
                         }
                         await targetCommunication.Write(encodedByteBuf.WrittenMemory, token);
                     }
+                    if (breaked) {
+                        breaked = false;
+                        if (logger.IsEnabled(LogLevel.Debug)) {
+                            logger.LogDebug(sb.ToString());
+                        }
+                        await targetCommunication.Write(stopReplySigint, token);
+                    }
                 } catch (Exception ex) {
                     this.RemoveConnection(/*connection*/);
                     logger.LogError("GDB error: {message}", ex);
@@ -80,9 +100,10 @@ public class GdbPacketAnalizer {
         while (shouldLoop) {
             workingBuf.Clear();
             // Ctrl+C (ASCII 3)
-            if (0 < buf.Length && buf.Span[0] == 3) { 
+            if (0 < buf.Length && buf.Span[0] == 3) {
                 logger.LogInformation("BREAK");
-                GDBUtils.GDBMessage(response, STOP_REPLY_SIGINT);
+                targetStub.HandleCtrlC();
+                // GDBUtils.GDBMessage(response, STOP_REPLY_SIGINT);
                 buf = buf[1..];
             }
             var parseResult = GDBUtils.ParseGDBMessage(buf.Span);
@@ -219,7 +240,7 @@ public class GdbPacketAnalizer {
             case IGDBSingleThread singleThread: {
                 var resumeObject = singleThread.ResumeObject;
                 if (resumeObject is not null) {
-                    resumeObject.Resume(address, null);
+                    resumeObject.Resume(address, signal);
                     return true;
                 }
                 return false;
@@ -359,76 +380,100 @@ public class GdbPacketAnalizer {
         return isSuccess;
     }
 
-    void ProcessGDBMessage(StringBuilder response, ReadOnlyMemory<char> cmd, StringBuilder workingBuf) {
-        if (cmd.Span.SequenceEqual("Hg0")) {
-            GDBUtils.GDBMessage(response, "OK");
+    void TryRunCustomCommand(StringBuilder response, ReadOnlyMemory<char> cmd) {
+        var reader = new GdbMessageReader(cmd);
+        if (!reader.TryReadIfExpString("qRcmd,") ||
+            !reader.TryReadExpectedLength(reader.RemainingLength, out var customCmd)) {
             return;
         }
+        var encoding = Encoding.UTF8;
+        var decodedCmd = encoding.GetString(Convert.FromHexString(customCmd.Span));
+        if (logger.IsEnabled(LogLevel.Debug)) {
+            logger.LogDebug($"qRcmd {decodedCmd}");
+        }
+        targetStub.GdbCustomCommandObject?.RunCustomCommand(response, decodedCmd);
+    }
 
-        if (cmd.Span.StartsWith("Hgp0")) {
-            GDBUtils.GDBMessage(response, "E31");
-            return;
-        }
+    void ProcessGDBMessage(StringBuilder response, ReadOnlyMemory<char> cmd, StringBuilder workingBuf) {
+        // if (cmd.Span.SequenceEqual("Hg0")) {
+        //     GDBUtils.GDBMessage(response, "OK");
+        //     return;
+        // }
+
+        // if (cmd.Span.StartsWith("Hgp0")) {
+        //     GDBUtils.GDBMessage(response, "E31");
+        //     return;
+        // }
 
         switch (cmd.Span[0]) {
-            case '!':
-                GDBUtils.GDBMessage(response, "OK");
-                return;
+            // case '!':
+            //     GDBUtils.GDBMessage(response, "OK");
+            //     return;
             case '?':
-                GDBUtils.GDBMessage(response, "OK");
+                GDBUtils.GDBMessage(response, STOP_REPLY_TRAP);
                 return;
             case 'q':
                 if (cmd.Span.StartsWith("qSupported:")) {
-                    GDBUtils.GDBMessage(response, "PacketSize=4000;qXfer:memory-map:read+;qXfer:features:read+;qXfer:threads:read+;vContSupported+;multiprocess+;QNonStop+;swbreak+;hwbreak+");
+                    // GDBUtils.GDBMessage(response, "PacketSize=4000;qXfer:memory-map:read+;qXfer:features:read+;qXfer:threads:read+;vContSupported+;multiprocess+;QNonStop+;swbreak+;hwbreak+");
+                    GDBUtils.GDBMessage(response, "PacketSize=4000;vContSupported+;qXfer:features:read+;");
                     return;
                 }
-                if (cmd.Span.StartsWith("qTStatus")) {
-                }
-                if (cmd.Span.StartsWith("qAttached")) {
-                    GDBUtils.GDBMessage(response, "0");
-                    return;
-                }
+                // if (cmd.Span.StartsWith("qTStatus")) {
+                // }
+                // if (cmd.Span.StartsWith("qAttached")) {
+                //     GDBUtils.GDBMessage(response, "0");
+                //     return;
+                // }
                 if (cmd.Span.StartsWith("qXfer:features:read:target.xml")) {
                     GDBUtils.GDBMessage(response, "l" + targetStub.TargetDescriptionXML);
                     return;
                 }
-                if (cmd.Span.StartsWith("qXfer:threads:read")) {
-                    var xml = """
-                    <?xml version="1.0"?><threads><thread id="p1.1" core="0">single core</thread></threads>
-                    """;
-                    GDBUtils.GDBMessage(response, "l" + xml);
-                    return;
-                }
+                // if (cmd.Span.StartsWith("qXfer:threads:read")) {
+                //     var xml = """
+                //     <?xml version="1.0"?><threads><thread id="p1.1" core="0">single core</thread></threads>
+                //     """;
+                //     GDBUtils.GDBMessage(response, "l" + xml);
+                //     return;
+                // }
                 if (cmd.Span.StartsWith("qRcmd")) {
-                    GDBUtils.GDBMessage(response, "OK");
+                    TryRunCustomCommand(response, cmd);
                     return;
                 }
                 break;
-            case 'Q':
-                if (cmd.Span.StartsWith("QNonStop")) {
-                    GDBUtils.GDBMessage(response, "OK");
-                    return;
-                }
-                break;
-            case 'v':
-                if (cmd.Span.SequenceEqual("vCont?")) {
-                    GDBUtils.GDBMessage(response, "vCont;c;C;s;S;t");
-                    return;
-                }
-                if (cmd.Span.StartsWith("vCont;c")) {
-                    TryResume(null, null);
-                    return;
-                }
-                if (cmd.Span.StartsWith("vCont;t")) {
-                    GDBUtils.GDBMessage(response, "OK");
-                    return;
-                }
-                if (cmd.Span.StartsWith("vStopped")) {
-                    GDBUtils.GDBMessage(response, "OK");
-                    return;
-                }
-                break;
+            // case 'Q':
+            //     if (cmd.Span.StartsWith("QNonStop")) {
+            //         GDBUtils.GDBMessage(response, "OK");
+            //         return;
+            //     }
+            //     break;
+            // case 'v':
+            //     if (cmd.Span.SequenceEqual("vCont?")) {
+            //         GDBUtils.GDBMessage(response, "vCont;c;C;s;S;t");
+            //         return;
+            //     }
+            //     if (cmd.Span.StartsWith("vCont;c")) {
+            //         canNotifyBreak = true;
+            //         TryResume(null, null);
+            //         GDBUtils.GDBMessage(response, "OK");
+            //         return;
+            //     }
+            //     if (cmd.Span.StartsWith("vCont;t")) {
+            //         targetStub.HandleCtrlC();
+            //         GDBUtils.GDBMessage(response, "OK");
+            //         return;
+            //     }
+                // if (cmd.Span.StartsWith("vStopped")) {
+                //     //GDBUtils.GDBMessage(response, "T02thread:p1.1;core:0;");
+                //     GDBUtils.GDBMessage(response, "OK");
+                //     return;
+                // }
+                // if (cmd.Span.StartsWith("vKill")) {
+                //     GDBUtils.GDBMessage(response, "OK");
+                //     return;
+                // }
+                // break;
             case 'c':
+                canNotifyBreak = true;
                 if (TryExecuteCommand_C(cmd)) {
                     return;
                 }
@@ -443,11 +488,6 @@ public class GdbPacketAnalizer {
                     return;
                 }
                 break;
-            case 'p':
-                // Handle 'p' case here
-            case 'P':
-                // Handle 'P' case here
-                break;
             case 'm':
                 if (TryReadMemory(response, cmd, workingBuf)) {
                     return;
@@ -456,26 +496,32 @@ public class GdbPacketAnalizer {
             case 'M':
                 if (TryWriteMemory(response, cmd)) {
                     return;
-                }
-                else {
+                } else {
                     GDBUtils.GDBMessage(response, "E00");
                     return;
                 }
-            case 'Z':
-                if (TryAddBreakPoint(response, cmd)) {
-                    return;
-                }
-                break;
-            case 'z':
-                if (TryRemoveBreakPoint(response, cmd)) {
-                    return;
-                }
-                break;
+            // case 'Z':
+            //     if (TryAddBreakPoint(response, cmd)) {
+            //         return;
+            //     }
+            //     break;
+            // case 'z':
+            //     if (TryRemoveBreakPoint(response, cmd)) {
+            //         return;
+            //     }
+            //     break;
             case 's':
+                canNotifyBreak = true;
                 if (TryStep(cmd)) {
                     return;
                 }
                 break;
+            // case 'T':
+            //     GDBUtils.GDBMessage(response, "OK");
+            //     return;
+            // case 'H':
+            //     GDBUtils.GDBMessage(response, "OK");
+            //     return;
         }
 
         GDBUtils.GDBMessage(response, "");

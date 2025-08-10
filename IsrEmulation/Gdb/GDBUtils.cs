@@ -1,10 +1,6 @@
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Reflection.Metadata;
 using System.Text;
 
 public enum GDBMessageKind {
@@ -87,14 +83,14 @@ public static class GDBUtils {
     /// </summary>
     public static int EncodeHexUInt32LE(StringBuilder buf, uint value) {
         uint swapped = BinaryPrimitives.ReverseEndianness(value);
-        return EncodeHexUInt32BE(buf, value);
+        return EncodeHexUInt32BE(buf, swapped);
     }
 
     /// <summary>
     /// ビッグエンディアン ASCII 16進数に変換し、書き込んだ文字数(8)を返します。
     /// </summary>
     public static int EncodeHexUInt64BE(StringBuilder buf, ulong value) {
-        buf.Append($"{value:x64}");
+        buf.Append($"{value:x16}");
         return 8;
     }
 
@@ -103,7 +99,7 @@ public static class GDBUtils {
     /// </summary>
     public static int EncodeHexUInt64LE(StringBuilder buf, ulong value) {
         ulong swapped = BinaryPrimitives.ReverseEndianness(value);
-        return EncodeHexUInt64BE(buf, value);
+        return EncodeHexUInt64BE(buf, swapped);
     }
 
     /// <summary>
@@ -119,7 +115,7 @@ public static class GDBUtils {
         return buf.Length - prevSize;
     }
 
-    static bool TryParseHexToByte(char ch, [NotNullWhen(true)] out byte value) {
+    public static bool TryParseHexToByte(char ch, [NotNullWhen(true)] out byte value) {
         if (ch >= '0' && ch <= '9') {
             value = (byte)(ch - '0');
             return true;
@@ -333,24 +329,23 @@ public static class GDBUtils {
         }
     }
 
-    public static byte GDBChecksum(ReadOnlySpan<char> text, uint initialChecksum = 0) {
+    public static byte GDBChecksum(ReadOnlySpan<char> text, byte initialChecksum = 0) {
         unchecked {
-            uint checksum = initialChecksum;
+            byte checksum = initialChecksum;
             foreach (var c in text) {
-                checksum += c;
+                checksum += (byte)c;
             }
-            checksum &= 0xFF;
-            return (byte)checksum;
+            return checksum;
         }
     }
 
-    public static byte GDBChecksum(StringBuilder.ChunkEnumerator text, uint initialChecksum = 0) {
+    public static byte GDBChecksum(StringBuilder.ChunkEnumerator text, byte initialChecksum = 0) {
         unchecked {
-            uint checksum = initialChecksum;
+            byte checksum = initialChecksum;
             foreach (var xs in text) {
-                checksum += GDBChecksum(xs.Span, checksum);
+                checksum = GDBChecksum(xs.Span, checksum);
             }
-            return (byte)(checksum & 0xFF);
+            return checksum;
         }
     }
 

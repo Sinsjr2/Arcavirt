@@ -9,6 +9,8 @@ public interface IGdbStub {
 
     IGDBThread? ThreadObject { get; }
 
+    IGdbCustomCommand? GdbCustomCommandObject { get; }
+
     string TargetDescriptionXML { get; }
 
     event Action OnBreak;

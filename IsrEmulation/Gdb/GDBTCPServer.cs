@@ -15,8 +15,6 @@ public class GDBTCPServer {
 
     Action<object?, Func<object?, ValueTask>> runOnLoop;
 
-    readonly GdbPacketAnalizer packetAnalizer;
-
     public GDBTCPServer(
         Action<object?, Func<object?, ValueTask>> runOnLoop, ILogger logger, int port, IGdbStub targetStub) {
         this.runOnLoop = runOnLoop;
@@ -24,7 +22,6 @@ public class GDBTCPServer {
         this.socketServer = new TcpListener(IPAddress.Any, port);
         this.logger = logger;
         this.targetStub = targetStub;
-        this.packetAnalizer = new GdbPacketAnalizer(targetStub, logger);
     }
 
     public async ValueTask ConnectionLoop(CancellationToken token) {
@@ -47,8 +44,10 @@ public class GDBTCPServer {
         token.ThrowIfCancellationRequested();
         using var client = listner;
         using var scopedClient = client;
-        var stream = scopedClient.GetStream();
-        var communication = new StreamCommunication(stream, stream);
-        await packetAnalizer.CommandAnalizeLoop(communication, token);
+        using var stream = scopedClient.GetStream();
+        var packetAnalizer = new GdbPacketAnalizerCStubLike(targetStub, logger, runOnLoop, stream, stream);
+        // var communication = new StreamCommunication(stream, stream);
+        // await packetAnalizer.CommandAnalizeLoop(communicasttion, token);
+        await packetAnalizer.MessageLoop(token);
     }
 }
