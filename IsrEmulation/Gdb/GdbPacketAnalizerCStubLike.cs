@@ -805,20 +805,16 @@ public class GdbPacketAnalizerCStubLike {
                     response.Append("E00");
                     break;
                 }
-            // case 'Z':
-            //     if (TryAddBreakPoint(response, cmd)) {
-            //         return;
-            //     }
-            //     break;
-            // case 'z':
-            //     if (TryRemoveBreakPoint(response, cmd)) {
-            //         return;
-            //     }
-            //     break;
-            // case 's':
-            //     TryStep(cmd.AsMemory());
-            //     response.Append("S05");
-            //     break;
+            case 'Z':
+                if (TryAddBreakPoint(response, cmd.AsMemory())) {
+                    return;
+                }
+                break;
+            case 'z':
+                if (TryRemoveBreakPoint(response, cmd.AsMemory())) {
+                    return;
+                }
+                break;
             // case 'T':
             //     GDBUtils.GDBMessage(response, "OK");
             //     return;
