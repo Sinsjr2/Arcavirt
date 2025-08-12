@@ -232,12 +232,12 @@ public class ClockSelector : IClockFrequency, IDisposable {
         }
         this.currentSource = sourceNo;
         Name = name;
-        ChangeSource(sourceNo);
         this.inners = sources.Select((src, i) => {
             var inner = new Inner(this, i, src);
             src.OnChangedFrequency += inner.OnChangedSourceFrequency;
             return inner;
         }).ToArray();
+        ChangeSource(sourceNo);
     }
 
     /// <summary>
