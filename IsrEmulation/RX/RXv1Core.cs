@@ -1100,13 +1100,13 @@ namespace RX {
         }
 
         void OpRTSD(uint src) {
-            SP += src;
+            SP += src * 4;
             PC = Bus.Read(SP, 4);
             SP += 4;
         }
 
         void OpRTSD(uint src, uint dest, uint dest2) {
-            SP += src - (dest2 - dest + 1) * 4;
+            SP += (src * 4) - (dest2 - dest + 1) * 4;
             for (int i = (int)dest; i <= (int)dest2; i++) {
                 var tmp = Bus.Read(SP, 4);
                 SP += 4;

@@ -43,8 +43,8 @@ namespace RX {
             var movu_mr_ptr = new Composite(new LEUInt(2, 1, 1), new LEUInt(12, 4, 2), new LEUInt(8, 4, 2), new DisplacementValueFormatter(2, 0));
 
             var b1_bcnd_s = new Composite(new LEUInt(3, 1, 1), new LEUInt(0, 3, 1), new Skip(1));
-            var b2_bcnd_b = new Composite(new LEUInt(0, 4, 2), new LEUInt(8, 8, 2), new Skip(2));
-            var b3_bcnd_w = new Composite(new LEUInt(0, 1, 3), new LEUInt(8, 16, 3), new Skip(3));
+            var b2_bcnd_b = new Composite(new LEUInt(0, 4, 2), new LEInt(8, 8, 2), new Skip(2));
+            var b3_bcnd_w = new Composite(new LEUInt(0, 1, 1), new LEInt(8, 16, 3), new Skip(3));
 
             var b1_bra_s = new Composite(new LEUInt(0, 3, 1), new Skip(1));
             var b2_bra_b = new Composite(new LEInt(8, 8, 2), new Skip(2));

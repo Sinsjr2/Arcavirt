@@ -392,14 +392,14 @@ namespace RX {
             return Create(OpCode.BCnd_s, (uint)condition, src % 8u);
         }
 
-        public static Instruction32 BC_B(Cnd condition, byte src) =>
-            Create(OpCode.BCnd_b, (uint)condition, src);
+        public static Instruction32 BC_B(Cnd condition, sbyte src) =>
+            Create(OpCode.BCnd_b, (uint)condition, (uint)(int)src);
 
-        public static Instruction32 BC_W(Cnd condition, ushort src) {
+        public static Instruction32 BC_W(Cnd condition, short src) {
             if (!(condition is Cnd.EQ or Cnd.NE)) {
                 throw new ArgumentException($"actual: {condition}", nameof(condition));
             }
-            return Create(OpCode.BCnd_w, (uint)condition, src);
+            return Create(OpCode.BCnd_w, (uint)condition, (uint)(int)src);
         }
 
         public static Instruction32 BMC(Cnd condition, byte src, StdRegAddressing dest) {
@@ -957,11 +957,26 @@ namespace RX {
         public static readonly Instruction32 RTS =
             Create(OpCode.RTS);
 
-        public static Instruction32 RTSD(byte src) =>
-            Create(OpCode.RTSD_i, src);
+        public static Instruction32 RTSD(ushort src) {
+            if ((src % 4) != 0) {
+                throw new ArgumentException($"it must be a multiple of 4. actual: {src}");
+            }
+            if (!(src <= 255 * 4)) {
+                throw new ArgumentException($"range: 0 ~ {255 * 4}, actual: {src}");
+            }
+            return Create(OpCode.RTSD_i, src / 4u);
+        }
 
-        public static Instruction32 RTSD(byte src, Reg dest, Reg dest2) =>
-            Create(OpCode.RTSD_irr, (uint)dest, (uint)dest2, src);
+        public static Instruction32 RTSD(ushort src, Reg dest, Reg dest2) {
+            if ((src % 4) != 0) {
+                throw new ArgumentException($"it must be a multiple of 4. actual: {src}");
+            }
+            if (!(src <= 255 * 4)) {
+                throw new ArgumentException($"range: 0 ~ {255 * 4}, actual: {src}");
+            }
+
+            return Create(OpCode.RTSD_irr, (uint)dest, (uint)dest2, src / 4u);
+        }
 
         public static Instruction32 SAT(Reg dest) =>
             Create(OpCode.SAT, (uint)dest);

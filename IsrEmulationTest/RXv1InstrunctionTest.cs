@@ -629,60 +629,61 @@ public class RXv1InstrunctionTest {
     }
 
     [Test]
-    [TestCase(false, false, false, false,   4, Cnd.GEU, false)]
-    [TestCase( true, false, false, false,   4, Cnd.GEU,  true)]
-    [TestCase( true, false, false, false, 100, Cnd.GEU,  true)]
+    [TestCase(false, false, false, false, 4, Cnd.GEU, false)]
+    [TestCase(true, false, false, false, 4, Cnd.GEU, true)]
+    [TestCase(true, false, false, false, 100, Cnd.GEU, true)]
     [TestCase(false, false, false, false, 100, Cnd.GEU, false)]
-    [TestCase(false, false, false, false,  20, Cnd. EQ, false)]
-    [TestCase(false,  true, false, false,  20, Cnd. EQ,  true)]
-    [TestCase(false, false, false, false,  50, Cnd.GTU, false)]
-    [TestCase(false,  true, false, false,  50, Cnd.GTU, false)]
-    [TestCase( true,  true, false, false,  50, Cnd.GTU, false)]
-    [TestCase( true, false, false, false,  50, Cnd.GTU,  true)]
-    [TestCase(false, false, false, false,  70, Cnd. PZ,  true)]
-    [TestCase(false, false,  true, false,  70, Cnd. PZ, false)]
-    [TestCase(false, false, false, false,  90, Cnd. GE,  true)]
-    [TestCase(false, false,  true, false,  90, Cnd. GE, false)]
-    [TestCase(false, false, false,  true,  90, Cnd. GE, false)]
-    [TestCase(false, false,  true,  true,  90, Cnd. GE,  true)]
-    [TestCase(false, false, false, false, 110, Cnd. GT,  true)]
-    [TestCase(false,  true, false, false, 110, Cnd. GT, false)]
-    [TestCase(false, false,  true, false, 110, Cnd. GT, false)]
-    [TestCase(false, false, false,  true, 110, Cnd. GT, false)]
-    [TestCase(false,  true,  true, false, 110, Cnd. GT, false)]
-    [TestCase(false, false,  true,  true, 110, Cnd. GT,  true)]
-    [TestCase(false,  true, false,  true, 110, Cnd. GT, false)]
-    [TestCase(false,  true,  true,  true, 110, Cnd. GT, false)]
-    [TestCase(false, false, false, false, 130, Cnd. O,  false)]
-    [TestCase(false, false, false,  true, 130, Cnd. O,   true)]
+    [TestCase(false, false, false, false, 20, Cnd.EQ, false)]
+    [TestCase(false, true, false, false, 20, Cnd.EQ, true)]
+    [TestCase(false, false, false, false, 50, Cnd.GTU, false)]
+    [TestCase(false, true, false, false, 50, Cnd.GTU, false)]
+    [TestCase(true, true, false, false, 50, Cnd.GTU, false)]
+    [TestCase(true, false, false, false, 50, Cnd.GTU, true)]
+    [TestCase(false, false, false, false, 70, Cnd.PZ, true)]
+    [TestCase(false, false, true, false, 70, Cnd.PZ, false)]
+    [TestCase(false, false, false, false, 90, Cnd.GE, true)]
+    [TestCase(false, false, true, false, 90, Cnd.GE, false)]
+    [TestCase(false, false, false, true, 90, Cnd.GE, false)]
+    [TestCase(false, false, true, true, 90, Cnd.GE, true)]
+    [TestCase(false, false, false, false, 110, Cnd.GT, true)]
+    [TestCase(false, true, false, false, 110, Cnd.GT, false)]
+    [TestCase(false, false, true, false, 110, Cnd.GT, false)]
+    [TestCase(false, false, false, true, 110, Cnd.GT, false)]
+    [TestCase(false, true, true, false, 110, Cnd.GT, false)]
+    [TestCase(false, false, true, true, 110, Cnd.GT, true)]
+    [TestCase(false, true, false, true, 110, Cnd.GT, false)]
+    [TestCase(false, true, true, true, 110, Cnd.GT, false)]
+    [TestCase(false, false, false, false, 127, Cnd.O, false)]
+    [TestCase(false, false, false, true, 127, Cnd.O, true)]
 
-    [TestCase(false, false, false, false,   5, Cnd.LTU,  true)]
-    [TestCase( true, false, false, false,   5, Cnd.LTU, false)]
-    [TestCase( true, false, false, false,  15, Cnd.LTU, false)]
-    [TestCase(false, false, false, false,  15, Cnd.LTU,  true)]
-    [TestCase(false, false, false, false,  30, Cnd. NE,  true)]
-    [TestCase(false,  true, false, false,  30, Cnd. NE, false)]
-    [TestCase(false, false, false, false,  40, Cnd.LEU,  true)]
-    [TestCase(false,  true, false, false,  40, Cnd.LEU,  true)]
-    [TestCase( true,  true, false, false,  40, Cnd.LEU,  true)]
-    [TestCase( true, false, false, false,  40, Cnd.LEU, false)]
-    [TestCase(false, false, false, false,  60, Cnd.  N, false)]
-    [TestCase(false, false,  true, false,  60, Cnd.  N,  true)]
-    [TestCase(false, false, false, false,  99, Cnd. LE, false)]
-    [TestCase(false, false,  true, false,  99, Cnd. LE,  true)]
-    [TestCase(false, false, false,  true,  99, Cnd. LE,  true)]
-    [TestCase(false, false,  true,  true,  99, Cnd. LE, false)]
-    [TestCase(false,  true, false, false,  99, Cnd. LE,  true)]
-    [TestCase(false,  true,  true, false,  99, Cnd. LE,  true)]
-    [TestCase(false,  true, false,  true,  99, Cnd. LE,  true)]
-    [TestCase(false,  true,  true,  true,  99, Cnd. LE,  true)]
-    [TestCase(false, false, false, false, 111, Cnd. LT, false)]
-    [TestCase(false, false,  true, false, 111, Cnd. LT,  true)]
-    [TestCase(false, false, false,  true, 111, Cnd. LT,  true)]
-    [TestCase(false, false,  true,  true, 111, Cnd. LT, false)]
-    [TestCase(false, false, false, false, 255, Cnd. NO,  true)]
-    [TestCase(false, false, false,  true, 255, Cnd. NO, false)]
-
+    [TestCase(false, false, false, false, 5, Cnd.LTU, true)]
+    [TestCase(true, false, false, false, 5, Cnd.LTU, false)]
+    [TestCase(true, false, false, false, 15, Cnd.LTU, false)]
+    [TestCase(false, false, false, false, 15, Cnd.LTU, true)]
+    [TestCase(false, false, false, false, 30, Cnd.NE, true)]
+    [TestCase(false, true, false, false, 30, Cnd.NE, false)]
+    [TestCase(false, false, false, false, 40, Cnd.LEU, true)]
+    [TestCase(false, true, false, false, 40, Cnd.LEU, true)]
+    [TestCase(true, true, false, false, 40, Cnd.LEU, true)]
+    [TestCase(true, false, false, false, 40, Cnd.LEU, false)]
+    [TestCase(false, false, false, false, 60, Cnd.N, false)]
+    [TestCase(false, false, true, false, 60, Cnd.N, true)]
+    [TestCase(false, false, false, false, 99, Cnd.LE, false)]
+    [TestCase(false, false, true, false, 99, Cnd.LE, true)]
+    [TestCase(false, false, false, true, 99, Cnd.LE, true)]
+    [TestCase(false, false, true, true, 99, Cnd.LE, false)]
+    [TestCase(false, true, false, false, 99, Cnd.LE, true)]
+    [TestCase(false, true, true, false, 99, Cnd.LE, true)]
+    [TestCase(false, true, false, true, 99, Cnd.LE, true)]
+    [TestCase(false, true, true, true, 99, Cnd.LE, true)]
+    [TestCase(false, false, false, false, 111, Cnd.LT, false)]
+    [TestCase(false, false, true, false, 111, Cnd.LT, true)]
+    [TestCase(false, false, false, true, 111, Cnd.LT, true)]
+    [TestCase(false, false, true, true, 111, Cnd.LT, false)]
+    [TestCase(false, false, false, false, -1, Cnd.NO, true)]
+    [TestCase(false, false, false, true, -1, Cnd.NO, false)]
+    [TestCase(false, false, false, false, -128, Cnd.NO, true)]
+    [TestCase(false, false, false, true, -128, Cnd.NO, false)]
     public void BCnd_b_Test(
         bool psw_c, bool psw_z, bool psw_s, bool psw_o,
         int src, Cnd condition,
@@ -693,20 +694,21 @@ public class RXv1InstrunctionTest {
         cpu.PSW_z = psw_z;
         cpu.PSW_s = psw_s;
         cpu.PSW_o = psw_o;
-        RunOpcode(BC_B(condition, (byte)src));
+        RunOpcode(BC_B(condition, (sbyte)src));
 
         if (shouldJump) {
-            cpu.PC.Is(beforePC + (byte)src);
-        }
-        else {
+            cpu.PC.Is((uint)(beforePC + (sbyte)src));
+        } else {
             cpu.PC.Is(beforePC + 2);
         }
     }
 
-    [TestCase(false, false, false, false,  2999, Cnd. EQ, false)]
-    [TestCase(false,  true, false, false,  2999, Cnd. EQ,  true)]
-    [TestCase(false, false, false, false, 66666, Cnd. NE,  true)]
-    [TestCase(false,  true, false, false, 66666, Cnd. NE, false)]
+    [TestCase(false, false, false, false, 2999, Cnd.EQ, false)]
+    [TestCase(false, true, false, false, 2999, Cnd.EQ, true)]
+    [TestCase(false, false, false, false, 32767, Cnd.NE, true)]
+    [TestCase(false, true, false, false, 32767, Cnd.NE, false)]
+    [TestCase(false, false, false, false, -32768, Cnd.NE, true)]
+    [TestCase(false,  true, false, false, -32768, Cnd. NE, false)]
     public void BCnd_w_Test(
         bool psw_c, bool psw_z, bool psw_s, bool psw_o,
         int src, Cnd condition,
@@ -717,12 +719,11 @@ public class RXv1InstrunctionTest {
         cpu.PSW_z = psw_z;
         cpu.PSW_s = psw_s;
         cpu.PSW_o = psw_o;
-        RunOpcode(BC_W(condition, (ushort)src));
+        RunOpcode(BC_W(condition, (short)src));
 
         if (shouldJump) {
-            cpu.PC.Is(beforePC + (ushort)src);
-        }
-        else {
+            cpu.PC.Is((uint)(beforePC + (short)src));
+        } else {
             cpu.PC.Is(beforePC + 3);
         }
     }
@@ -3254,10 +3255,11 @@ public class RXv1InstrunctionTest {
 
     [Test]
     public void RTSD_i_Test([Random(5)]byte src, [Random(5)] uint pc) {
+        var value = src * 4u;
         cpu.SP -= 4;
         busManager.Write(cpu.SP, 4, pc);
-        cpu.SP -= src;
-        RunOpcode(RTSD(src));
+        cpu.SP -= value;
+        RunOpcode(RTSD((ushort)value));
         cpu.PC.Is(pc);
     }
 
@@ -3268,6 +3270,7 @@ public class RXv1InstrunctionTest {
         [Random(1, 15, 5)] byte regBegin,
         [Random(1, 14, 5)] byte length
         ) {
+        var value = src * 4u;
         var regEnd = Math.Min(15, regBegin + length);
 
         cpu.SP -= 4;
@@ -3285,8 +3288,8 @@ public class RXv1InstrunctionTest {
             busManager.Write(sp, 4, randomValues[i]);
         }
 
-        cpu.SP -= src;
-        RunOpcode(RTSD(src, (Reg)regBegin, (Reg)regEnd));
+        cpu.SP -= value;
+        RunOpcode(RTSD((ushort)value, (Reg)regBegin, (Reg)regEnd));
         cpu.PC.Is(pc);
         cpu.Registers.AsSpan(1).ToArray().Is(randomValues.AsSpan(1).ToArray());
     }
