@@ -414,6 +414,7 @@ public class CLOCKMapping {
 }
 public class CLOCKRX64MMapping {
     public CLOCKMapping Mapping { get; }
+    public CLOCK Clock { get; }
 
     public CLOCKRX64MMapping() {
         var obj = new CLOCK("CLOCK");
@@ -439,6 +440,7 @@ public class CLOCKRX64MMapping {
             new(CLOCKOffset.MOFCR, obj.MOFCR),
             new(CLOCKOffset.HOCOPCR, obj.HOCOPCR),
         };
+        Clock = obj;
         Mapping = new(mapping, obj);
     }
 }

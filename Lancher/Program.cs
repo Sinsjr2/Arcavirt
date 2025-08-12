@@ -1,17 +1,20 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using CPU;
 using Gdb;
 using GdbStub;
 using Microsoft.Extensions.Logging;
 using Peripheral.Renesas;
 using Pheripheral;
+using Renesas;
 using RX;
 
 namespace Lancher;
 
 public class Program {
     public static void Main(string[] args) {
-        using ILoggerFactory factory = LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Trace));
+        using ILoggerFactory factory = LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Information));
 
         var looper = new Looper(factory.CreateLogger("ChannelLooper"));
         var memory = new RAM32Bit("sram", 0x80000);
@@ -22,6 +25,14 @@ public class Program {
         var busManager = new BusManager();
         busManager.AddRangedAddressMapping(ramBeginAddress, ramEndAddress, memory);
         busManager.AddRangedAddressMapping(0x120000, 256, ofs);
+        var memoryMappings = new List<Register32MappingInfo>();
+        var clockMapping = new CLOCKRX64MMapping();
+        // HOCO 安定化完了をセット
+        clockMapping.Clock.OSCOVFSR.Value = 1 << 3;
+        memoryMappings.AddRange(clockMapping.Mapping.Mapping.Select(x => x with { Offset = x.Offset + 0x0008_0000 }));
+        foreach (var mapping in memoryMappings) {
+            busManager.AddMapping(mapping.Offset, mapping.Register);
+        }
         uint romEndAddress = 0xFFFFFFFF;
         uint romBeginAddress = romEndAddress + 1 - rom.MemorySize;
         busManager.AddRangedAddressMapping(romBeginAddress, romEndAddress, rom);
