@@ -11,7 +11,7 @@ public class InstructionLoop<TTarget> where TTarget : IInstructionStep {
 
     readonly Action execute;
 
-    public bool IsRunning { get; private set; } = false;
+    public bool IsRunning => !Target.Waiting;
 
     /// <summary>
     /// 一度の <see cref="Execute"/> の呼び出しで実行するクロック数 
@@ -32,7 +32,7 @@ public class InstructionLoop<TTarget> where TTarget : IInstructionStep {
     }
 
     public void Start() {
-        IsRunning = true;
+        Target.Start();
         runOnLoop(execute);
     }
 
@@ -57,6 +57,6 @@ public class InstructionLoop<TTarget> where TTarget : IInstructionStep {
     }
 
     public void Stop() {
-        IsRunning = false;
+        Target.Stop();
     }
 }

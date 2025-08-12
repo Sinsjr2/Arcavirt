@@ -16,5 +16,7 @@ public interface IInstructionStep {
     /// </summary>
     int NextStep();
 
+    void Start();
+
     void Stop();
 }
