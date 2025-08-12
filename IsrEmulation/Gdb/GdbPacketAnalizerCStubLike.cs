@@ -687,9 +687,7 @@ public class GdbPacketAnalizerCStubLike {
         } else if (data.Kind == GdbStubStateMachineOutputKind.OnReceivedStubRequest) {
             // 非同期であるので、重複して実行される可能性があるので、インスタンスを分ける
             var response = new StringBuilder();
-            Console.WriteLine("ExecuteStubCommand start");
             await ExecuteStubCommand(message, response, token);
-            Console.WriteLine("ExecuteStubCommand done");
             sendGdbPacketBuilder.Clear();
             var output = new GdbStubStateMachineOutput(GdbStubStateMachineOutputKind.None, sendGdbPacketBuilder);
             gdbStubStateMachine.Step(new GdbStubStateMachineInput(GdbStubStateMachineInputKind.OnCompleteStubRequest, string.Empty), ref output);
