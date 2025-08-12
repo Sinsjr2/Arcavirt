@@ -2231,7 +2231,6 @@ namespace RX {
             if (shouldIncrementPC) {
                 PC += opSize;
             }
-            // Console.WriteLine($"PC 0x{PC:X}");
         }
 
         public void Reset() {
