@@ -88,7 +88,7 @@ public class GdbCommunicator {
 
     bool nonAckMode = false;
 
-    int maxPayloadSize = 4096;
+    int maxPayloadSize = 16384;
 
     int retrySendMax = 3;
 
