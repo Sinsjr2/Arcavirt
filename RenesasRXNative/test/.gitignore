@@ -1,0 +1,8 @@
+# E2 Studio setting
+HardwareDebug/
+Release/
+trash/
+.settings/
+
+
+# End of https://www.toptal.com/developers/gitignore/api/e2studio,c
