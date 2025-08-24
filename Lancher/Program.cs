@@ -26,6 +26,12 @@ public class Program {
         busManager.AddRangedAddressMapping(ramBeginAddress, ramEndAddress, memory);
         busManager.AddRangedAddressMapping(0x120000, 256, ofs);
         var memoryMappings = new List<Register32MappingInfo>();
+
+        var iceDebug = new IceDebug();
+        memoryMappings.AddRange(
+            IceDebugMapping.CreateMapping(iceDebug)
+            .Select(x => x with { Offset = x.Offset + 0x8_4080}));
+
         var clockMapping = new CLOCKRX64MMapping();
         // HOCO 安定化完了をセット
         clockMapping.Clock.OSCOVFSR.Value = 1 << 3;
