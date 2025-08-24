@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Threading.Channels;
 using Gdb.BreakPoint;
@@ -666,8 +665,6 @@ public class GdbPacketAnalizerCStubLike {
         }
         if (0 < gdbPacketOutput.SendMessage.Length) {
             using (await ScopedLock.Lock(writeStreamLock, token)) {
-                // TODO 消すこと
-                Console.WriteLine($">> {gdbPacketOutput.SendMessage}");
                 await streamWriter.WriteAsync(gdbPacketOutput.SendMessage, token);
                 await streamWriter.FlushAsync(token);
             }
@@ -836,7 +833,7 @@ public class GdbPacketAnalizerCStubLike {
                 break;
             }
             // TODO 消すこと
-            Console.WriteLine($"<< {new string(rxBuffer.AsSpan(0, readLength))}");
+            //Console.WriteLine($"<< {new string(rxBuffer.AsSpan(0, readLength))}");
             for (int i = 0; i < readLength; i++) {
                 sendMessageBuilder.Clear();
                 receivedMessageBuilder.Clear();
