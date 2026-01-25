@@ -790,9 +790,6 @@ public class LogicSimulation {
                 new TargetConnection(targetPinInfo.executorIndex, new int[] { targetPinInfo.pinIndex })
             );
         }
-        
-        MarkAllInputPinChanged();
-        Step();
     }
 
     /// <summary>

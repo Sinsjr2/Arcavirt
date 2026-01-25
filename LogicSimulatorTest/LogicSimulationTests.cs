@@ -230,6 +230,8 @@ public class LogicSimulationTests {
             simulation.SetInput("set", 0, false);
             simulation.SetInput("reset", 0, true);
         }
+        // 初回実行で初期出力を生成する
+        simulation.MarkAllInputPinChanged();
         simulation.Step();
         // 前の出力が期待通り反映されていることを確認する
         Assert.That(simulation.GetOutput("outputQ", 0), Is.EqualTo(prevQ));
