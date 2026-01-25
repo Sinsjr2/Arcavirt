@@ -254,20 +254,20 @@ public struct LogicPinsWriter {
 
 public class AndLogicExecutorFactory : ILogicExecutorFactory<AndLogic> {
     class AndExecutor : ILogicExecutor {
-        public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
-            while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
-                int length = inputs.GetPinsLength(logicNo);
-                bool isAllTrue = true;
-                for (int i = 0; i < length; i++) {
-                    if (!inputs.ReadBit(logicNo, i)) {
-                        isAllTrue = false;
-                        break;
-                    }
+    public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
+        while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
+            int length = inputs.GetPinsLength(logicNo);
+            bool isAllTrue = true;
+            for (int i = 0; i < length; i++) {
+                if (!inputs.ReadBit(logicNo, i)) {
+                    isAllTrue = false;
+                    break;
                 }
-                outputs.WriteBit(logicNo, 0, isAllTrue);
             }
+            outputs.WriteBit(logicNo, 0, isAllTrue);
         }
     }
+}
 
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<AndLogic> node) {
         return new IOConnectorDefinition(
@@ -284,20 +284,20 @@ public class AndLogicExecutorFactory : ILogicExecutorFactory<AndLogic> {
 
 public class OrLogicExecutorFactory : ILogicExecutorFactory<OrLogic> {
     class OrLogicExecutor : ILogicExecutor {
-        public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
-            while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
-                int length = inputs.GetPinsLength(logicNo);
-                bool result = false;
-                for (int i = 0; i < length; i++) {
-                    if (inputs.ReadBit(logicNo, i)) {
-                        result = true;
-                        break;
-                    }
+    public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
+        while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
+            int length = inputs.GetPinsLength(logicNo);
+            bool result = false;
+            for (int i = 0; i < length; i++) {
+                if (inputs.ReadBit(logicNo, i)) {
+                    result = true;
+                    break;
                 }
-                outputs.WriteBit(logicNo, 0, result);
             }
+            outputs.WriteBit(logicNo, 0, result);
         }
     }
+}
 
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<OrLogic> node) {
         return new IOConnectorDefinition(
@@ -314,13 +314,13 @@ public class OrLogicExecutorFactory : ILogicExecutorFactory<OrLogic> {
 
 public class NotLogicExecutorFactory : ILogicExecutorFactory<NotLogic> {
     class NotLogicExecutor : ILogicExecutor {
-        public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
-            while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
-                bool input = inputs.ReadBit(logicNo, 0);
-                outputs.WriteBit(logicNo, 0, !input);
-            }
+    public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
+        while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
+            bool input = inputs.ReadBit(logicNo, 0);
+            outputs.WriteBit(logicNo, 0, !input);
         }
     }
+}
 
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<NotLogic> node) {
         return new IOConnectorDefinition(
@@ -337,20 +337,20 @@ public class NotLogicExecutorFactory : ILogicExecutorFactory<NotLogic> {
 
 public class NAndLogicExecutorFactory : ILogicExecutorFactory<NAndLogic> {
     class NAndLogicExecutor : ILogicExecutor {
-        public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
-            while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
-                int length = inputs.GetPinsLength(logicNo);
-                bool isAllTrue = true;
-                for (int i = 0; i < length; i++) {
-                    if (!inputs.ReadBit(logicNo, i)) {
-                        isAllTrue = false;
-                        break;
-                    }
+    public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
+        while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
+            int length = inputs.GetPinsLength(logicNo);
+            bool isAllTrue = true;
+            for (int i = 0; i < length; i++) {
+                if (!inputs.ReadBit(logicNo, i)) {
+                    isAllTrue = false;
+                    break;
                 }
-                outputs.WriteBit(logicNo, 0, !isAllTrue);
             }
+            outputs.WriteBit(logicNo, 0, !isAllTrue);
         }
     }
+}
 
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<NAndLogic> node) {
         return new IOConnectorDefinition(
@@ -367,20 +367,20 @@ public class NAndLogicExecutorFactory : ILogicExecutorFactory<NAndLogic> {
 
 public class NOrLogicExecutorFactory : ILogicExecutorFactory<NOrLogic> {
     class NOrLogicExecutor : ILogicExecutor {
-        public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
-            while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
-                int length = inputs.GetPinsLength(logicNo);
-                bool isAnyTrue = false;
-                for (int i = 0; i < length; i++) {
-                    if (inputs.ReadBit(logicNo, i)) {
-                        isAnyTrue = true;
-                        break;
-                    }
+    public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
+        while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
+            int length = inputs.GetPinsLength(logicNo);
+            bool isAnyTrue = false;
+            for (int i = 0; i < length; i++) {
+                if (inputs.ReadBit(logicNo, i)) {
+                    isAnyTrue = true;
+                    break;
                 }
-                outputs.WriteBit(logicNo, 0, !isAnyTrue);
             }
+            outputs.WriteBit(logicNo, 0, !isAnyTrue);
         }
     }
+}
 
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<NOrLogic> node) {
         return new IOConnectorDefinition(
@@ -397,17 +397,17 @@ public class NOrLogicExecutorFactory : ILogicExecutorFactory<NOrLogic> {
 
 public class XOrLogicExecutorFactory : ILogicExecutorFactory<XOrLogic> {
     class XOrLogicExecutor : ILogicExecutor {
-        public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
-            while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
-                int length = inputs.GetPinsLength(logicNo);
-                bool result = false;
-                for (int i = 0; i < length; i++) {
-                    result ^= inputs.ReadBit(logicNo, i);
-                }
-                outputs.WriteBit(logicNo, 0, result);
+    public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
+        while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
+            int length = inputs.GetPinsLength(logicNo);
+            bool result = false;
+            for (int i = 0; i < length; i++) {
+                result ^= inputs.ReadBit(logicNo, i);
             }
+            outputs.WriteBit(logicNo, 0, result);
         }
     }
+}
 
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<XOrLogic> node) {
         return new IOConnectorDefinition(
@@ -740,7 +740,7 @@ public class LogicSimulation {
         }
 
         executorContexts = executorList.ToArray();
-        
+
         // LogicIDとPinNameからExecutorContext内のピンの全体インデックスへのマッピング
         logicIdAndPinNameToPinIndex = new Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>>();
 
@@ -790,6 +790,9 @@ public class LogicSimulation {
                 new TargetConnection(targetPinInfo.executorIndex, new int[] { targetPinInfo.pinIndex })
             );
         }
+        
+        MarkAllInputPinChanged();
+        Step();
     }
 
     /// <summary>

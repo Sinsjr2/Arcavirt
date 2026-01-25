@@ -194,8 +194,8 @@ public class LogicSimulationTests {
     [TestCase(false, false, false, false)] // 出力:保持
     [TestCase(true , false, true , false)] // 出力:0
     [TestCase(false, false, true , false)] // 出力:0
-    [TestCase(true , true , false, false)] // 出力:1
-    [TestCase(false, true , false, false)] // 出力:1
+    [TestCase(true , true , false, true )] // 出力:1 (Set状態)
+    [TestCase(false, true , false, true )] // 出力:1 (Set状態)
     // 回路が発振したときの無限ループ対策
     [CancelAfter(1000)]
     public void NandSrFFLatchSimulationTest(bool prevQ, bool set, bool reset, bool expectedQ) {
@@ -240,5 +240,247 @@ public class LogicSimulationTests {
         simulation.Step();
         Assert.That(simulation.GetOutput("outputQ", 0), Is.EqualTo(expectedQ));
         Assert.That(simulation.GetOutput("outputQnot", 0), Is.EqualTo(!expectedQ));
+    }
+
+    /// <summary>
+    /// 1つの出力ピンから複数の入力ピンに状態が正しくコピーされることを確認するテスト
+    /// </summary>
+    [Test]
+    public void MultipleConnectionCopyTest() {
+        // 1つのOR素子の出力を3つの異なる素子の入力に接続する複数接続テスト
+        var nodes = new LogicNode[] {
+            new("input", new InputConnector(1)),
+            new("or1", new OrLogic(1)),
+            new("and1", new AndLogic(2)),
+            new("and2", new AndLogic(2)),
+            new("and3", new AndLogic(2)),
+            new("outputA", new OutputConnector(1)),
+            new("outputB", new OutputConnector(1)),
+            new("outputC", new OutputConnector(1))
+        };
+
+        var connections = new LogicConnection[] {
+            // 入力 → OR[0]
+            new(new LogicConnector("input", "out"), new LogicConnector("or1", "in[0]")),
+            
+            // OR出力 → 複数のAND素子の入力[0]（複数接続）
+            new(new LogicConnector("or1", "out"), new LogicConnector("and1", "in[0]")),
+            new(new LogicConnector("or1", "out"), new LogicConnector("and2", "in[0]")),
+            new(new LogicConnector("or1", "out"), new LogicConnector("and3", "in[0]")),
+            
+            // 入力をAND素子の入力[1]にも接続（全ANDが同じ入力を受け取る）
+            new(new LogicConnector("input", "out"), new LogicConnector("and1", "in[1]")),
+            new(new LogicConnector("input", "out"), new LogicConnector("and2", "in[1]")),
+            new(new LogicConnector("input", "out"), new LogicConnector("and3", "in[1]")),
+            
+            // AND出力 → 出力コネクタ
+            new(new LogicConnector("and1", "out"), new LogicConnector("outputA", "in")),
+            new(new LogicConnector("and2", "out"), new LogicConnector("outputB", "in")),
+            new(new LogicConnector("and3", "out"), new LogicConnector("outputC", "in"))
+        };
+
+        var simulation = new LogicSimulation(nodes, connections);
+
+        // ステップ1: 入力=FALSE で初期化
+        simulation.SetInput("input", 0, false);
+        simulation.Step();
+        
+        bool outA1 = simulation.GetOutput("outputA", 0);
+        bool outB1 = simulation.GetOutput("outputB", 0);
+        bool outC1 = simulation.GetOutput("outputC", 0);
+
+        Assert.That(outA1, Is.EqualTo(false));
+        Assert.That(outB1, Is.EqualTo(false));
+        Assert.That(outC1, Is.EqualTo(false));
+
+        // ステップ2: 入力=TRUE に変更
+        simulation.SetInput("input", 0, true);
+        simulation.Step();
+
+        // すべての出力がTRUEであることを確認（複数接続がすべて正しくコピーされたことを検証）
+        Assert.That(simulation.GetOutput("outputA", 0), Is.EqualTo(true));
+        Assert.That(simulation.GetOutput("outputB", 0), Is.EqualTo(true));
+        Assert.That(simulation.GetOutput("outputC", 0), Is.EqualTo(true));
+    }
+}
+
+/// <summary>
+/// LogicPinReader 単体テスト
+/// 入力ピンの変化検出と素子番号の取得機能を検証
+/// </summary>
+[TestFixture]
+public class LogicPinReaderTests {
+    [Test]
+    public void ReadBit_ReturnsCorrectPinValue() {
+        // Arrange: 基本的なLogicPinsを作成
+        var pins = new LogicPins {
+            Pins = new[] { true, false, true, false },
+            NumOfPins = new[] { (0, 2), (2, 2) },
+            PinNumberToLogicNumber = new[] { 0, 0, 1, 1 }
+        };
+
+        var changedPins = new List<int> { 0, 2 };
+        var isExecutedLogicNumbers = new[] { false, false };
+
+        var reader = new LogicPinReader(pins, changedPins, isExecutedLogicNumbers, 0);
+
+        Assert.That(reader.ReadBit(0, 0), Is.EqualTo(true));
+        Assert.That(reader.ReadBit(0, 1), Is.EqualTo(false));
+        Assert.That(reader.ReadBit(1, 0), Is.EqualTo(true));
+        Assert.That(reader.ReadBit(1, 1), Is.EqualTo(false));
+    }
+
+    [Test]
+    public void GetPinsLength_ReturnsCorrectLength() {
+        // Arrange
+        var pins = new LogicPins {
+            Pins = new[] { true, false, true },
+            NumOfPins = new[] { (0, 2), (2, 1) },
+            PinNumberToLogicNumber = new[] { 0, 0, 1 }
+        };
+
+        var reader = new LogicPinReader(pins, new List<int>(), new[] { false, false }, 0);
+
+        Assert.That(reader.GetPinsLength(0), Is.EqualTo(2));
+        Assert.That(reader.GetPinsLength(1), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void TryGetNextChangedLogicNumber_ReturnsChangedLogicNumbers() {
+        // Logic 0のPin 0, Logic 1のPin 0が変化した
+        var pins = new LogicPins {
+            Pins = new[] { true, false, true, false },
+            NumOfPins = new[] { (0, 2), (2, 2) },
+            PinNumberToLogicNumber = new[] { 0, 0, 1, 1 }
+        };
+
+        var changedPins = new List<int> { 0, 2 }; // Logic 0のPin 0, Logic 1のPin 0
+        var isExecutedLogicNumbers = new[] { false, false };
+
+        var reader = new LogicPinReader(pins, changedPins, isExecutedLogicNumbers, 0);
+
+        Assert.That(reader.TryGetNextChangedLogicNumber(out int firstLogicNo), Is.True);
+        Assert.That(firstLogicNo, Is.EqualTo(0));
+        
+        Assert.That(reader.TryGetNextChangedLogicNumber(out int secondLogicNo), Is.True);
+        Assert.That(secondLogicNo, Is.EqualTo(1));
+        Assert.That(reader.TryGetNextChangedLogicNumber(out int thirdLogicNo), Is.False);
+    }
+
+    [Test]
+    public void TryGetNextChangedLogicNumber_SkipsDuplicates() {
+        // Arrange: Logic 0のPin 0と1が両方変化（Logic 0は1回だけ返す）
+        var pins = new LogicPins {
+            Pins = new[] { true, false, true },
+            NumOfPins = new[] { (0, 2), (2, 1) },
+            PinNumberToLogicNumber = new[] { 0, 0, 1 }
+        };
+
+        var changedPins = new List<int> { 0, 1 }; // Logic 0の両方のピン
+        var isExecutedLogicNumbers = new[] { false, false };
+
+        var reader = new LogicPinReader(pins, changedPins, isExecutedLogicNumbers, 0);
+
+        Assert.That(reader.TryGetNextChangedLogicNumber(out int firstLogicNo), Is.True);
+        Assert.That(firstLogicNo, Is.EqualTo(0));
+        Assert.That(reader.TryGetNextChangedLogicNumber(out int secondLogicNo), Is.False);
+    }
+}
+
+/// <summary>
+/// LogicPinsWriter 単体テスト
+/// ピンへの書き込みと変更追跡機能を検証
+/// </summary>
+[TestFixture]
+public class LogicPinsWriterTests {
+    [Test]
+    public void WriteBit_UpdatesPinValue() {
+        // Arrange
+        var pins = new LogicPins {
+            Pins = new[] { false, false, false, false },
+            NumOfPins = new[] { (0, 2), (2, 2) },
+            PinNumberToLogicNumber = new[] { 0, 0, 1, 1 }
+        };
+
+        var changedPins = new List<int>();
+        var writer = new LogicPinsWriter(pins, changedPins);
+
+        writer.WriteBit(0, 0, true);
+        writer.WriteBit(1, 1, true);
+
+        Assert.That(pins.Pins[0], Is.True);
+        Assert.That(pins.Pins[1], Is.False);
+        Assert.That(pins.Pins[2], Is.False);
+        Assert.That(pins.Pins[3], Is.True);
+    }
+
+    [Test]
+    public void WriteBit_TracksChangedPins() {
+        // Arrange
+        var pins = new LogicPins {
+            Pins = new[] { false, false },
+            NumOfPins = new[] { (0, 2) },
+            PinNumberToLogicNumber = new[] { 0, 0 }
+        };
+
+        var changedPins = new List<int>();
+        var writer = new LogicPinsWriter(pins, changedPins);
+
+        writer.WriteBit(0, 0, true);  // 変更あり
+        writer.WriteBit(0, 1, false); // 変更なし（既にfalse）
+        writer.WriteBit(0, 0, false); // 変更あり
+
+        Assert.That(changedPins.Count, Is.EqualTo(2));
+        Assert.That(changedPins[0], Is.EqualTo(0));
+        Assert.That(changedPins[1], Is.EqualTo(0));
+    }
+
+    [Test]
+    public void GetPinsLength_ReturnsCorrectLength() {
+        var pins = new LogicPins {
+            Pins = new[] { false, false, false },
+            NumOfPins = new[] { (0, 2), (2, 1) },
+            PinNumberToLogicNumber = new[] { 0, 0, 1 }
+        };
+
+        var writer = new LogicPinsWriter(pins, new List<int>());
+
+        Assert.That(writer.GetPinsLength(0), Is.EqualTo(2));
+        Assert.That(writer.GetPinsLength(1), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void ReadBit_ReturnsCurrentValue() {
+        var pins = new LogicPins {
+            Pins = new[] { true, false },
+            NumOfPins = new[] { (0, 2) },
+            PinNumberToLogicNumber = new[] { 0, 0 }
+        };
+
+        var writer = new LogicPinsWriter(pins, new List<int>());
+
+        Assert.That(writer.ReadBit(0, 0), Is.True);
+        Assert.That(writer.ReadBit(0, 1), Is.False);
+    }
+
+    [Test]
+    public void WriteBit_MultipleWrites_TrackEachChange() {
+        var pins = new LogicPins {
+            Pins = new[] { false, false, false, false },
+            NumOfPins = new[] { (0, 2), (2, 2) },
+            PinNumberToLogicNumber = new[] { 0, 0, 1, 1 }
+        };
+
+        var changedPins = new List<int>();
+        var writer = new LogicPinsWriter(pins, changedPins);
+
+        // 複数の異なるピンに書き込み
+        writer.WriteBit(0, 0, true);
+        writer.WriteBit(0, 1, true);
+        writer.WriteBit(1, 0, true);
+        writer.WriteBit(1, 1, true);
+
+        Assert.That(changedPins.Count, Is.EqualTo(4));
+        Assert.That(pins.Pins.All(p => p), Is.True);
     }
 }
