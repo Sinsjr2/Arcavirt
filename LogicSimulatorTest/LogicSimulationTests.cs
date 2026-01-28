@@ -244,6 +244,68 @@ public class LogicSimulationTests {
         Assert.That(simulation.GetOutput("outputQnot", 0), Is.EqualTo(!expectedQ));
     }
 
+    public void JKFFMasterSlavePresetClear(bool pre_, bool j, bool k, bool clk, bool clr) {
+        var nodes = new LogicNode[] {
+            new("~PRE~", new InputConnector(1)),
+            new("J", new InputConnector(1)),
+            new("K", new InputConnector(1)),
+            new("CLK", new InputConnector(1)),
+            new("~CLR~", new InputConnector(1)),
+            new("and1", new AndLogic(2)),
+            new("and2", new AndLogic(2)),
+            new("and3", new AndLogic(2)),
+            new("and4", new AndLogic(2)),
+            new("and5", new AndLogic(2)),
+            new("and6", new AndLogic(2)),
+            new("nand1", new NAndLogic(2)),
+            new("nand2", new NAndLogic(2)),
+            new("nand3", new NAndLogic(2)),
+            new("nand4", new NAndLogic(2)),
+            new("nand5", new NAndLogic(2)),
+            new("nand6", new NAndLogic(2)),
+            new("nand7", new NAndLogic(2)),
+            new("nand8", new NAndLogic(2)),
+            new("not1", new NotLogic()),
+            new("Q", new OutputConnector(1)),
+            new("~Q~", new OutputConnector(1))
+        };
+        var connections = new LogicConnection[] {
+            new(new LogicConnector("~PRE~", "out"), new LogicConnector("and3", "in[0]")),
+            new(new LogicConnector("~PRE~", "out"), new LogicConnector("and5", "in[0]")),
+            new(new LogicConnector("J", "out"), new LogicConnector("and1", "in[0]")),
+            new(new LogicConnector("K", "out"), new LogicConnector("and2", "in[0]")),
+            new(new LogicConnector("CLK", "out"), new LogicConnector("and1", "in[1]")),
+            new(new LogicConnector("CLK", "out"), new LogicConnector("and2", "in[1]")),
+            new(new LogicConnector("CLK", "out"), new LogicConnector("not1", "in")),
+            new(new LogicConnector("not1", "out"), new LogicConnector("nand5", "in[1]")),
+            new(new LogicConnector("not1", "out"), new LogicConnector("nand6", "in[0]")),
+            new(new LogicConnector("~CLR~", "out"), new LogicConnector("and4", "in[1]")),
+            new(new LogicConnector("~CLR~", "out"), new LogicConnector("and6", "in[1]")),
+            new(new LogicConnector("and1", "out"), new LogicConnector("nand1", "in[1]")),
+            new(new LogicConnector("and2", "out"), new LogicConnector("nand2", "in[0]")),
+            new(new LogicConnector("nand1", "out"), new LogicConnector("and3", "in[1]")),
+            new(new LogicConnector("and3", "out"), new LogicConnector("nand3", "in[0]")),
+            new(new LogicConnector("nand2", "out"), new LogicConnector("and4", "in[0]")),
+            new(new LogicConnector("and4", "out"), new LogicConnector("nand4", "in[1]")),
+            new(new LogicConnector("nand3", "out"), new LogicConnector("nand4", "in[0]")),
+            new(new LogicConnector("nand3", "out"), new LogicConnector("nand5", "in[0]")),
+            new(new LogicConnector("nand4", "out"), new LogicConnector("nand3", "in[1]")),
+            new(new LogicConnector("nand4", "out"), new LogicConnector("nand6", "in[1]")),
+            new(new LogicConnector("nand5", "out"), new LogicConnector("and5", "in[1]")),
+            new(new LogicConnector("nand6", "out"), new LogicConnector("and6", "in[0]")),
+            new(new LogicConnector("and5", "out"), new LogicConnector("nand7", "in[0]")),
+            new(new LogicConnector("and6", "out"), new LogicConnector("nand8", "in[1]")),
+            new(new LogicConnector("nand7", "out"), new LogicConnector("Q", "in")),
+            new(new LogicConnector("nand7", "out"), new LogicConnector("nand8", "in[0]")),
+            new(new LogicConnector("nand7", "out"), new LogicConnector("and2", "in[1]")),
+            new(new LogicConnector("nand8", "out"), new LogicConnector("~Q~", "in")),
+            new(new LogicConnector("nand8", "out"), new LogicConnector("nand7", "in[1]")),
+            new(new LogicConnector("nand8", "out"), new LogicConnector("nand1", "in[0]")),
+        };
+
+        var simulation = new LogicSimulation(nodes, connections);
+    }
+
     /// <summary>
     /// 1つの出力ピンから複数の入力ピンに状態が正しくコピーされることを確認するテスト
     /// </summary>
