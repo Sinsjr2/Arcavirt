@@ -110,10 +110,36 @@ public interface ILogicExecutor {
 }
 
 /// <summary>
+/// 論理回路で使用する信号を表します。
+/// </summary>
+public enum LogicSignal : byte {
+    /// <summary>
+    /// 不定
+    /// </summary>
+    X,
+    /// <summary>
+    /// ロー信号
+    /// </summary>
+    Low,
+    /// <summary>
+    /// ハイ信号
+    /// </summary>
+    High,
+}
+
+public static class LogicSignalExtensions {
+    public static LogicSignal ToSignal(this bool value) =>
+        value ? LogicSignal.High : LogicSignal.Low;
+}
+
+/// <summary>
 /// 複数の素子の複数のピンをあわらします。
 /// </summary>
 public struct LogicPins {
-    public bool[] Pins;
+    /// <summary>
+    /// ピンの信号
+    /// </summary>
+    public LogicSignal[] Pins;
 
     /// <summary>
     /// ピン番号から素子を識別できる番号に変換するためのテーブル
@@ -144,7 +170,7 @@ public struct LogicPins {
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool ReadBit(int logicNumber, int pinNumber) {
+    public LogicSignal ReadBit(int logicNumber, int pinNumber) {
         var num = NumOfPins[logicNumber];
         if (num.length <= pinNumber) {
             throw new IndexOutOfRangeException($"length: {num.length}, actual: {pinNumber}");
@@ -157,7 +183,7 @@ public struct LogicPins {
     /// 今回書き込んだ値と変化したかどうかを返します。
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool WriteBit(int logicNumber, int pinNumber, bool value) {
+    public bool WriteBit(int logicNumber, int pinNumber, LogicSignal value) {
         var num = NumOfPins[logicNumber];
         if (num.length <= pinNumber) {
             throw new IndexOutOfRangeException($"length: {num.length}, actual: {pinNumber}");
@@ -200,7 +226,7 @@ public struct LogicPinReader {
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool ReadBit(int logicNumber, int pinNumber) {
+    public LogicSignal ReadBit(int logicNumber, int pinNumber) {
         return targetPins.ReadBit(logicNumber, pinNumber);
     }
 
@@ -240,12 +266,12 @@ public struct LogicPinsWriter {
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool ReadBit(int logicNumber, int pinNumber) {
+    public LogicSignal ReadBit(int logicNumber, int pinNumber) {
         return targetPins.ReadBit(logicNumber, pinNumber);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void WriteBit(int logicNumber, int pinNumber, bool value) {
+    public void WriteBit(int logicNumber, int pinNumber, LogicSignal value) {
         if (targetPins.WriteBit(logicNumber, pinNumber, value)) {
             valueChangedPins.Add(targetPins.GetPinIndex(logicNumber, pinNumber));
         }
@@ -254,20 +280,33 @@ public struct LogicPinsWriter {
 
 public class AndLogicExecutorFactory : ILogicExecutorFactory<AndLogic> {
     class AndExecutor : ILogicExecutor {
-    public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
-        while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
-            int length = inputs.GetPinsLength(logicNo);
-            bool isAllTrue = true;
-            for (int i = 0; i < length; i++) {
-                if (!inputs.ReadBit(logicNo, i)) {
-                    isAllTrue = false;
-                    break;
+        public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
+            while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
+                int length = inputs.GetPinsLength(logicNo);
+                bool hasUnknownSignal = false;
+                bool shouldProcess = true;
+                for (int i = 0; shouldProcess && i < length; i++) {
+                    var signal = inputs.ReadBit(logicNo, i);
+                    switch (signal) {
+                        case LogicSignal.Low:
+                            // 1つでもLow があった場合は、入力が不定でも出力は常にLow
+                            outputs.WriteBit(logicNo, 0, LogicSignal.Low);
+                            shouldProcess = false;
+                            break;
+                        case LogicSignal.High:// 計算する必要は無いが、最適化(ルックアップテーブル生成)のために設けている
+                            break;
+                        case LogicSignal.X:
+                            hasUnknownSignal = true;
+                            break;
+                    }
+                }
+                if (shouldProcess) {
+                    var output = hasUnknownSignal ? LogicSignal.X : LogicSignal.High;
+                    outputs.WriteBit(logicNo, 0, output);
                 }
             }
-            outputs.WriteBit(logicNo, 0, isAllTrue);
         }
     }
-}
 
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<AndLogic> node) {
         return new IOConnectorDefinition(
@@ -284,20 +323,33 @@ public class AndLogicExecutorFactory : ILogicExecutorFactory<AndLogic> {
 
 public class OrLogicExecutorFactory : ILogicExecutorFactory<OrLogic> {
     class OrLogicExecutor : ILogicExecutor {
-    public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
-        while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
-            int length = inputs.GetPinsLength(logicNo);
-            bool result = false;
-            for (int i = 0; i < length; i++) {
-                if (inputs.ReadBit(logicNo, i)) {
-                    result = true;
-                    break;
+        public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
+            while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
+                int length = inputs.GetPinsLength(logicNo);
+                bool hasUnknownSignal = false;
+                bool shouldProcess = true;
+                for (int i = 0; shouldProcess && i < length; i++) {
+                    var signal = inputs.ReadBit(logicNo, i);
+                    switch (signal) {
+                        case LogicSignal.Low: // 計算する必要は無いが、最適化(ルックアップテーブル生成)のために設けている
+                            break;
+                        case LogicSignal.High:
+                            // 1つでもHigh があった場合は、入力が不定でも出力は常にHigh
+                            outputs.WriteBit(logicNo, 0, LogicSignal.High);
+                            shouldProcess = false;
+                            break;
+                        case LogicSignal.X:
+                            hasUnknownSignal = true;
+                            break;
+                    }
+                }
+                if (shouldProcess) {
+                    var output = hasUnknownSignal ? LogicSignal.X : LogicSignal.Low;  
+                    outputs.WriteBit(logicNo, 0, output);
                 }
             }
-            outputs.WriteBit(logicNo, 0, result);
         }
     }
-}
 
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<OrLogic> node) {
         return new IOConnectorDefinition(
@@ -314,13 +366,18 @@ public class OrLogicExecutorFactory : ILogicExecutorFactory<OrLogic> {
 
 public class NotLogicExecutorFactory : ILogicExecutorFactory<NotLogic> {
     class NotLogicExecutor : ILogicExecutor {
-    public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
-        while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
-            bool input = inputs.ReadBit(logicNo, 0);
-            outputs.WriteBit(logicNo, 0, !input);
+        public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
+            while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
+                var input = inputs.ReadBit(logicNo, 0);
+                var output = input switch {
+                    LogicSignal.Low => LogicSignal.High,
+                    LogicSignal.High => LogicSignal.Low,
+                    _ => input
+                };
+                outputs.WriteBit(logicNo, 0, output);
+            }
         }
     }
-}
 
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<NotLogic> node) {
         return new IOConnectorDefinition(
@@ -337,20 +394,33 @@ public class NotLogicExecutorFactory : ILogicExecutorFactory<NotLogic> {
 
 public class NAndLogicExecutorFactory : ILogicExecutorFactory<NAndLogic> {
     class NAndLogicExecutor : ILogicExecutor {
-    public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
-        while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
-            int length = inputs.GetPinsLength(logicNo);
-            bool isAllTrue = true;
-            for (int i = 0; i < length; i++) {
-                if (!inputs.ReadBit(logicNo, i)) {
-                    isAllTrue = false;
-                    break;
+        public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
+            while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
+                int length = inputs.GetPinsLength(logicNo);
+                bool hasUnknownSignal = false;
+                bool shouldProcess = true;
+                for (int i = 0; shouldProcess && i < length; i++) {
+                    var signal = inputs.ReadBit(logicNo, i);
+                    switch (signal) {
+                        case LogicSignal.Low:
+                            // 1つでもLow があった場合は、入力が不定でも出力は常にHigh
+                            outputs.WriteBit(logicNo, 0, LogicSignal.High);
+                            shouldProcess = false;
+                            break;
+                        case LogicSignal.High:// 計算する必要は無いが、最適化(ルックアップテーブル生成)のために設けている
+                            break;
+                        case LogicSignal.X:
+                            hasUnknownSignal = true;
+                            break;
+                    }
+                }
+                if (shouldProcess) {
+                    var output = hasUnknownSignal ? LogicSignal.X : LogicSignal.Low;
+                    outputs.WriteBit(logicNo, 0, output);
                 }
             }
-            outputs.WriteBit(logicNo, 0, !isAllTrue);
         }
     }
-}
 
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<NAndLogic> node) {
         return new IOConnectorDefinition(
@@ -367,20 +437,33 @@ public class NAndLogicExecutorFactory : ILogicExecutorFactory<NAndLogic> {
 
 public class NOrLogicExecutorFactory : ILogicExecutorFactory<NOrLogic> {
     class NOrLogicExecutor : ILogicExecutor {
-    public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
-        while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
-            int length = inputs.GetPinsLength(logicNo);
-            bool isAnyTrue = false;
-            for (int i = 0; i < length; i++) {
-                if (inputs.ReadBit(logicNo, i)) {
-                    isAnyTrue = true;
-                    break;
+        public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
+            while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
+                int length = inputs.GetPinsLength(logicNo);
+                bool hasUnknownSignal = false;
+                bool shouldProcess = true;
+                for (int i = 0; shouldProcess && i < length; i++) {
+                    var signal = inputs.ReadBit(logicNo, i);
+                    switch (signal) {
+                        case LogicSignal.Low: // 計算する必要は無いが、最適化(ルックアップテーブル生成)のために設けている
+                            break;
+                        case LogicSignal.High:
+                            // 1つでもHigh があった場合は、入力が不定でも出力は常にLow
+                            outputs.WriteBit(logicNo, 0, LogicSignal.Low);
+                            shouldProcess = false;
+                            break;
+                        case LogicSignal.X:
+                            hasUnknownSignal = true;
+                            break;
+                    }
+                }
+                if (shouldProcess) {
+                    var output = hasUnknownSignal ? LogicSignal.X : LogicSignal.High;  
+                    outputs.WriteBit(logicNo, 0, output);
                 }
             }
-            outputs.WriteBit(logicNo, 0, !isAnyTrue);
         }
     }
-}
 
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<NOrLogic> node) {
         return new IOConnectorDefinition(
@@ -397,17 +480,35 @@ public class NOrLogicExecutorFactory : ILogicExecutorFactory<NOrLogic> {
 
 public class XOrLogicExecutorFactory : ILogicExecutorFactory<XOrLogic> {
     class XOrLogicExecutor : ILogicExecutor {
-    public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
-        while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
-            int length = inputs.GetPinsLength(logicNo);
-            bool result = false;
-            for (int i = 0; i < length; i++) {
-                result ^= inputs.ReadBit(logicNo, i);
+        public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
+            while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
+                int length = inputs.GetPinsLength(logicNo);
+                bool shouldProcess = true;
+                bool result = false;
+                for (int i = 0; shouldProcess && i < length; i++) {
+                    var input = inputs.ReadBit(logicNo, i);
+                    bool boolSignal;
+                    switch (input) {
+                        case LogicSignal.Low:
+                            boolSignal = false;
+                            break;
+                        case LogicSignal.High:
+                            boolSignal = true;
+                            break;
+                        case LogicSignal.X:
+                        default:
+                            outputs.WriteBit(logicNo, 0, input);
+                            shouldProcess = false;
+                            continue;
+                    }
+                    result ^= boolSignal;
+                }
+                if (shouldProcess) {
+                    outputs.WriteBit(logicNo, 0, result ? LogicSignal.High : LogicSignal.Low);
+                }
             }
-            outputs.WriteBit(logicNo, 0, result);
         }
     }
-}
 
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<XOrLogic> node) {
         return new IOConnectorDefinition(
@@ -438,7 +539,7 @@ public class InputConnectorExecutor : ILogicExecutor {
     /// <summary>
     /// 入力コネクタの出力ピンに値を設定します。
     /// </summary>
-    public void SetInputValue(LogicNode<InputConnector>[] nodes, LogicPins outputs, int logicNumberInExecutor, int pinNumber, bool value) {
+    public void SetInputValue(LogicNode<InputConnector>[] nodes, LogicPins outputs, int logicNumberInExecutor, int pinNumber, LogicSignal value) {
         var logicNode = nodes[logicNumberInExecutor];
         var globalPinIndex = outputs.GetPinIndex(logicNumberInExecutor, pinNumber);
         
@@ -515,32 +616,32 @@ public class JK_FF_PresetClearExecutor : ILogicExecutor {
 
     public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
         while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
-            bool preN = inputs.ReadBit(logicNo, 0);
-            bool j = inputs.ReadBit(logicNo, 1);
-            bool k = inputs.ReadBit(logicNo, 2);
-            bool clk = inputs.ReadBit(logicNo, 3);
-            bool clrN = inputs.ReadBit(logicNo, 4);
+            // bool preN = inputs.ReadBit(logicNo, 0);
+            // bool j = inputs.ReadBit(logicNo, 1);
+            // bool k = inputs.ReadBit(logicNo, 2);
+            // bool clk = inputs.ReadBit(logicNo, 3);
+            // bool clrN = inputs.ReadBit(logicNo, 4);
 
-            bool prevQ = outputs.ReadBit(logicNo, 0);
+            // bool prevQ = outputs.ReadBit(logicNo, 0);
 
-            var newQ = !clrN && (
-                ((j && clk) ? 0b001 : 0) |
-                ((k && clk) ? 0b010 : 0) |
-                (prevQ ? 0b100 : 0)) switch {
-                    0b000 => false,
-                    0b001 => true,
-                    0b010 => false,
-                    0b011 => false,
-                    0b100 => true,
-                    0b101 => true,
-                    0b110 => true,
-                    0b111 => false,
-                    _ => prevQ
-                };
-            bool q = !preN || newQ;
-            bool qN = !clrN || q;
-            outputs.WriteBit(logicNo, 0, q);
-            outputs.WriteBit(logicNo, 1, qN);
+            // var newQ = !clrN && (
+            //     ((j && clk) ? 0b001 : 0) |
+            //     ((k && clk) ? 0b010 : 0) |
+            //     (prevQ ? 0b100 : 0)) switch {
+            //         0b000 => false,
+            //         0b001 => true,
+            //         0b010 => false,
+            //         0b011 => false,
+            //         0b100 => true,
+            //         0b101 => true,
+            //         0b110 => true,
+            //         0b111 => false,
+            //         _ => prevQ
+            //     };
+            // bool q = !preN || newQ;
+            // bool qN = !clrN || q;
+            // outputs.WriteBit(logicNo, 0, q);
+            // outputs.WriteBit(logicNo, 1, qN);
         }
     }
 }
@@ -565,7 +666,7 @@ public class ConstantValueExecutor : ILogicExecutor {
         for (int i = 0; i < datas.Length; i++) {
             var data = datas[i];
             for (int pinNo = 0; pinNo < data.LogicData.DataBits; pinNo++) {
-                outputs.WriteBit(i, pinNo, ((data.LogicData.Value >> pinNo) & 1) != 0);
+                outputs.WriteBit(i, pinNo, ((data.LogicData.Value >> pinNo) & 1) != 0 ? LogicSignal.High : LogicSignal.Low);
             }
         }
     }
@@ -713,13 +814,13 @@ public class LogicSimulation {
                 }
                 var inputs = new LogicPins {
                     NumOfPins = inputNumOfPins.ToArray(),
-                    Pins = new bool[inputPinNumberToLogicNumber.Count],
+                    Pins = [.. Enumerable.Repeat(LogicSignal.X, inputPinNumberToLogicNumber.Count)],
                     PinNumberToLogicNumber = inputPinNumberToLogicNumber.ToArray()
                 };
 
                 var outputs = new LogicPins {
                     NumOfPins = outputNumOfPins.ToArray(),
-                    Pins = new bool[outputPinNumberToLogicNumber.Count],
+                    Pins = [.. Enumerable.Repeat(LogicSignal.X, outputPinNumberToLogicNumber.Count)],
                     PinNumberToLogicNumber = outputPinNumberToLogicNumber.ToArray()
                 };
 
@@ -789,20 +890,6 @@ public class LogicSimulation {
             sourceExecutorContext.OutputToInputPinConnections[sourceGlobalPinIndex].Add(
                 new TargetConnection(targetPinInfo.executorIndex, new int[] { targetPinInfo.pinIndex })
             );
-        }
-    }
-
-    /// <summary>
-    /// 全ての入力ピンにおいて変化したことをマークします。
-    /// </summary>
-    public void MarkAllInputPinChanged() {
-        inputValueChangedExecutorIndexes.Clear();
-        outputValueChangedExecutorIndexes.Clear();
-        inputValueChangedExecutorIndexes.AddRange(Enumerable.Range(0, executorContexts.Length));
-        outputValueChangedExecutorIndexes.AddRange(Enumerable.Range(0, executorContexts.Length));
-        foreach (var ctx in executorContexts) {
-            ctx.ValueChangedInputPins.Clear();
-            ctx.ValueChangedInputPins.AddRange(Enumerable.Range(0, ctx.Inputs.Pins.Length));
         }
     }
 
@@ -889,7 +976,7 @@ public class LogicSimulation {
     /// <summary>
     /// InputConnector経由で入力値を設定します。
     /// </summary>
-    public void SetInput(string inputConnectorLogicID, int pinNumber, bool value) {
+    public void SetInput(string inputConnectorLogicID, int pinNumber, LogicSignal value) {
         if (!logicIdAndPinNameToPinIndex.TryGetValue(inputConnectorLogicID, out var pinMap) || !pinMap.TryGetValue("out", out var inputPinInfo)) {
             throw new ArgumentException($"Input connector {inputConnectorLogicID} not found or does not have 'out' pin.");
         }
@@ -913,7 +1000,7 @@ public class LogicSimulation {
     /// <summary>
     /// OutputConnector経由で出力値を取得します。
     /// </summary>
-    public bool GetOutput(string outputConnectorLogicID, int pinNumber) {
+    public LogicSignal GetOutput(string outputConnectorLogicID, int pinNumber) {
         // logicIdAndPinNameToPinIndex を使用して OutputConnector の入力ピンを特定
         // OutputConnectorは通常"in"ピンを持つ
         if (!logicIdAndPinNameToPinIndex.TryGetValue(outputConnectorLogicID, out var pinMap) || !pinMap.TryGetValue("in", out var outputPinInfo)) {

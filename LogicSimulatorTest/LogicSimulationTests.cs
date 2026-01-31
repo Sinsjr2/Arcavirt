@@ -10,7 +10,7 @@ public class LogicSimulationTests {
     [TestCase(true, false, true)]
     [TestCase(false, true, true)]
     [TestCase(true, true, true)]
-    public void CustomOrGateExtensibilityTest(bool input1, bool input2, bool expected) {
+    public void OrGateExtensibilityTest(bool input1, bool input2, bool expected) {
         var nodes = new LogicNode[] {
             new("input1", new InputConnector(1)),
             new("input2", new InputConnector(1)),
@@ -33,11 +33,11 @@ public class LogicSimulationTests {
 
         var simulation = new LogicSimulation(nodes, connections, factories);
 
-        simulation.SetInput("input1", 0, input1);
-        simulation.SetInput("input2", 0, input2);
+        simulation.SetInput("input1", 0, input1.ToSignal());
+        simulation.SetInput("input2", 0, input2.ToSignal());
         simulation.Step();
         
-        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected));
+        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected.ToSignal()));
     }
 
     [TestCase(false, false, false)]
@@ -60,11 +60,11 @@ public class LogicSimulationTests {
 
         var simulation = new LogicSimulation(nodes, connections);
 
-        simulation.SetInput("input1", 0, input1);
-        simulation.SetInput("input2", 0, input2);
+        simulation.SetInput("input1", 0, input1.ToSignal());
+        simulation.SetInput("input2", 0, input2.ToSignal());
         simulation.Step();
         
-        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected));
+        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected.ToSignal()));
     }
 
     [TestCase(false, true)]
@@ -84,13 +84,13 @@ public class LogicSimulationTests {
         var simulation = new LogicSimulation(nodes, connections);
 
         // 最初は反対の値を設定して、次に目的の値に設定
-        simulation.SetInput("input", 0, !input);
+        simulation.SetInput("input", 0, (!input).ToSignal());
         simulation.Step();
         
-        simulation.SetInput("input", 0, input);
+        simulation.SetInput("input", 0, input.ToSignal());
         simulation.Step();
         
-        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected));
+        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected.ToSignal()));
     }
 
     [TestCase(false, false, true)]
@@ -114,16 +114,11 @@ public class LogicSimulationTests {
 
         var simulation = new LogicSimulation(nodes, connections);
 
-        // 最初は反対の値を設定して、値が伝播するようにしてから、目的の値に変更
-        simulation.SetInput("input1", 0, !input1);
-        simulation.SetInput("input2", 0, !input2);
-        simulation.Step();
-        
-        simulation.SetInput("input1", 0, input1);
-        simulation.SetInput("input2", 0, input2);
+        simulation.SetInput("input1", 0, input1.ToSignal());
+        simulation.SetInput("input2", 0, input2.ToSignal());
         simulation.Step();
 
-        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected));
+        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected.ToSignal()));
     }
 
     [TestCase(false, false, true)]
@@ -146,16 +141,11 @@ public class LogicSimulationTests {
 
         var simulation = new LogicSimulation(nodes, connections);
 
-        // 最初は反対の値を設定して、値が伝播するようにしてから、目的の値に変更
-        simulation.SetInput("input1", 0, !input1);
-        simulation.SetInput("input2", 0, !input2);
+        simulation.SetInput("input1", 0, input1.ToSignal());
+        simulation.SetInput("input2", 0, input2.ToSignal());
         simulation.Step();
 
-        simulation.SetInput("input1", 0, input1);
-        simulation.SetInput("input2", 0, input2);
-        simulation.Step();
-
-        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected));
+        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected.ToSignal()));
     }
 
     [TestCase(false, false, false)]
@@ -178,16 +168,11 @@ public class LogicSimulationTests {
 
         var simulation = new LogicSimulation(nodes, connections);
 
-        // 最初は反対の値を設定して、値が伝播するようにしてから、目的の値に変更
-        simulation.SetInput("input1", 0, !input1);
-        simulation.SetInput("input2", 0, !input2);
-        simulation.Step();
-        
-        simulation.SetInput("input1", 0, input1);
-        simulation.SetInput("input2", 0, input2);
+        simulation.SetInput("input1", 0, input1.ToSignal());
+        simulation.SetInput("input2", 0, input2.ToSignal());
         simulation.Step();
 
-        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected));
+        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected.ToSignal()));
     }
 
     [TestCase(true , false, false, true )] // 出力:保持
@@ -224,27 +209,31 @@ public class LogicSimulationTests {
 
         // 前の出力を設定する
         if (prevQ) {
-            simulation.SetInput("set", 0, true);
-            simulation.SetInput("reset", 0, false);
+            simulation.SetInput("set", 0, LogicSignal.High);
+            simulation.SetInput("reset", 0, LogicSignal.Low);
         } else {
-            simulation.SetInput("set", 0, false);
-            simulation.SetInput("reset", 0, true);
+            simulation.SetInput("set", 0, LogicSignal.Low);
+            simulation.SetInput("reset", 0, LogicSignal.High);
         }
         // 初回実行で初期出力を生成する
-        simulation.MarkAllInputPinChanged();
         simulation.Step();
         // 前の出力が期待通り反映されていることを確認する
-        Assert.That(simulation.GetOutput("outputQ", 0), Is.EqualTo(prevQ));
-        Assert.That(simulation.GetOutput("outputQnot", 0), Is.EqualTo(!prevQ));
+        Assert.That(simulation.GetOutput("outputQ", 0), Is.EqualTo(prevQ.ToSignal()));
+        Assert.That(simulation.GetOutput("outputQnot", 0), Is.EqualTo((!prevQ).ToSignal()));
 
-        simulation.SetInput("set", 0, set);
-        simulation.SetInput("reset", 0, reset);
+        simulation.SetInput("set", 0, set.ToSignal());
+        simulation.SetInput("reset", 0, reset.ToSignal());
         simulation.Step();
-        Assert.That(simulation.GetOutput("outputQ", 0), Is.EqualTo(expectedQ));
-        Assert.That(simulation.GetOutput("outputQnot", 0), Is.EqualTo(!expectedQ));
+        Assert.That(simulation.GetOutput("outputQ", 0), Is.EqualTo(expectedQ.ToSignal()));
+        Assert.That(simulation.GetOutput("outputQnot", 0), Is.EqualTo((!expectedQ).ToSignal()));
     }
 
-    public void JKFFMasterSlavePresetClear(bool pre_, bool j, bool k, bool clk, bool clr) {
+    /// <summary>
+    /// JK-FFマスタースレーブ型フリップフロップのプリセット機能テスト
+    /// </summary>
+    [TestCase(true, false, false, false, false, true)]   // PRE=0（プリセット有効）: Q = 1
+    [CancelAfter(1000)]
+    public void JKFFMasterSlavePresetClear(bool clr, bool j, bool k, bool clk, bool pre_, bool expectedQ) {
         var nodes = new LogicNode[] {
             new("~PRE~", new InputConnector(1)),
             new("J", new InputConnector(1)),
@@ -304,6 +293,19 @@ public class LogicSimulationTests {
         };
 
         var simulation = new LogicSimulation(nodes, connections);
+
+        // 入力を設定
+        simulation.SetInput("~PRE~", 0, pre_.ToSignal());
+        simulation.SetInput("J", 0, j.ToSignal());
+        simulation.SetInput("K", 0, k.ToSignal());
+        simulation.SetInput("CLK", 0, clk.ToSignal());
+        simulation.SetInput("~CLR~", 0, clr.ToSignal());
+
+        simulation.Step();
+
+        // 出力を確認
+        Assert.That(simulation.GetOutput("Q", 0), Is.EqualTo(expectedQ.ToSignal()));
+        Assert.That(simulation.GetOutput("~Q~", 0), Is.EqualTo((!expectedQ).ToSignal()));
     }
 
     /// <summary>
@@ -346,25 +348,21 @@ public class LogicSimulationTests {
         var simulation = new LogicSimulation(nodes, connections);
 
         // ステップ1: 入力=FALSE で初期化
-        simulation.SetInput("input", 0, false);
+        simulation.SetInput("input", 0, LogicSignal.Low);
         simulation.Step();
-        
-        bool outA1 = simulation.GetOutput("outputA", 0);
-        bool outB1 = simulation.GetOutput("outputB", 0);
-        bool outC1 = simulation.GetOutput("outputC", 0);
 
-        Assert.That(outA1, Is.EqualTo(false));
-        Assert.That(outB1, Is.EqualTo(false));
-        Assert.That(outC1, Is.EqualTo(false));
+        Assert.That(simulation.GetOutput("outputA", 0), Is.EqualTo(LogicSignal.Low));
+        Assert.That(simulation.GetOutput("outputB", 0), Is.EqualTo(LogicSignal.Low));
+        Assert.That(simulation.GetOutput("outputC", 0), Is.EqualTo(LogicSignal.Low));
 
         // ステップ2: 入力=TRUE に変更
-        simulation.SetInput("input", 0, true);
+        simulation.SetInput("input", 0, LogicSignal.High);
         simulation.Step();
 
         // すべての出力がTRUEであることを確認（複数接続がすべて正しくコピーされたことを検証）
-        Assert.That(simulation.GetOutput("outputA", 0), Is.EqualTo(true));
-        Assert.That(simulation.GetOutput("outputB", 0), Is.EqualTo(true));
-        Assert.That(simulation.GetOutput("outputC", 0), Is.EqualTo(true));
+        Assert.That(simulation.GetOutput("outputA", 0), Is.EqualTo(LogicSignal.High));
+        Assert.That(simulation.GetOutput("outputB", 0), Is.EqualTo(LogicSignal.High));
+        Assert.That(simulation.GetOutput("outputC", 0), Is.EqualTo(LogicSignal.High));
     }
 }
 
@@ -378,9 +376,9 @@ public class LogicPinReaderTests {
     public void ReadBit_ReturnsCorrectPinValue() {
         // Arrange: 基本的なLogicPinsを作成
         var pins = new LogicPins {
-            Pins = new[] { true, false, true, false },
-            NumOfPins = new[] { (0, 2), (2, 2) },
-            PinNumberToLogicNumber = new[] { 0, 0, 1, 1 }
+            Pins = [LogicSignal.High, LogicSignal.Low, LogicSignal.High, LogicSignal.Low],
+            NumOfPins = [(0, 2), (2, 2)],
+            PinNumberToLogicNumber = [0, 0, 1, 1]
         };
 
         var changedPins = new List<int> { 0, 2 };
@@ -388,22 +386,22 @@ public class LogicPinReaderTests {
 
         var reader = new LogicPinReader(pins, changedPins, isExecutedLogicNumbers, 0);
 
-        Assert.That(reader.ReadBit(0, 0), Is.EqualTo(true));
-        Assert.That(reader.ReadBit(0, 1), Is.EqualTo(false));
-        Assert.That(reader.ReadBit(1, 0), Is.EqualTo(true));
-        Assert.That(reader.ReadBit(1, 1), Is.EqualTo(false));
+        Assert.That(reader.ReadBit(0, 0), Is.EqualTo(LogicSignal.High));
+        Assert.That(reader.ReadBit(0, 1), Is.EqualTo(LogicSignal.Low));
+        Assert.That(reader.ReadBit(1, 0), Is.EqualTo(LogicSignal.High));
+        Assert.That(reader.ReadBit(1, 1), Is.EqualTo(LogicSignal.Low));
     }
 
     [Test]
     public void GetPinsLength_ReturnsCorrectLength() {
         // Arrange
         var pins = new LogicPins {
-            Pins = new[] { true, false, true },
-            NumOfPins = new[] { (0, 2), (2, 1) },
-            PinNumberToLogicNumber = new[] { 0, 0, 1 }
+            Pins = [ LogicSignal.High, LogicSignal.Low, LogicSignal.High ],
+            NumOfPins = [(0, 2), (2, 1)],
+            PinNumberToLogicNumber = [0, 0, 1]
         };
 
-        var reader = new LogicPinReader(pins, new List<int>(), new[] { false, false }, 0);
+        var reader = new LogicPinReader(pins, [], [false, false], 0);
 
         Assert.That(reader.GetPinsLength(0), Is.EqualTo(2));
         Assert.That(reader.GetPinsLength(1), Is.EqualTo(1));
@@ -413,9 +411,9 @@ public class LogicPinReaderTests {
     public void TryGetNextChangedLogicNumber_ReturnsChangedLogicNumbers() {
         // Logic 0のPin 0, Logic 1のPin 0が変化した
         var pins = new LogicPins {
-            Pins = new[] { true, false, true, false },
-            NumOfPins = new[] { (0, 2), (2, 2) },
-            PinNumberToLogicNumber = new[] { 0, 0, 1, 1 }
+            Pins = [ LogicSignal.High, LogicSignal.Low, LogicSignal.High, LogicSignal.Low ], 
+            NumOfPins = [(0, 2), (2, 2)],
+            PinNumberToLogicNumber = [0, 0, 1, 1]
         };
 
         var changedPins = new List<int> { 0, 2 }; // Logic 0のPin 0, Logic 1のPin 0
@@ -435,9 +433,9 @@ public class LogicPinReaderTests {
     public void TryGetNextChangedLogicNumber_SkipsDuplicates() {
         // Arrange: Logic 0のPin 0と1が両方変化（Logic 0は1回だけ返す）
         var pins = new LogicPins {
-            Pins = new[] { true, false, true },
-            NumOfPins = new[] { (0, 2), (2, 1) },
-            PinNumberToLogicNumber = new[] { 0, 0, 1 }
+            Pins = [ LogicSignal.High, LogicSignal.Low, LogicSignal.High],
+            NumOfPins = [(0, 2), (2, 1)],
+            PinNumberToLogicNumber = [0, 0, 1]
         };
 
         var changedPins = new List<int> { 0, 1 }; // Logic 0の両方のピン
@@ -461,38 +459,38 @@ public class LogicPinsWriterTests {
     public void WriteBit_UpdatesPinValue() {
         // Arrange
         var pins = new LogicPins {
-            Pins = new[] { false, false, false, false },
-            NumOfPins = new[] { (0, 2), (2, 2) },
-            PinNumberToLogicNumber = new[] { 0, 0, 1, 1 }
+            Pins = [ LogicSignal.Low, LogicSignal.Low, LogicSignal.Low, LogicSignal.Low],
+            NumOfPins = [(0, 2), (2, 2)],
+            PinNumberToLogicNumber = [0, 0, 1, 1]
         };
 
         var changedPins = new List<int>();
         var writer = new LogicPinsWriter(pins, changedPins);
 
-        writer.WriteBit(0, 0, true);
-        writer.WriteBit(1, 1, true);
+        writer.WriteBit(0, 0, LogicSignal.High);
+        writer.WriteBit(1, 1, LogicSignal.High);
 
-        Assert.That(pins.Pins[0], Is.True);
-        Assert.That(pins.Pins[1], Is.False);
-        Assert.That(pins.Pins[2], Is.False);
-        Assert.That(pins.Pins[3], Is.True);
+        Assert.That(pins.Pins[0], Is.EqualTo(LogicSignal.High));
+        Assert.That(pins.Pins[1], Is.EqualTo(LogicSignal.Low));
+        Assert.That(pins.Pins[2], Is.EqualTo(LogicSignal.Low));
+        Assert.That(pins.Pins[3], Is.EqualTo(LogicSignal.High));
     }
 
     [Test]
     public void WriteBit_TracksChangedPins() {
         // Arrange
         var pins = new LogicPins {
-            Pins = new[] { false, false },
-            NumOfPins = new[] { (0, 2) },
-            PinNumberToLogicNumber = new[] { 0, 0 }
+            Pins = [ LogicSignal.Low, LogicSignal.Low ],
+            NumOfPins = [(0, 2)],
+            PinNumberToLogicNumber = [0, 0]
         };
 
         var changedPins = new List<int>();
         var writer = new LogicPinsWriter(pins, changedPins);
 
-        writer.WriteBit(0, 0, true);  // 変更あり
-        writer.WriteBit(0, 1, false); // 変更なし（既にfalse）
-        writer.WriteBit(0, 0, false); // 変更あり
+        writer.WriteBit(0, 0, LogicSignal.High);  // 変更あり
+        writer.WriteBit(0, 1, LogicSignal.Low); // 変更なし（既にfalse）
+        writer.WriteBit(0, 0, LogicSignal.Low); // 変更あり
 
         Assert.That(changedPins.Count, Is.EqualTo(2));
         Assert.That(changedPins[0], Is.EqualTo(0));
@@ -502,9 +500,9 @@ public class LogicPinsWriterTests {
     [Test]
     public void GetPinsLength_ReturnsCorrectLength() {
         var pins = new LogicPins {
-            Pins = new[] { false, false, false },
-            NumOfPins = new[] { (0, 2), (2, 1) },
-            PinNumberToLogicNumber = new[] { 0, 0, 1 }
+            Pins = [ LogicSignal.Low, LogicSignal.Low, LogicSignal.Low ],
+            NumOfPins = [(0, 2), (2, 1)],
+            PinNumberToLogicNumber = [0, 0, 1]
         };
 
         var writer = new LogicPinsWriter(pins, new List<int>());
@@ -516,35 +514,35 @@ public class LogicPinsWriterTests {
     [Test]
     public void ReadBit_ReturnsCurrentValue() {
         var pins = new LogicPins {
-            Pins = new[] { true, false },
-            NumOfPins = new[] { (0, 2) },
-            PinNumberToLogicNumber = new[] { 0, 0 }
+            Pins = [ LogicSignal.High, LogicSignal.Low ],
+            NumOfPins = [(0, 2)],
+            PinNumberToLogicNumber = [0, 0]
         };
 
-        var writer = new LogicPinsWriter(pins, new List<int>());
+        var writer = new LogicPinsWriter(pins, []);
 
-        Assert.That(writer.ReadBit(0, 0), Is.True);
-        Assert.That(writer.ReadBit(0, 1), Is.False);
+        Assert.That(writer.ReadBit(0, 0), Is.EqualTo(LogicSignal.High));
+        Assert.That(writer.ReadBit(0, 1), Is.EqualTo(LogicSignal.Low));
     }
 
     [Test]
     public void WriteBit_MultipleWrites_TrackEachChange() {
         var pins = new LogicPins {
-            Pins = new[] { false, false, false, false },
-            NumOfPins = new[] { (0, 2), (2, 2) },
-            PinNumberToLogicNumber = new[] { 0, 0, 1, 1 }
+            Pins = [ LogicSignal.Low, LogicSignal.Low, LogicSignal.Low, LogicSignal.Low ],
+            NumOfPins = [(0, 2), (2, 2)],
+            PinNumberToLogicNumber = [0, 0, 1, 1]
         };
 
         var changedPins = new List<int>();
         var writer = new LogicPinsWriter(pins, changedPins);
 
         // 複数の異なるピンに書き込み
-        writer.WriteBit(0, 0, true);
-        writer.WriteBit(0, 1, true);
-        writer.WriteBit(1, 0, true);
-        writer.WriteBit(1, 1, true);
+        writer.WriteBit(0, 0, LogicSignal.High);
+        writer.WriteBit(0, 1, LogicSignal.High);
+        writer.WriteBit(1, 0, LogicSignal.High);
+        writer.WriteBit(1, 1, LogicSignal.High);
 
         Assert.That(changedPins.Count, Is.EqualTo(4));
-        Assert.That(pins.Pins.All(p => p), Is.True);
+        Assert.That(pins.Pins.All(p => p == LogicSignal.High), Is.True);
     }
 }
