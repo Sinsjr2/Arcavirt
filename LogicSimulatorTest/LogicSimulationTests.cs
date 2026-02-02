@@ -3,6 +3,19 @@ using LogicSimulator;
 
 namespace LogicSimulatorTest;
 
+public record PinValue(string PinName, bool Value);
+
+/// <summary>
+/// 1フレームで入力されるデータとそのフレームを計算したときの出力の期待値を表します。
+/// </summary>
+public record SignalFrame(IReadOnlyList<PinValue> Inputs, IReadOnlyList<PinValue> Expecteds);
+
+/// <summary>
+/// 一連のフレームを処理する信号のテストパターン
+/// </summary>
+public record SignalTestPattern(IReadOnlyList<SignalFrame> Frames);
+
+
 [TestFixture]
 public class LogicSimulationTests {
 
@@ -17,7 +30,6 @@ public class LogicSimulationTests {
             new("or", new OrLogic(2)),
             new("output", new OutputConnector(1))
         };
-
         var connections = new LogicConnection[] {
             new(new LogicConnector("input1", "out"), new LogicConnector("or", "in[0]")),
             new(new LogicConnector("input2", "out"), new LogicConnector("or", "in[1]")),
@@ -40,11 +52,16 @@ public class LogicSimulationTests {
         Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected.ToSignal()));
     }
 
-    [TestCase(false, false, false)]
-    [TestCase(true, false, false)]
-    [TestCase(false, true, false)]
-    [TestCase(true, true, true)]
-    public void AndGateSimulationTest(bool input1, bool input2, bool expected) {
+    [TestCase(LogicSignal.Low, LogicSignal.Low, LogicSignal.Low)]
+    [TestCase(LogicSignal.High, LogicSignal.Low, LogicSignal.Low)]
+    [TestCase(LogicSignal.Low, LogicSignal.High, LogicSignal.Low)]
+    [TestCase(LogicSignal.High, LogicSignal.High, LogicSignal.High)]
+    [TestCase(LogicSignal.X, LogicSignal.X, LogicSignal.X)]
+    [TestCase(LogicSignal.X, LogicSignal.Low, LogicSignal.Low)]
+    [TestCase(LogicSignal.X, LogicSignal.High, LogicSignal.X)]
+    [TestCase(LogicSignal.Low, LogicSignal.X, LogicSignal.Low)]
+    [TestCase(LogicSignal.High, LogicSignal.X, LogicSignal.X)]
+    public void AndLogicTest(LogicSignal input1, LogicSignal input2, LogicSignal expected) {
         var nodes = new LogicNode[] {
             new("input1", new InputConnector(1)),
             new("input2", new InputConnector(1)),
@@ -60,16 +77,48 @@ public class LogicSimulationTests {
 
         var simulation = new LogicSimulation(nodes, connections);
 
-        simulation.SetInput("input1", 0, input1.ToSignal());
-        simulation.SetInput("input2", 0, input2.ToSignal());
+        simulation.SetInput("input1", 0, input1);
+        simulation.SetInput("input2", 0, input2);
         simulation.Step();
-        
-        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected.ToSignal()));
+
+        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected));
     }
 
-    [TestCase(false, true)]
-    [TestCase(true, false)]
-    public void NotGateSimulationTest(bool input, bool expected) {
+    [TestCase(LogicSignal.Low, LogicSignal.Low, LogicSignal.Low)]
+    [TestCase(LogicSignal.High, LogicSignal.Low, LogicSignal.High)]
+    [TestCase(LogicSignal.Low, LogicSignal.High, LogicSignal.High)]
+    [TestCase(LogicSignal.High, LogicSignal.High, LogicSignal.High)]
+    [TestCase(LogicSignal.X, LogicSignal.X, LogicSignal.X)]
+    [TestCase(LogicSignal.X, LogicSignal.Low, LogicSignal.X)]
+    [TestCase(LogicSignal.X, LogicSignal.High, LogicSignal.High)]
+    [TestCase(LogicSignal.Low, LogicSignal.X, LogicSignal.X)]
+    [TestCase(LogicSignal.High, LogicSignal.X, LogicSignal.High)]
+    public void OrLogicTest(LogicSignal input1, LogicSignal input2, LogicSignal expected) {
+        var nodes = new LogicNode[] {
+            new("input1", new InputConnector(1)),
+            new("input2", new InputConnector(1)),
+            new("or", new OrLogic(2)),
+            new("output", new OutputConnector(1))
+        };
+        var connections = new LogicConnection[] {
+            new(new LogicConnector("input1", "out"), new LogicConnector("or", "in[0]")),
+            new(new LogicConnector("input2", "out"), new LogicConnector("or", "in[1]")),
+            new(new LogicConnector("or", "out"), new LogicConnector("output", "in"))
+        };
+
+        var simulation = new LogicSimulation(nodes, connections);
+
+        simulation.SetInput("input1", 0, input1);
+        simulation.SetInput("input2", 0, input2);
+        simulation.Step();
+
+        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected));
+    }
+
+    [TestCase(LogicSignal.Low, LogicSignal.High)]
+    [TestCase(LogicSignal.High, LogicSignal.Low)]
+    [TestCase(LogicSignal.X, LogicSignal.X)]
+    public void NotLogicTest(LogicSignal input, LogicSignal expected) {
         var nodes = new LogicNode[] {
             new("input", new InputConnector(1)),
             new("not1", new NotLogic()),
@@ -82,30 +131,29 @@ public class LogicSimulationTests {
         };
 
         var simulation = new LogicSimulation(nodes, connections);
-
-        // 最初は反対の値を設定して、次に目的の値に設定
-        simulation.SetInput("input", 0, (!input).ToSignal());
+        
+        simulation.SetInput("input", 0, input);
         simulation.Step();
         
-        simulation.SetInput("input", 0, input.ToSignal());
-        simulation.Step();
-        
-        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected.ToSignal()));
+        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected));
     }
 
-    [TestCase(false, false, true)]
-    [TestCase(true, false, true)]
-    [TestCase(false, true, true)]
-    [TestCase(true, true, false)]
-    public void NAndGateSimulationTest(bool input1, bool input2, bool expected) {
+    [TestCase(LogicSignal.Low, LogicSignal.Low, LogicSignal.High)]
+    [TestCase(LogicSignal.High, LogicSignal.Low, LogicSignal.High)]
+    [TestCase(LogicSignal.Low, LogicSignal.High, LogicSignal.High)]
+    [TestCase(LogicSignal.High, LogicSignal.High, LogicSignal.Low)]
+    [TestCase(LogicSignal.X, LogicSignal.X, LogicSignal.X)]
+    [TestCase(LogicSignal.X, LogicSignal.Low, LogicSignal.High)]
+    [TestCase(LogicSignal.X, LogicSignal.High, LogicSignal.X)]
+    [TestCase(LogicSignal.Low, LogicSignal.X, LogicSignal.High)]
+    [TestCase(LogicSignal.High, LogicSignal.X, LogicSignal.X)]
+    public void NAndLogicTest(LogicSignal input1, LogicSignal input2, LogicSignal expected) {
         var nodes = new LogicNode[] {
             new("input1", new InputConnector(1)),
             new("input2", new InputConnector(1)),
             new("nand1", new NAndLogic(2)),
             new("output", new OutputConnector(1))
         };
-
-        // 接続の定義
         var connections = new LogicConnection[] {
             new(new LogicConnector("input1", "out"), new LogicConnector("nand1", "in[0]")),
             new(new LogicConnector("input2", "out"), new LogicConnector("nand1", "in[1]")),
@@ -114,25 +162,29 @@ public class LogicSimulationTests {
 
         var simulation = new LogicSimulation(nodes, connections);
 
-        simulation.SetInput("input1", 0, input1.ToSignal());
-        simulation.SetInput("input2", 0, input2.ToSignal());
+        simulation.SetInput("input1", 0, input1);
+        simulation.SetInput("input2", 0, input2);
         simulation.Step();
 
-        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected.ToSignal()));
+        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected));
     }
 
-    [TestCase(false, false, true)]
-    [TestCase(true, false, false)]
-    [TestCase(false, true, false)]
-    [TestCase(true, true, false)]
-    public void NOrGateSimulationTest(bool input1, bool input2, bool expected) {
+    [TestCase(LogicSignal.Low, LogicSignal.Low, LogicSignal.High)]
+    [TestCase(LogicSignal.High, LogicSignal.Low, LogicSignal.Low)]
+    [TestCase(LogicSignal.Low, LogicSignal.High, LogicSignal.Low)]
+    [TestCase(LogicSignal.High, LogicSignal.High, LogicSignal.Low)]
+    [TestCase(LogicSignal.X, LogicSignal.X, LogicSignal.X)]
+    [TestCase(LogicSignal.X, LogicSignal.Low, LogicSignal.X)]
+    [TestCase(LogicSignal.X, LogicSignal.High, LogicSignal.Low)]
+    [TestCase(LogicSignal.Low, LogicSignal.X, LogicSignal.X)]
+    [TestCase(LogicSignal.High, LogicSignal.X, LogicSignal.Low)]
+    public void NOrLogicTest(LogicSignal input1, LogicSignal input2, LogicSignal expected) {
         var nodes = new LogicNode[] {
             new("input1", new InputConnector(1)),
             new("input2", new InputConnector(1)),
             new("nor", new NOrLogic(2)),
             new("output", new OutputConnector(1))
         };
-
         var connections = new LogicConnection[] {
             new(new LogicConnector("input1", "out"), new LogicConnector("nor", "in[0]")),
             new(new LogicConnector("input2", "out"), new LogicConnector("nor", "in[1]")),
@@ -141,18 +193,23 @@ public class LogicSimulationTests {
 
         var simulation = new LogicSimulation(nodes, connections);
 
-        simulation.SetInput("input1", 0, input1.ToSignal());
-        simulation.SetInput("input2", 0, input2.ToSignal());
+        simulation.SetInput("input1", 0, input1);
+        simulation.SetInput("input2", 0, input2);
         simulation.Step();
 
-        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected.ToSignal()));
+        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected));
     }
 
-    [TestCase(false, false, false)]
-    [TestCase(true, false, true)]
-    [TestCase(false, true, true)]
-    [TestCase(true, true, false)]
-    public void XOrGateSimulationTest(bool input1, bool input2, bool expected) {
+    [TestCase(LogicSignal.Low, LogicSignal.Low, LogicSignal.Low)]
+    [TestCase(LogicSignal.High, LogicSignal.Low, LogicSignal.High)]
+    [TestCase(LogicSignal.Low, LogicSignal.High, LogicSignal.High)]
+    [TestCase(LogicSignal.High, LogicSignal.High, LogicSignal.Low)]
+    [TestCase(LogicSignal.X, LogicSignal.X, LogicSignal.X)]
+    [TestCase(LogicSignal.X, LogicSignal.Low, LogicSignal.X)]
+    [TestCase(LogicSignal.X, LogicSignal.High, LogicSignal.X)]
+    [TestCase(LogicSignal.Low, LogicSignal.X, LogicSignal.X)]
+    [TestCase(LogicSignal.High, LogicSignal.X, LogicSignal.X)]
+    public void XOrLogicTest(LogicSignal input1, LogicSignal input2, LogicSignal expected) {
         var nodes = new LogicNode[] {
             new("input1", new InputConnector(1)),
             new("input2", new InputConnector(1)),
@@ -168,72 +225,150 @@ public class LogicSimulationTests {
 
         var simulation = new LogicSimulation(nodes, connections);
 
-        simulation.SetInput("input1", 0, input1.ToSignal());
-        simulation.SetInput("input2", 0, input2.ToSignal());
+        simulation.SetInput("input1", 0, input1);
+        simulation.SetInput("input2", 0, input2);
         simulation.Step();
 
-        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected.ToSignal()));
+        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected));
     }
 
-    [TestCase(true , false, false, true )] // 出力:保持
-    [TestCase(false, false, false, false)] // 出力:保持
-    [TestCase(true , false, true , false)] // 出力:0
-    [TestCase(false, false, true , false)] // 出力:0
-    [TestCase(true , true , false, true )] // 出力:1 (Set状態)
-    [TestCase(false, true , false, true )] // 出力:1 (Set状態)
+    public static readonly IReadOnlyList<SignalTestPattern> NandSrFFLatchSimulationTest_Data = [
+        new([ new( [new("S", true) ], [ new("Q", true), new("~Q", false)]) ]), // // 出力:保持(1)
+        // NOTE: S=0 R=0 は保持であるので、初期状態は不定になる
+        // 出力:保持(0)
+        new([
+            new([ new("R", true) ], [ new("Q", false), new("~Q", true)]),
+            new([ new("R", false) ], [ new("Q", false), new("~Q", true)])
+        ]),
+        // // 初期:1 出力:0
+        new([
+            new([ new("S", true) ], []),
+            new([ new("S", false), new("R", true) ], [ new("Q", false), new("~Q", true) ])
+        ]),
+        // 初期:0 出力0
+        new([
+            new([ new("R", true) ], [ new("Q", false), new("~Q", true) ])
+        ]),
+        // 初期:1 出力:1
+        new([
+            new([ new("S", true) ], []),
+            new([ new("S", true) ], [ new("Q", true), new("~Q", false) ])
+        ]),
+        // 初期:0 出力1
+        new([
+            new([ new("R", true) ], [ ]),
+            new([ new("R", false), new("S", true) ], [new("Q", true), new("~Q", false)])
+        ]),
+    ];
+
     // 回路が発振したときの無限ループ対策
     [CancelAfter(1000)]
-    public void NandSrFFLatchSimulationTest(bool prevQ, bool set, bool reset, bool expectedQ) {
+    [TestCaseSource(nameof(NandSrFFLatchSimulationTest_Data))]
+    public void NandSrFFLatchSimulationTest(SignalTestPattern pattern) {
         var nodes = new LogicNode[] {
-            new("set", new InputConnector(1)),
-            new("reset", new InputConnector(1)),
+            new("S", new InputConnector(1)),
+            new("R", new InputConnector(1)),
             new("not1", new NotLogic()),
             new("not2", new NotLogic()),
             new("nand1", new NAndLogic(2)),
             new("nand2", new NAndLogic(2)),
-            new("outputQ", new OutputConnector(1)),
-            new("outputQnot", new OutputConnector(1))
+            new("Q", new OutputConnector(1)),
+            new("~Q", new OutputConnector(1))
         };
         var connections = new LogicConnection[] {
-            new(new LogicConnector("set", "out"), new LogicConnector("not1", "in")),
+            new(new LogicConnector("S", "out"), new LogicConnector("not1", "in")),
             new(new LogicConnector("not1", "out"), new LogicConnector("nand1", "in[0]")),
-            new(new LogicConnector("reset", "out"), new LogicConnector("not2", "in")),
+            new(new LogicConnector("R", "out"), new LogicConnector("not2", "in")),
             new(new LogicConnector("not2", "out"), new LogicConnector("nand2", "in[0]")),
             new(new LogicConnector("nand1", "out"), new LogicConnector("nand2", "in[1]")),
-            new(new LogicConnector("nand1", "out"), new LogicConnector("outputQ", "in")),
+            new(new LogicConnector("nand1", "out"), new LogicConnector("Q", "in")),
             new(new LogicConnector("nand2", "out"), new LogicConnector("nand1", "in[1]")),
-            new(new LogicConnector("nand2", "out"), new LogicConnector("outputQnot", "in"))
+            new(new LogicConnector("nand2", "out"), new LogicConnector("~Q", "in"))
         };
 
         var simulation = new LogicSimulation(nodes, connections);
+        simulation.SetInput("S", 0, LogicSignal.Low);
+        simulation.SetInput("R", 0, LogicSignal.Low);
 
-        // 前の出力を設定する
-        if (prevQ) {
-            simulation.SetInput("set", 0, LogicSignal.High);
-            simulation.SetInput("reset", 0, LogicSignal.Low);
-        } else {
-            simulation.SetInput("set", 0, LogicSignal.Low);
-            simulation.SetInput("reset", 0, LogicSignal.High);
+        foreach (var frame in pattern.Frames) {
+            foreach (var input in frame.Inputs) {
+                simulation.SetInput(input.PinName, 0, input.Value.ToSignal());
+            }
+            simulation.Step();
+            foreach (var expected in frame.Expecteds) {
+                Assert.That(simulation.GetOutput(expected.PinName, 0), Is.EqualTo(expected.Value.ToSignal()));
+            }
         }
-        // 初回実行で初期出力を生成する
-        simulation.Step();
-        // 前の出力が期待通り反映されていることを確認する
-        Assert.That(simulation.GetOutput("outputQ", 0), Is.EqualTo(prevQ.ToSignal()));
-        Assert.That(simulation.GetOutput("outputQnot", 0), Is.EqualTo((!prevQ).ToSignal()));
-
-        simulation.SetInput("set", 0, set.ToSignal());
-        simulation.SetInput("reset", 0, reset.ToSignal());
-        simulation.Step();
-        Assert.That(simulation.GetOutput("outputQ", 0), Is.EqualTo(expectedQ.ToSignal()));
-        Assert.That(simulation.GetOutput("outputQnot", 0), Is.EqualTo((!expectedQ).ToSignal()));
     }
 
-    /// <summary>
-    /// JK-FFマスタースレーブ型フリップフロップのプリセット機能テスト
-    /// </summary>
-    [TestCase(true, false, false, false, false, true)]   // PRE=0（プリセット有効）: Q = 1
+    public static IReadOnlyList<SignalTestPattern> JKFFMasterSlavePresetClear_Data = [
+        // 初期状態で、 PRE CLR の信号が出力されることを考える
+        new([ new([], [ new("Q", true), new("~Q~", true) ]) ]),
+        new([ new([ new("~PRE~", true) ], [ new("Q", false), new("~Q~", true) ]) ]),
+        new([ new([ new("~CLR~", true) ], [ new("Q", true), new("~Q~", false) ]) ]),
+        new([
+            // NOTE: Q と ~Q~ の両方が 1 のときに、PRE と CLR を1にすると発振する
+            new([ new("~PRE~", true) ],  [ ]),
+            new([ new("~CLR~", true) ], [ new("Q", false), new("~Q~", true) ])
+        ]),
+        // クロックを入れても出力が変化しない J=0, K=0
+        new([
+            new([ new("~PRE~", true) ],  [ ]), new([ new("~CLR~", true) ], [ ]),
+            new([ new("CLK", true) ], [ new("Q", false), new("~Q~", true) ]),
+            new([ new("CLK", false) ], [ new("Q", false), new("~Q~", true) ])
+        ]),
+        // クロックを入れると出力トグルする 初期: Q=0 J=1, K=1
+        new([
+            new([ new("~PRE~", true) ],  [ ]), new([ new("~CLR~", true) ], []),
+            new([ new("J", true), new("K", true) ],  [ new("Q", false), new("~Q~", true) ]),
+            new([ new("CLK", true) ], [ new("Q", false), new("~Q~", true) ]),
+            // 1回目
+            new([ new("CLK", false) ], [ new("Q", true), new("~Q~", false) ]),
+            new([ new("CLK", true) ], [ new("Q", true), new("~Q~", false) ]),
+            // 2回目
+            new([ new("CLK", false) ], [ new("Q", false), new("~Q~", true) ])
+        ]),
+        // クロックを入れると出力トグルする 初期: Q=1 J=1, K=1
+        new([
+            new([ new("~CLR~", true) ],  [ ]), new([ new("~PRE~", true) ], []),
+            new([ new("J", true), new("K", true) ],  [ new("Q", true), new("~Q~", false) ]),
+            new([ new("CLK", true) ], [ new("Q", true), new("~Q~", false) ]),
+            // 1回目
+            new([ new("CLK", false) ], [ new("Q", false), new("~Q~", true) ]),
+            new([ new("CLK", true) ], [ new("Q", false), new("~Q~", true) ]),
+            // 2回目
+            new([ new("CLK", false) ], [ new("Q", true), new("~Q~", false) ]),
+            new([ new("CLK", true) ], [ new("Q", true), new("~Q~", false) ])
+        ]),
+        // 初期:Q=1 Q=0で固定される
+        new([
+            new([ new("~CLR~", true) ],  []), new([ new("~PRE~", true) ], []),
+            new([ new("K", true) ],  [ new("Q", true), new("~Q~", false) ]),
+            new([ new("CLK", true) ],  [ new("Q", true), new("~Q~", false) ]),
+            // 1回目
+            new([ new("CLK", false) ],  [ new("Q", false), new("~Q~", true) ]),
+            new([ new("CLK", true) ],  [ new("Q", false), new("~Q~", true) ]),
+            // 2回目
+            new([ new("CLK", false) ],  [ new("Q", false), new("~Q~", true) ]),
+            new([ new("CLK", true) ],  [ new("Q", false), new("~Q~", true) ]),
+        ]),
+        // 初期:Q=0 Q=1で固定される
+        new([
+            new([ new("~PRE~", true) ],  [ ]), new([ new("~CLR~", true) ], []),
+            new([ new("J", true) ],  [ new("Q", false), new("~Q~", true) ]),
+            new([ new("CLK", true) ],  [ new("Q", false), new("~Q~", true) ]),
+            // 1回目
+            new([ new("CLK", false) ],  [ new("Q", true), new("~Q~", false) ]),
+            new([ new("CLK", true) ],  [ new("Q", true), new("~Q~", false) ]),
+            // 2回目
+            new([ new("CLK", false) ],  [ new("Q", true), new("~Q~", false) ]),
+            new([ new("CLK", true) ],  [ new("Q", true), new("~Q~", false) ]),
+        ])
+    ];
+
     [CancelAfter(1000)]
-    public void JKFFMasterSlavePresetClear(bool clr, bool j, bool k, bool clk, bool pre_, bool expectedQ) {
+    [TestCaseSource(nameof(JKFFMasterSlavePresetClear_Data))]
+    public void JKFFMasterSlavePresetClear(SignalTestPattern testPattern) {
         var nodes = new LogicNode[] {
             new("~PRE~", new InputConnector(1)),
             new("J", new InputConnector(1)),
@@ -286,7 +421,7 @@ public class LogicSimulationTests {
             new(new LogicConnector("and6", "out"), new LogicConnector("nand8", "in[1]")),
             new(new LogicConnector("nand7", "out"), new LogicConnector("Q", "in")),
             new(new LogicConnector("nand7", "out"), new LogicConnector("nand8", "in[0]")),
-            new(new LogicConnector("nand7", "out"), new LogicConnector("and2", "in[1]")),
+            new(new LogicConnector("nand7", "out"), new LogicConnector("nand2", "in[1]")),
             new(new LogicConnector("nand8", "out"), new LogicConnector("~Q~", "in")),
             new(new LogicConnector("nand8", "out"), new LogicConnector("nand7", "in[1]")),
             new(new LogicConnector("nand8", "out"), new LogicConnector("nand1", "in[0]")),
@@ -294,18 +429,22 @@ public class LogicSimulationTests {
 
         var simulation = new LogicSimulation(nodes, connections);
 
-        // 入力を設定
-        simulation.SetInput("~PRE~", 0, pre_.ToSignal());
-        simulation.SetInput("J", 0, j.ToSignal());
-        simulation.SetInput("K", 0, k.ToSignal());
-        simulation.SetInput("CLK", 0, clk.ToSignal());
-        simulation.SetInput("~CLR~", 0, clr.ToSignal());
-
+        simulation.SetInput("CLK", 0, LogicSignal.Low);
+        simulation.SetInput("J", 0, LogicSignal.Low);
+        simulation.SetInput("K", 0, LogicSignal.Low);
+        simulation.SetInput("~PRE~", 0, LogicSignal.Low);
+        simulation.SetInput("~CLR~", 0, LogicSignal.Low);
         simulation.Step();
 
-        // 出力を確認
-        Assert.That(simulation.GetOutput("Q", 0), Is.EqualTo(expectedQ.ToSignal()));
-        Assert.That(simulation.GetOutput("~Q~", 0), Is.EqualTo((!expectedQ).ToSignal()));
+        foreach (var frame in testPattern.Frames) {
+            foreach (var input in frame.Inputs) {
+                simulation.SetInput(input.PinName, 0, input.Value.ToSignal());
+            }
+            simulation.Step();
+            foreach (var expected in frame.Expecteds) {
+                Assert.That(simulation.GetOutput(expected.PinName, 0), Is.EqualTo(expected.Value.ToSignal()));
+            }
+        }
     }
 
     /// <summary>
