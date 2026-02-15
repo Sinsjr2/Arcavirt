@@ -24,17 +24,17 @@ public class LogicSimulationTests {
     [TestCase(false, true, true)]
     [TestCase(true, true, true)]
     public void OrGateExtensibilityTest(bool input1, bool input2, bool expected) {
-        var nodes = new LogicNode[] {
-            new("input1", new InputConnector(1)),
-            new("input2", new InputConnector(1)),
-            new("or", new OrLogic(2)),
-            new("output", new OutputConnector(1))
-        };
-        var connections = new LogicConnection[] {
-            new(new LogicConnector("input1", "out"), new LogicConnector("or", "in[0]")),
-            new(new LogicConnector("input2", "out"), new LogicConnector("or", "in[1]")),
-            new(new LogicConnector("or", "out"), new LogicConnector("output", "in"))
-        };
+        var circuit = new Circuit([
+                new("input1", new InputConnector(1)),
+                new("input2", new InputConnector(1)),
+                new("or", new OrLogic(2)),
+                new("output", new OutputConnector(1))
+            ],
+            [
+                new(new LogicConnector("input1", "out"), new LogicConnector("or", "in[0]")),
+                new(new LogicConnector("input2", "out"), new LogicConnector("or", "in[1]")),
+                new(new LogicConnector("or", "out"), new LogicConnector("output", "in"))
+            ]);
 
         // カスタムファクトリを指定してLogicSimulationをインスタンス化
         var factories = new Dictionary<Type, ILogicExecutorFactory> {
@@ -43,7 +43,7 @@ public class LogicSimulationTests {
             { typeof(OutputConnector), new LogicExecutorFactory<OutputConnector>(new OutputConnectorExecutorFactory()) },
         };
 
-        var simulation = new LogicSimulation(nodes, connections, factories);
+        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections, factories);
 
         simulation.SetInput("input1", 0, input1.ToSignal());
         simulation.SetInput("input2", 0, input2.ToSignal());
@@ -62,20 +62,19 @@ public class LogicSimulationTests {
     [TestCase(LogicSignal.Low, LogicSignal.X, LogicSignal.Low)]
     [TestCase(LogicSignal.High, LogicSignal.X, LogicSignal.X)]
     public void AndLogicTest(LogicSignal input1, LogicSignal input2, LogicSignal expected) {
-        var nodes = new LogicNode[] {
-            new("input1", new InputConnector(1)),
-            new("input2", new InputConnector(1)),
-            new("and1", new AndLogic(2)),
-            new("output", new OutputConnector(1))
-        };
+        var circuit = new Circuit([
+                new("input1", new InputConnector(1)),
+                new("input2", new InputConnector(1)),
+                new("and1", new AndLogic(2)),
+                new("output", new OutputConnector(1))
+            ],
+            [
+                new(new LogicConnector("input1", "out"), new LogicConnector("and1", "in[0]")),
+                new(new LogicConnector("input2", "out"), new LogicConnector("and1", "in[1]")),
+                new(new LogicConnector("and1", "out"), new LogicConnector("output", "in"))
+            ]);
 
-        var connections = new LogicConnection[] {
-            new(new LogicConnector("input1", "out"), new LogicConnector("and1", "in[0]")),
-            new(new LogicConnector("input2", "out"), new LogicConnector("and1", "in[1]")),
-            new(new LogicConnector("and1", "out"), new LogicConnector("output", "in"))
-        };
-
-        var simulation = new LogicSimulation(nodes, connections);
+        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections);
 
         simulation.SetInput("input1", 0, input1);
         simulation.SetInput("input2", 0, input2);
@@ -94,19 +93,19 @@ public class LogicSimulationTests {
     [TestCase(LogicSignal.Low, LogicSignal.X, LogicSignal.X)]
     [TestCase(LogicSignal.High, LogicSignal.X, LogicSignal.High)]
     public void OrLogicTest(LogicSignal input1, LogicSignal input2, LogicSignal expected) {
-        var nodes = new LogicNode[] {
-            new("input1", new InputConnector(1)),
-            new("input2", new InputConnector(1)),
-            new("or", new OrLogic(2)),
-            new("output", new OutputConnector(1))
-        };
-        var connections = new LogicConnection[] {
-            new(new LogicConnector("input1", "out"), new LogicConnector("or", "in[0]")),
-            new(new LogicConnector("input2", "out"), new LogicConnector("or", "in[1]")),
-            new(new LogicConnector("or", "out"), new LogicConnector("output", "in"))
-        };
+        var circuit = new Circuit([
+                new("input1", new InputConnector(1)),
+                new("input2", new InputConnector(1)),
+                new("or", new OrLogic(2)),
+                new("output", new OutputConnector(1))
+            ],
+            [
+                new(new LogicConnector("input1", "out"), new LogicConnector("or", "in[0]")),
+                new(new LogicConnector("input2", "out"), new LogicConnector("or", "in[1]")),
+                new(new LogicConnector("or", "out"), new LogicConnector("output", "in"))
+            ]);
 
-        var simulation = new LogicSimulation(nodes, connections);
+        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections);
 
         simulation.SetInput("input1", 0, input1);
         simulation.SetInput("input2", 0, input2);
@@ -119,18 +118,17 @@ public class LogicSimulationTests {
     [TestCase(LogicSignal.High, LogicSignal.Low)]
     [TestCase(LogicSignal.X, LogicSignal.X)]
     public void NotLogicTest(LogicSignal input, LogicSignal expected) {
-        var nodes = new LogicNode[] {
-            new("input", new InputConnector(1)),
-            new("not1", new NotLogic()),
-            new("output", new OutputConnector(1))
-        };
+        var circuit = new Circuit([
+                new("input", new InputConnector(1)),
+                new("not1", new NotLogic()),
+                new("output", new OutputConnector(1))
+            ],
+            [
+                new(new LogicConnector("input", "out"), new LogicConnector("not1", "in")),
+                new(new LogicConnector("not1", "out"), new LogicConnector("output", "in"))
+            ]);
 
-        var connections = new LogicConnection[] {
-            new(new LogicConnector("input", "out"), new LogicConnector("not1", "in")),
-            new(new LogicConnector("not1", "out"), new LogicConnector("output", "in"))
-        };
-
-        var simulation = new LogicSimulation(nodes, connections);
+        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections);
         
         simulation.SetInput("input", 0, input);
         simulation.Step();
@@ -148,19 +146,19 @@ public class LogicSimulationTests {
     [TestCase(LogicSignal.Low, LogicSignal.X, LogicSignal.High)]
     [TestCase(LogicSignal.High, LogicSignal.X, LogicSignal.X)]
     public void NAndLogicTest(LogicSignal input1, LogicSignal input2, LogicSignal expected) {
-        var nodes = new LogicNode[] {
-            new("input1", new InputConnector(1)),
-            new("input2", new InputConnector(1)),
-            new("nand1", new NAndLogic(2)),
-            new("output", new OutputConnector(1))
-        };
-        var connections = new LogicConnection[] {
-            new(new LogicConnector("input1", "out"), new LogicConnector("nand1", "in[0]")),
-            new(new LogicConnector("input2", "out"), new LogicConnector("nand1", "in[1]")),
-            new(new LogicConnector("nand1", "out"), new LogicConnector("output", "in"))
-        };
+        var circuit = new Circuit([
+                new("input1", new InputConnector(1)),
+                new("input2", new InputConnector(1)),
+                new("nand1", new NAndLogic(2)),
+                new("output", new OutputConnector(1))
+            ],
+            [
+                new(new LogicConnector("input1", "out"), new LogicConnector("nand1", "in[0]")),
+                new(new LogicConnector("input2", "out"), new LogicConnector("nand1", "in[1]")),
+                new(new LogicConnector("nand1", "out"), new LogicConnector("output", "in"))
+            ]);
 
-        var simulation = new LogicSimulation(nodes, connections);
+        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections);
 
         simulation.SetInput("input1", 0, input1);
         simulation.SetInput("input2", 0, input2);
@@ -179,19 +177,19 @@ public class LogicSimulationTests {
     [TestCase(LogicSignal.Low, LogicSignal.X, LogicSignal.X)]
     [TestCase(LogicSignal.High, LogicSignal.X, LogicSignal.Low)]
     public void NOrLogicTest(LogicSignal input1, LogicSignal input2, LogicSignal expected) {
-        var nodes = new LogicNode[] {
-            new("input1", new InputConnector(1)),
-            new("input2", new InputConnector(1)),
-            new("nor", new NOrLogic(2)),
-            new("output", new OutputConnector(1))
-        };
-        var connections = new LogicConnection[] {
-            new(new LogicConnector("input1", "out"), new LogicConnector("nor", "in[0]")),
-            new(new LogicConnector("input2", "out"), new LogicConnector("nor", "in[1]")),
-            new(new LogicConnector("nor", "out"), new LogicConnector("output", "in"))
-        };
+        var circuit = new Circuit([
+                new("input1", new InputConnector(1)),
+                new("input2", new InputConnector(1)),
+                new("nor", new NOrLogic(2)),
+                new("output", new OutputConnector(1))
+            ],
+            [
+                new(new LogicConnector("input1", "out"), new LogicConnector("nor", "in[0]")),
+                new(new LogicConnector("input2", "out"), new LogicConnector("nor", "in[1]")),
+                new(new LogicConnector("nor", "out"), new LogicConnector("output", "in"))
+            ]);
 
-        var simulation = new LogicSimulation(nodes, connections);
+        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections);
 
         simulation.SetInput("input1", 0, input1);
         simulation.SetInput("input2", 0, input2);
@@ -210,20 +208,19 @@ public class LogicSimulationTests {
     [TestCase(LogicSignal.Low, LogicSignal.X, LogicSignal.X)]
     [TestCase(LogicSignal.High, LogicSignal.X, LogicSignal.X)]
     public void XOrLogicTest(LogicSignal input1, LogicSignal input2, LogicSignal expected) {
-        var nodes = new LogicNode[] {
-            new("input1", new InputConnector(1)),
-            new("input2", new InputConnector(1)),
-            new("xor", new XOrLogic(2)),
-            new("output", new OutputConnector(1))
-        };
+        var circuit = new Circuit([
+                new("input1", new InputConnector(1)),
+                new("input2", new InputConnector(1)),
+                new("xor", new XOrLogic(2)),
+                new("output", new OutputConnector(1))
+            ],
+            [
+                new(new LogicConnector("input1", "out"), new LogicConnector("xor", "in[0]")),
+                new(new LogicConnector("input2", "out"), new LogicConnector("xor", "in[1]")),
+                new(new LogicConnector("xor", "out"), new LogicConnector("output", "in"))
+            ]);
 
-        var connections = new LogicConnection[] {
-            new(new LogicConnector("input1", "out"), new LogicConnector("xor", "in[0]")),
-            new(new LogicConnector("input2", "out"), new LogicConnector("xor", "in[1]")),
-            new(new LogicConnector("xor", "out"), new LogicConnector("output", "in"))
-        };
-
-        var simulation = new LogicSimulation(nodes, connections);
+        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections);
 
         simulation.SetInput("input1", 0, input1);
         simulation.SetInput("input2", 0, input2);
@@ -265,28 +262,28 @@ public class LogicSimulationTests {
     [CancelAfter(1000)]
     [TestCaseSource(nameof(NandSrFFLatchSimulationTest_Data))]
     public void NandSrFFLatchSimulationTest(SignalTestPattern pattern) {
-        var nodes = new LogicNode[] {
-            new("S", new InputConnector(1)),
-            new("R", new InputConnector(1)),
-            new("not1", new NotLogic()),
-            new("not2", new NotLogic()),
-            new("nand1", new NAndLogic(2)),
-            new("nand2", new NAndLogic(2)),
-            new("Q", new OutputConnector(1)),
-            new("~Q", new OutputConnector(1))
-        };
-        var connections = new LogicConnection[] {
-            new(new LogicConnector("S", "out"), new LogicConnector("not1", "in")),
-            new(new LogicConnector("not1", "out"), new LogicConnector("nand1", "in[0]")),
-            new(new LogicConnector("R", "out"), new LogicConnector("not2", "in")),
-            new(new LogicConnector("not2", "out"), new LogicConnector("nand2", "in[0]")),
-            new(new LogicConnector("nand1", "out"), new LogicConnector("nand2", "in[1]")),
-            new(new LogicConnector("nand1", "out"), new LogicConnector("Q", "in")),
-            new(new LogicConnector("nand2", "out"), new LogicConnector("nand1", "in[1]")),
-            new(new LogicConnector("nand2", "out"), new LogicConnector("~Q", "in"))
-        };
+        var circuit = new Circuit([
+                new("S", new InputConnector(1)),
+                new("R", new InputConnector(1)),
+                new("not1", new NotLogic()),
+                new("not2", new NotLogic()),
+                new("nand1", new NAndLogic(2)),
+                new("nand2", new NAndLogic(2)),
+                new("Q", new OutputConnector(1)),
+                new("~Q", new OutputConnector(1))
+            ],
+            [
+                new(new LogicConnector("S", "out"), new LogicConnector("not1", "in")),
+                new(new LogicConnector("not1", "out"), new LogicConnector("nand1", "in[0]")),
+                new(new LogicConnector("R", "out"), new LogicConnector("not2", "in")),
+                new(new LogicConnector("not2", "out"), new LogicConnector("nand2", "in[0]")),
+                new(new LogicConnector("nand1", "out"), new LogicConnector("nand2", "in[1]")),
+                new(new LogicConnector("nand1", "out"), new LogicConnector("Q", "in")),
+                new(new LogicConnector("nand2", "out"), new LogicConnector("nand1", "in[1]")),
+                new(new LogicConnector("nand2", "out"), new LogicConnector("~Q", "in"))
+            ]);
 
-        var simulation = new LogicSimulation(nodes, connections);
+        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections);
         simulation.SetInput("S", 0, LogicSignal.Low);
         simulation.SetInput("R", 0, LogicSignal.Low);
 
@@ -369,65 +366,65 @@ public class LogicSimulationTests {
     [CancelAfter(1000)]
     [TestCaseSource(nameof(JKFFMasterSlavePresetClear_Data))]
     public void JKFFMasterSlavePresetClear(SignalTestPattern testPattern) {
-        var nodes = new LogicNode[] {
-            new("~PRE~", new InputConnector(1)),
-            new("J", new InputConnector(1)),
-            new("K", new InputConnector(1)),
-            new("CLK", new InputConnector(1)),
-            new("~CLR~", new InputConnector(1)),
-            new("and1", new AndLogic(2)),
-            new("and2", new AndLogic(2)),
-            new("and3", new AndLogic(2)),
-            new("and4", new AndLogic(2)),
-            new("and5", new AndLogic(2)),
-            new("and6", new AndLogic(2)),
-            new("nand1", new NAndLogic(2)),
-            new("nand2", new NAndLogic(2)),
-            new("nand3", new NAndLogic(2)),
-            new("nand4", new NAndLogic(2)),
-            new("nand5", new NAndLogic(2)),
-            new("nand6", new NAndLogic(2)),
-            new("nand7", new NAndLogic(2)),
-            new("nand8", new NAndLogic(2)),
-            new("not1", new NotLogic()),
-            new("Q", new OutputConnector(1)),
-            new("~Q~", new OutputConnector(1))
-        };
-        var connections = new LogicConnection[] {
-            new(new LogicConnector("~PRE~", "out"), new LogicConnector("and3", "in[0]")),
-            new(new LogicConnector("~PRE~", "out"), new LogicConnector("and5", "in[0]")),
-            new(new LogicConnector("J", "out"), new LogicConnector("and1", "in[0]")),
-            new(new LogicConnector("K", "out"), new LogicConnector("and2", "in[0]")),
-            new(new LogicConnector("CLK", "out"), new LogicConnector("and1", "in[1]")),
-            new(new LogicConnector("CLK", "out"), new LogicConnector("and2", "in[1]")),
-            new(new LogicConnector("CLK", "out"), new LogicConnector("not1", "in")),
-            new(new LogicConnector("not1", "out"), new LogicConnector("nand5", "in[1]")),
-            new(new LogicConnector("not1", "out"), new LogicConnector("nand6", "in[0]")),
-            new(new LogicConnector("~CLR~", "out"), new LogicConnector("and4", "in[1]")),
-            new(new LogicConnector("~CLR~", "out"), new LogicConnector("and6", "in[1]")),
-            new(new LogicConnector("and1", "out"), new LogicConnector("nand1", "in[1]")),
-            new(new LogicConnector("and2", "out"), new LogicConnector("nand2", "in[0]")),
-            new(new LogicConnector("nand1", "out"), new LogicConnector("and3", "in[1]")),
-            new(new LogicConnector("and3", "out"), new LogicConnector("nand3", "in[0]")),
-            new(new LogicConnector("nand2", "out"), new LogicConnector("and4", "in[0]")),
-            new(new LogicConnector("and4", "out"), new LogicConnector("nand4", "in[1]")),
-            new(new LogicConnector("nand3", "out"), new LogicConnector("nand4", "in[0]")),
-            new(new LogicConnector("nand3", "out"), new LogicConnector("nand5", "in[0]")),
-            new(new LogicConnector("nand4", "out"), new LogicConnector("nand3", "in[1]")),
-            new(new LogicConnector("nand4", "out"), new LogicConnector("nand6", "in[1]")),
-            new(new LogicConnector("nand5", "out"), new LogicConnector("and5", "in[1]")),
-            new(new LogicConnector("nand6", "out"), new LogicConnector("and6", "in[0]")),
-            new(new LogicConnector("and5", "out"), new LogicConnector("nand7", "in[0]")),
-            new(new LogicConnector("and6", "out"), new LogicConnector("nand8", "in[1]")),
-            new(new LogicConnector("nand7", "out"), new LogicConnector("Q", "in")),
-            new(new LogicConnector("nand7", "out"), new LogicConnector("nand8", "in[0]")),
-            new(new LogicConnector("nand7", "out"), new LogicConnector("nand2", "in[1]")),
-            new(new LogicConnector("nand8", "out"), new LogicConnector("~Q~", "in")),
-            new(new LogicConnector("nand8", "out"), new LogicConnector("nand7", "in[1]")),
-            new(new LogicConnector("nand8", "out"), new LogicConnector("nand1", "in[0]")),
-        };
+        var circuit = new Circuit([
+                new("~PRE~", new InputConnector(1)),
+                new("J", new InputConnector(1)),
+                new("K", new InputConnector(1)),
+                new("CLK", new InputConnector(1)),
+                new("~CLR~", new InputConnector(1)),
+                new("and1", new AndLogic(2)),
+                new("and2", new AndLogic(2)),
+                new("and3", new AndLogic(2)),
+                new("and4", new AndLogic(2)),
+                new("and5", new AndLogic(2)),
+                new("and6", new AndLogic(2)),
+                new("nand1", new NAndLogic(2)),
+                new("nand2", new NAndLogic(2)),
+                new("nand3", new NAndLogic(2)),
+                new("nand4", new NAndLogic(2)),
+                new("nand5", new NAndLogic(2)),
+                new("nand6", new NAndLogic(2)),
+                new("nand7", new NAndLogic(2)),
+                new("nand8", new NAndLogic(2)),
+                new("not1", new NotLogic()),
+                new("Q", new OutputConnector(1)),
+                new("~Q~", new OutputConnector(1))
+            ],
+            [
+                new(new LogicConnector("~PRE~", "out"), new LogicConnector("and3", "in[0]")),
+                new(new LogicConnector("~PRE~", "out"), new LogicConnector("and5", "in[0]")),
+                new(new LogicConnector("J", "out"), new LogicConnector("and1", "in[0]")),
+                new(new LogicConnector("K", "out"), new LogicConnector("and2", "in[0]")),
+                new(new LogicConnector("CLK", "out"), new LogicConnector("and1", "in[1]")),
+                new(new LogicConnector("CLK", "out"), new LogicConnector("and2", "in[1]")),
+                new(new LogicConnector("CLK", "out"), new LogicConnector("not1", "in")),
+                new(new LogicConnector("not1", "out"), new LogicConnector("nand5", "in[1]")),
+                new(new LogicConnector("not1", "out"), new LogicConnector("nand6", "in[0]")),
+                new(new LogicConnector("~CLR~", "out"), new LogicConnector("and4", "in[1]")),
+                new(new LogicConnector("~CLR~", "out"), new LogicConnector("and6", "in[1]")),
+                new(new LogicConnector("and1", "out"), new LogicConnector("nand1", "in[1]")),
+                new(new LogicConnector("and2", "out"), new LogicConnector("nand2", "in[0]")),
+                new(new LogicConnector("nand1", "out"), new LogicConnector("and3", "in[1]")),
+                new(new LogicConnector("and3", "out"), new LogicConnector("nand3", "in[0]")),
+                new(new LogicConnector("nand2", "out"), new LogicConnector("and4", "in[0]")),
+                new(new LogicConnector("and4", "out"), new LogicConnector("nand4", "in[1]")),
+                new(new LogicConnector("nand3", "out"), new LogicConnector("nand4", "in[0]")),
+                new(new LogicConnector("nand3", "out"), new LogicConnector("nand5", "in[0]")),
+                new(new LogicConnector("nand4", "out"), new LogicConnector("nand3", "in[1]")),
+                new(new LogicConnector("nand4", "out"), new LogicConnector("nand6", "in[1]")),
+                new(new LogicConnector("nand5", "out"), new LogicConnector("and5", "in[1]")),
+                new(new LogicConnector("nand6", "out"), new LogicConnector("and6", "in[0]")),
+                new(new LogicConnector("and5", "out"), new LogicConnector("nand7", "in[0]")),
+                new(new LogicConnector("and6", "out"), new LogicConnector("nand8", "in[1]")),
+                new(new LogicConnector("nand7", "out"), new LogicConnector("Q", "in")),
+                new(new LogicConnector("nand7", "out"), new LogicConnector("nand8", "in[0]")),
+                new(new LogicConnector("nand7", "out"), new LogicConnector("nand2", "in[1]")),
+                new(new LogicConnector("nand8", "out"), new LogicConnector("~Q~", "in")),
+                new(new LogicConnector("nand8", "out"), new LogicConnector("nand7", "in[1]")),
+                new(new LogicConnector("nand8", "out"), new LogicConnector("nand1", "in[0]")),
+            ]);
 
-        var simulation = new LogicSimulation(nodes, connections);
+        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections);
 
         simulation.SetInput("CLK", 0, LogicSignal.Low);
         simulation.SetInput("J", 0, LogicSignal.Low);
@@ -448,43 +445,87 @@ public class LogicSimulationTests {
     }
 
     /// <summary>
+    /// 回路の展開が入れ子になっていた場合展開できるかを確認します。
+    /// </summary>
+    [TestCase(LogicSignal.High, LogicSignal.High, LogicSignal.High)]
+    [TestCase(LogicSignal.Low, LogicSignal.High, LogicSignal.Low)]
+    [TestCase(LogicSignal.Low, LogicSignal.Low, LogicSignal.Low)]
+    [TestCase(LogicSignal.High, LogicSignal.Low, LogicSignal.Low)]
+    public void CustomCircuitExpandTest(LogicSignal input1, LogicSignal input2, LogicSignal expected) {
+        var andCircuit = new Circuit([
+                new("a", new InputConnector(1)),
+                new("b", new InputConnector(1)),
+                new("and1", new AndLogic(2)),
+                new("y", new OutputConnector(1))
+            ],
+            [
+                new(new("a", "out"), new("and1", "in[0]")),
+                new(new("b", "out"), new("and1", "in[1]")),
+                new(new("and1", "out"), new ("y", "in"))
+            ]);
+
+        var library = new Dictionary<string, Circuit> {
+            { "andCircuit", andCircuit }
+        }
+            .ToDictionary(x => x.Key, x => (x.Value.LogicNodes, x.Value.LogicConnections));
+
+        var testCircuit = new Circuit([
+                new("x1", new InputConnector(1)),
+                new("x2", new InputConnector(1)),
+                new("and100", new CustomCircuit("andCircuit")),
+                new("result", new OutputConnector(1))
+            ],
+            [
+                new(new("x1", "out"), new("and100", "a")),
+                new(new("x2", "out"), new("and100", "b")),
+                new(new("and100", "y"), new("result", "in")),
+            ]);
+        
+        var simulation = new LogicSimulation(testCircuit.LogicNodes, testCircuit.LogicConnections, library);
+        simulation.SetInput("x1", 0, input1);
+        simulation.SetInput("x2", 0, input2);
+        simulation.Step();
+
+        Assert.That(simulation.GetOutput("result", 0), Is.EqualTo(expected));
+    }
+
+    /// <summary>
     /// 1つの出力ピンから複数の入力ピンに状態が正しくコピーされることを確認するテスト
     /// </summary>
     [Test]
     public void MultipleConnectionCopyTest() {
         // 1つのOR素子の出力を3つの異なる素子の入力に接続する複数接続テスト
-        var nodes = new LogicNode[] {
-            new("input", new InputConnector(1)),
-            new("or1", new OrLogic(1)),
-            new("and1", new AndLogic(2)),
-            new("and2", new AndLogic(2)),
-            new("and3", new AndLogic(2)),
-            new("outputA", new OutputConnector(1)),
-            new("outputB", new OutputConnector(1)),
-            new("outputC", new OutputConnector(1))
-        };
+        var circuit = new Circuit(new LogicNode[] {
+                new("input", new InputConnector(1)),
+                new("or1", new OrLogic(1)),
+                new("and1", new AndLogic(2)),
+                new("and2", new AndLogic(2)),
+                new("and3", new AndLogic(2)),
+                new("outputA", new OutputConnector(1)),
+                new("outputB", new OutputConnector(1)),
+                new("outputC", new OutputConnector(1))
+            },
+            new LogicConnection[] {
+                // 入力 → OR[0]
+                new(new LogicConnector("input", "out"), new LogicConnector("or1", "in[0]")),
+                
+                // OR出力 → 複数のAND素子の入力[0]（複数接続）
+                new(new LogicConnector("or1", "out"), new LogicConnector("and1", "in[0]")),
+                new(new LogicConnector("or1", "out"), new LogicConnector("and2", "in[0]")),
+                new(new LogicConnector("or1", "out"), new LogicConnector("and3", "in[0]")),
+                
+                // 入力をAND素子の入力[1]にも接続（全ANDが同じ入力を受け取る）
+                new(new LogicConnector("input", "out"), new LogicConnector("and1", "in[1]")),
+                new(new LogicConnector("input", "out"), new LogicConnector("and2", "in[1]")),
+                new(new LogicConnector("input", "out"), new LogicConnector("and3", "in[1]")),
+                
+                // AND出力 → 出力コネクタ
+                new(new LogicConnector("and1", "out"), new LogicConnector("outputA", "in")),
+                new(new LogicConnector("and2", "out"), new LogicConnector("outputB", "in")),
+                new(new LogicConnector("and3", "out"), new LogicConnector("outputC", "in"))
+            });
 
-        var connections = new LogicConnection[] {
-            // 入力 → OR[0]
-            new(new LogicConnector("input", "out"), new LogicConnector("or1", "in[0]")),
-            
-            // OR出力 → 複数のAND素子の入力[0]（複数接続）
-            new(new LogicConnector("or1", "out"), new LogicConnector("and1", "in[0]")),
-            new(new LogicConnector("or1", "out"), new LogicConnector("and2", "in[0]")),
-            new(new LogicConnector("or1", "out"), new LogicConnector("and3", "in[0]")),
-            
-            // 入力をAND素子の入力[1]にも接続（全ANDが同じ入力を受け取る）
-            new(new LogicConnector("input", "out"), new LogicConnector("and1", "in[1]")),
-            new(new LogicConnector("input", "out"), new LogicConnector("and2", "in[1]")),
-            new(new LogicConnector("input", "out"), new LogicConnector("and3", "in[1]")),
-            
-            // AND出力 → 出力コネクタ
-            new(new LogicConnector("and1", "out"), new LogicConnector("outputA", "in")),
-            new(new LogicConnector("and2", "out"), new LogicConnector("outputB", "in")),
-            new(new LogicConnector("and3", "out"), new LogicConnector("outputC", "in"))
-        };
-
-        var simulation = new LogicSimulation(nodes, connections);
+        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections);
 
         // ステップ1: 入力=FALSE で初期化
         simulation.SetInput("input", 0, LogicSignal.Low);
@@ -683,50 +724,5 @@ public class LogicPinsWriterTests {
 
         Assert.That(changedPins.Count, Is.EqualTo(4));
         Assert.That(pins.Pins.All(p => p == LogicSignal.High), Is.True);
-    }
-
-    /// <summary>
-    /// 回路の展開が入れ子になっていた場合展開できるかを確認します。
-    /// </summary>
-    [TestCase(LogicSignal.High, LogicSignal.High, LogicSignal.High)]
-    [TestCase(LogicSignal.Low, LogicSignal.High, LogicSignal.Low)]
-    [TestCase(LogicSignal.Low, LogicSignal.Low, LogicSignal.Low)]
-    [TestCase(LogicSignal.High, LogicSignal.Low, LogicSignal.Low)]
-    public void CustomCircuitExpandTest(LogicSignal input1, LogicSignal input2, LogicSignal expected) {
-        var andCircuit = new Circuit([
-                new("a", new InputConnector(1)),
-                new("b", new InputConnector(1)),
-                new("and1", new AndLogic(2)),
-                new("y", new OutputConnector(1))
-            ],
-            [
-                new(new("a", "out"), new("and1", "in[0]")),
-                new(new("b", "out"), new("and1", "in[1]")),
-                new(new("and1", "out"), new ("y", "in"))
-            ]);
-
-        var library = new Dictionary<string, Circuit> {
-            { "andCircuit", andCircuit }
-        }
-            .ToDictionary(x => x.Key, x => (x.Value.LogicNodes, x.Value.LogicConnections));
-
-        var testCircuit = new Circuit([
-                new("x1", new InputConnector(1)),
-                new("x2", new InputConnector(1)),
-                new("and100", new CustomCircuit("andCircuit")),
-                new("result", new OutputConnector(1))
-            ],
-            [
-                new(new("x1", "out"), new("and100", "a")),
-                new(new("x2", "out"), new("and100", "b")),
-                new(new("and100", "y"), new("result", "in")),
-            ]);
-        
-        var simulation = new LogicSimulation(testCircuit.LogicNodes, testCircuit.LogicConnections, library);
-        simulation.SetInput("x1", 0, input1);
-        simulation.SetInput("x2", 0, input2);
-        simulation.Step();
-
-        Assert.That(simulation.GetOutput("result", 0), Is.EqualTo(expected));
     }
 }
