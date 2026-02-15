@@ -43,7 +43,7 @@ public class LogicSimulationTests {
             { typeof(OutputConnector), new LogicExecutorFactory<OutputConnector>(new OutputConnectorExecutorFactory()) },
         };
 
-        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections, factories);
+        var simulation = new LogicSimulation(circuit, factories);
 
         simulation.SetInput("input1", 0, input1.ToSignal());
         simulation.SetInput("input2", 0, input2.ToSignal());
@@ -74,7 +74,7 @@ public class LogicSimulationTests {
                 new(new LogicConnector("and1", "out"), new LogicConnector("output", "in"))
             ]);
 
-        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections);
+        var simulation = new LogicSimulation(circuit);
 
         simulation.SetInput("input1", 0, input1);
         simulation.SetInput("input2", 0, input2);
@@ -105,7 +105,7 @@ public class LogicSimulationTests {
                 new(new LogicConnector("or", "out"), new LogicConnector("output", "in"))
             ]);
 
-        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections);
+        var simulation = new LogicSimulation(circuit);
 
         simulation.SetInput("input1", 0, input1);
         simulation.SetInput("input2", 0, input2);
@@ -128,7 +128,7 @@ public class LogicSimulationTests {
                 new(new LogicConnector("not1", "out"), new LogicConnector("output", "in"))
             ]);
 
-        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections);
+        var simulation = new LogicSimulation(circuit);
         
         simulation.SetInput("input", 0, input);
         simulation.Step();
@@ -158,7 +158,7 @@ public class LogicSimulationTests {
                 new(new LogicConnector("nand1", "out"), new LogicConnector("output", "in"))
             ]);
 
-        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections);
+        var simulation = new LogicSimulation(circuit);
 
         simulation.SetInput("input1", 0, input1);
         simulation.SetInput("input2", 0, input2);
@@ -189,7 +189,7 @@ public class LogicSimulationTests {
                 new(new LogicConnector("nor", "out"), new LogicConnector("output", "in"))
             ]);
 
-        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections);
+        var simulation = new LogicSimulation(circuit);
 
         simulation.SetInput("input1", 0, input1);
         simulation.SetInput("input2", 0, input2);
@@ -220,7 +220,7 @@ public class LogicSimulationTests {
                 new(new LogicConnector("xor", "out"), new LogicConnector("output", "in"))
             ]);
 
-        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections);
+        var simulation = new LogicSimulation(circuit);
 
         simulation.SetInput("input1", 0, input1);
         simulation.SetInput("input2", 0, input2);
@@ -283,7 +283,7 @@ public class LogicSimulationTests {
                 new(new LogicConnector("nand2", "out"), new LogicConnector("~Q", "in"))
             ]);
 
-        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections);
+        var simulation = new LogicSimulation(circuit);
         simulation.SetInput("S", 0, LogicSignal.Low);
         simulation.SetInput("R", 0, LogicSignal.Low);
 
@@ -424,7 +424,7 @@ public class LogicSimulationTests {
                 new(new LogicConnector("nand8", "out"), new LogicConnector("nand1", "in[0]")),
             ]);
 
-        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections);
+        var simulation = new LogicSimulation(circuit);
 
         simulation.SetInput("CLK", 0, LogicSignal.Low);
         simulation.SetInput("J", 0, LogicSignal.Low);
@@ -466,8 +466,7 @@ public class LogicSimulationTests {
 
         var library = new Dictionary<string, Circuit> {
             { "andCircuit", andCircuit }
-        }
-            .ToDictionary(x => x.Key, x => (x.Value.LogicNodes, x.Value.LogicConnections));
+        };
 
         var testCircuit = new Circuit([
                 new("x1", new InputConnector(1)),
@@ -481,7 +480,7 @@ public class LogicSimulationTests {
                 new(new("and100", "y"), new("result", "in")),
             ]);
         
-        var simulation = new LogicSimulation(testCircuit.LogicNodes, testCircuit.LogicConnections, library);
+        var simulation = new LogicSimulation(testCircuit, library);
         simulation.SetInput("x1", 0, input1);
         simulation.SetInput("x2", 0, input2);
         simulation.Step();
@@ -525,7 +524,7 @@ public class LogicSimulationTests {
                 new(new LogicConnector("and3", "out"), new LogicConnector("outputC", "in"))
             });
 
-        var simulation = new LogicSimulation(circuit.LogicNodes, circuit.LogicConnections);
+        var simulation = new LogicSimulation(circuit);
 
         // ステップ1: 入力=FALSE で初期化
         simulation.SetInput("input", 0, LogicSignal.Low);

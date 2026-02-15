@@ -742,12 +742,12 @@ public class LogicSimulation {
         }
     }
 
-    public LogicSimulation(IReadOnlyList<LogicNode> nodes, IReadOnlyList<LogicConnection> connections)
-        : this(nodes, connections, new Dictionary<string, (IReadOnlyList<LogicNode> nodes, IReadOnlyList<LogicConnection> connections)>()) {
+    public LogicSimulation(Circuit circuit)
+        : this(circuit, new Dictionary<string, Circuit>()) {
     }
 
-    public LogicSimulation(IReadOnlyList<LogicNode> nodes, IReadOnlyList<LogicConnection> connections, Dictionary<string, (IReadOnlyList<LogicNode> nodes, IReadOnlyList<LogicConnection> connections)> circuitLibrary)
-        : this(nodes, connections, new Dictionary<Type, ILogicExecutorFactory> {
+    public LogicSimulation(Circuit circuit, Dictionary<string, Circuit> circuitLibrary)
+        : this(circuit, new Dictionary<Type, ILogicExecutorFactory> {
             { typeof(AndLogic), new LogicExecutorFactory<AndLogic>(new AndLogicExecutorFactory()) },
             { typeof(OrLogic), new LogicExecutorFactory<OrLogic>(new OrLogicExecutorFactory()) },
             { typeof(NotLogic), new LogicExecutorFactory<NotLogic>(new NotLogicExecutorFactory()) },
@@ -759,15 +759,15 @@ public class LogicSimulation {
         }, circuitLibrary) {
     }
 
-    // 従来のコンストラクター: factories を直接引き渡す
-    public LogicSimulation(IReadOnlyList<LogicNode> nodes, IReadOnlyList<LogicConnection> connections, Dictionary<Type, ILogicExecutorFactory> factories)
-        : this(nodes, connections, factories, null) {
+    public LogicSimulation(Circuit circuit, Dictionary<Type, ILogicExecutorFactory> factories)
+        : this(circuit, factories, null) {
     }
 
-    private LogicSimulation(IReadOnlyList<LogicNode> nodes, IReadOnlyList<LogicConnection> connections, Dictionary<Type, ILogicExecutorFactory> factories, Dictionary<string, (IReadOnlyList<LogicNode> nodes, IReadOnlyList<LogicConnection> connections)>? circuitLibrary = null) {
+    private LogicSimulation(Circuit circuit, Dictionary<Type, ILogicExecutorFactory> factories, Dictionary<string, Circuit>? circuitLibrary = null) {
+        IReadOnlyList<LogicNode> nodes = circuit.LogicNodes;
+        IReadOnlyList<LogicConnection> connections = circuit.LogicConnections;
         if (circuitLibrary != null) {
-            var emptyLibrary = new Dictionary<string, Circuit>();
-            var expanded = ExpandCustomCircuits(circuitLibrary?.ToDictionary(x => x.Key, x => new Circuit(x.Value.nodes, x.Value.connections)) ?? emptyLibrary, new Circuit(nodes, connections));
+            var expanded = ExpandCustomCircuits(circuitLibrary ?? new Dictionary<string, Circuit>(), new Circuit(nodes, connections));
             nodes = expanded.LogicNodes;
             connections = expanded.LogicConnections;
         }
