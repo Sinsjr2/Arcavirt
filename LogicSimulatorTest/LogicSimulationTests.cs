@@ -684,4 +684,49 @@ public class LogicPinsWriterTests {
         Assert.That(changedPins.Count, Is.EqualTo(4));
         Assert.That(pins.Pins.All(p => p == LogicSignal.High), Is.True);
     }
+
+    /// <summary>
+    /// 回路の展開が入れ子になっていた場合展開できるかを確認します。
+    /// </summary>
+    [TestCase(LogicSignal.High, LogicSignal.High, LogicSignal.High)]
+    [TestCase(LogicSignal.Low, LogicSignal.High, LogicSignal.Low)]
+    [TestCase(LogicSignal.Low, LogicSignal.Low, LogicSignal.Low)]
+    [TestCase(LogicSignal.High, LogicSignal.Low, LogicSignal.Low)]
+    public void CustomCircuitExpandTest(LogicSignal input1, LogicSignal input2, LogicSignal expected) {
+        var andCircuit = new Circuit([
+                new("a", new InputConnector(1)),
+                new("b", new InputConnector(1)),
+                new("and1", new AndLogic(2)),
+                new("y", new OutputConnector(1))
+            ],
+            [
+                new(new("a", "out"), new("and1", "in[0]")),
+                new(new("b", "out"), new("and1", "in[1]")),
+                new(new("and1", "out"), new ("y", "in"))
+            ]);
+
+        var library = new Dictionary<string, Circuit> {
+            { "andCircuit", andCircuit }
+        }
+            .ToDictionary(x => x.Key, x => (x.Value.LogicNodes, x.Value.LogicConnections));
+
+        var testCircuit = new Circuit([
+                new("x1", new InputConnector(1)),
+                new("x2", new InputConnector(1)),
+                new("and100", new CustomCircuit("andCircuit")),
+                new("result", new OutputConnector(1))
+            ],
+            [
+                new(new("x1", "out"), new("and100", "a")),
+                new(new("x2", "out"), new("and100", "b")),
+                new(new("and100", "y"), new("result", "in")),
+            ]);
+        
+        var simulation = new LogicSimulation(testCircuit.LogicNodes, testCircuit.LogicConnections, library);
+        simulation.SetInput("x1", 0, input1);
+        simulation.SetInput("x2", 0, input2);
+        simulation.Step();
+
+        Assert.That(simulation.GetOutput("result", 0), Is.EqualTo(expected));
+    }
 }

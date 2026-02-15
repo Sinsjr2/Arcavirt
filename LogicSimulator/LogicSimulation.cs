@@ -14,9 +14,17 @@ public record LogicConnection(LogicConnector Source, LogicConnector Target);
 
 public record LogicNode<T>(string LogicID, T LogicData);
 
+/// <summary>
+/// 回路の素子とその回路の接続を表します。
+/// </summary>
+public record Circuit(IReadOnlyList<LogicNode> LogicNodes, IReadOnlyList<LogicConnection> LogicConnections);
+
 public record PinDefinition(string PinName, int BitSize);
 
-public record IOConnectorDefinition(string LogicID, IReadOnlyList<PinDefinition> InputPins, IReadOnlyList<PinDefinition> OutputPins);
+public record IOConnectorDefinition(
+    string LogicID,
+    IReadOnlyList<PinDefinition> InputPins,
+    IReadOnlyList<PinDefinition> OutputPins);
 
 public interface ILogicElement;
 
@@ -523,34 +531,14 @@ public class XOrLogicExecutorFactory : ILogicExecutorFactory<XOrLogic> {
     }
 }
 
-public class InputConnectorExecutor : ILogicExecutor {
-    readonly LogicNode<InputConnector>[] datas;
-    readonly Action onInputChangedNotify;
+public class InputConnectorExecutorFactory : ILogicExecutorFactory<InputConnector> {
+    class InputConnectorExecutor : ILogicExecutor {
 
-    public InputConnectorExecutor(LogicNode<InputConnector>[] datas, Action onInputChangedNotify) {
-        this.datas = datas;
-        this.onInputChangedNotify = onInputChangedNotify;
-    }
-
-    public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
-        // 入力コネクタは入力がないため、何も処理しない
-    }
-
-    /// <summary>
-    /// 入力コネクタの出力ピンに値を設定します。
-    /// </summary>
-    public void SetInputValue(LogicNode<InputConnector>[] nodes, LogicPins outputs, int logicNumberInExecutor, int pinNumber, LogicSignal value) {
-        var logicNode = nodes[logicNumberInExecutor];
-        var globalPinIndex = outputs.GetPinIndex(logicNumberInExecutor, pinNumber);
-        
-        if (outputs.WriteBit(logicNumberInExecutor, pinNumber, value)) {
-            // 値が変化した場合、変更を通知
-            onInputChangedNotify?.Invoke();
+        public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
+            // 入力コネクタは入力がないため、何も処理しない
         }
     }
-}
 
-public class InputConnectorExecutorFactory : ILogicExecutorFactory<InputConnector> {
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<InputConnector> node) {
         return new IOConnectorDefinition(
             node.LogicID,
@@ -560,35 +548,18 @@ public class InputConnectorExecutorFactory : ILogicExecutorFactory<InputConnecto
     }
 
     public ILogicExecutor CreateExecutor(LogicNode<InputConnector>[] nodes, Action onInputChangedNotify) {
-        return new InputConnectorExecutor(nodes, onInputChangedNotify);
-    }
-}
-
-public class OutputConnectorExecutor : ILogicExecutor {
-    readonly LogicNode<OutputConnector>[] datas;
-    readonly Action onInputChangedNotify;
-
-    public OutputConnectorExecutor(LogicNode<OutputConnector>[] datas, Action onInputChangedNotify) {
-        this.datas = datas;
-        this.onInputChangedNotify = onInputChangedNotify;
-    }
-
-    public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
-        // 出力コネクタは自身の出力を持たないため、何も処理しない。入力が外部への出力となる。
-    }
-
-    public IReadOnlyList<IOConnectorDefinition> GetPinDefinitions() {
-        return datas.Select(x =>
-            new IOConnectorDefinition(
-                x.LogicID,
-                [ new PinDefinition("in", x.LogicData.DataBits) ],
-                [] // 出力ピンなし
-            ))
-            .ToArray();
+        return new InputConnectorExecutor();
     }
 }
 
 public class OutputConnectorExecutorFactory : ILogicExecutorFactory<OutputConnector> {
+    class OutputConnectorExecutor : ILogicExecutor {
+
+        public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
+            // 出力コネクタは自身の出力を持たないため、何も処理しない。入力が外部への出力となる。
+        }
+    }
+
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<OutputConnector> node) {
         return new IOConnectorDefinition(
             node.LogicID,
@@ -598,7 +569,7 @@ public class OutputConnectorExecutorFactory : ILogicExecutorFactory<OutputConnec
     }
 
     public ILogicExecutor CreateExecutor(LogicNode<OutputConnector>[] nodes, Action onInputChangedNotify) {
-        return new OutputConnectorExecutor(nodes, onInputChangedNotify);
+        return new OutputConnectorExecutor();
     }
 }
 
@@ -609,8 +580,17 @@ public class JK_FF_PresetClearExecutor : ILogicExecutor {
         return datas.Select(x =>
             new IOConnectorDefinition(
                 x.LogicID,
-                [ new PinDefinition("preN", 1), new PinDefinition("j", 1), new PinDefinition("k", 1), new PinDefinition("clk", 1), new PinDefinition("clrN", 1)],
-                [ new PinDefinition("q", 1), new PinDefinition("qN", 1)]))
+                [
+                    new PinDefinition("preN", 1),
+                    new PinDefinition("j", 1),
+                    new PinDefinition("k", 1),
+                    new PinDefinition("clk", 1),
+                    new PinDefinition("clrN", 1)
+                ],
+                [
+                    new PinDefinition("q", 1),
+                    new PinDefinition("qN", 1)
+                ]))
             .ToArray();
     }
 
@@ -658,7 +638,7 @@ public class ConstantValueExecutor : ILogicExecutor {
             new IOConnectorDefinition(
                 x.LogicID,
                 [],
-                [ new PinDefinition("out", 1)]))
+                [ new PinDefinition("out", 1) ]))
             .ToArray();
     }
 
@@ -762,7 +742,11 @@ public class LogicSimulation {
         }
     }
 
-    public LogicSimulation(IReadOnlyList<LogicNode> nodes, IReadOnlyList<LogicConnection> connections) 
+    public LogicSimulation(IReadOnlyList<LogicNode> nodes, IReadOnlyList<LogicConnection> connections)
+        : this(nodes, connections, new Dictionary<string, (IReadOnlyList<LogicNode> nodes, IReadOnlyList<LogicConnection> connections)>()) {
+    }
+
+    public LogicSimulation(IReadOnlyList<LogicNode> nodes, IReadOnlyList<LogicConnection> connections, Dictionary<string, (IReadOnlyList<LogicNode> nodes, IReadOnlyList<LogicConnection> connections)> circuitLibrary)
         : this(nodes, connections, new Dictionary<Type, ILogicExecutorFactory> {
             { typeof(AndLogic), new LogicExecutorFactory<AndLogic>(new AndLogicExecutorFactory()) },
             { typeof(OrLogic), new LogicExecutorFactory<OrLogic>(new OrLogicExecutorFactory()) },
@@ -772,10 +756,22 @@ public class LogicSimulation {
             { typeof(XOrLogic), new LogicExecutorFactory<XOrLogic>(new XOrLogicExecutorFactory()) },
             { typeof(InputConnector), new LogicExecutorFactory<InputConnector>(new InputConnectorExecutorFactory()) },
             { typeof(OutputConnector), new LogicExecutorFactory<OutputConnector>(new OutputConnectorExecutorFactory()) },
-        }) {
+        }, circuitLibrary) {
     }
 
-    public LogicSimulation(IReadOnlyList<LogicNode> nodes, IReadOnlyList<LogicConnection> connections, Dictionary<Type, ILogicExecutorFactory> factories) {
+    // 従来のコンストラクター: factories を直接引き渡す
+    public LogicSimulation(IReadOnlyList<LogicNode> nodes, IReadOnlyList<LogicConnection> connections, Dictionary<Type, ILogicExecutorFactory> factories)
+        : this(nodes, connections, factories, null) {
+    }
+
+    private LogicSimulation(IReadOnlyList<LogicNode> nodes, IReadOnlyList<LogicConnection> connections, Dictionary<Type, ILogicExecutorFactory> factories, Dictionary<string, (IReadOnlyList<LogicNode> nodes, IReadOnlyList<LogicConnection> connections)>? circuitLibrary = null) {
+        if (circuitLibrary != null) {
+            var emptyLibrary = new Dictionary<string, Circuit>();
+            var expanded = ExpandCustomCircuits(circuitLibrary?.ToDictionary(x => x.Key, x => new Circuit(x.Value.nodes, x.Value.connections)) ?? emptyLibrary, new Circuit(nodes, connections));
+            nodes = expanded.LogicNodes;
+            connections = expanded.LogicConnections;
+        }
+
         var executorList = new List<ExecutorContext>();
         var groupedNodes = nodes.GroupBy(node => node.LogicData.GetType());
 
@@ -891,6 +887,126 @@ public class LogicSimulation {
                 new TargetConnection(targetPinInfo.executorIndex, new int[] { targetPinInfo.pinIndex })
             );
         }
+    }
+
+    Circuit ExpandCustomCircuits(
+        Dictionary<string, Circuit> circuitLibrary,
+        Circuit originalCircuit) {
+        var expandedNodes = new Dictionary<string, (bool isTop, LogicNode node)>();
+        var expandedConnections = new List<(bool isTop, LogicConnection connection)>();
+
+        // CustomCircuitで展開される回路の名前にプレフィックスをつけてユニークにする
+        void ExpandCircuit(string prefix, Circuit circuit, int level = 0) {
+            // 接続する名前も展開する回路の名前をつけてユニークにする
+            foreach (var connection in circuit.LogicConnections) {
+                var source = connection.Source;
+                var targt = connection.Target;
+                expandedConnections.Add((level == 0, new LogicConnection(
+                    source with { LogicID = prefix + source.LogicID },
+                    targt with { LogicID = prefix + targt.LogicID })));
+            }
+            foreach (var node in circuit.LogicNodes) {
+                var newLogicID = prefix + node.LogicID;
+                var newNode = node with { LogicID = newLogicID };
+                expandedNodes[newLogicID] = (level == 0, newNode);
+                if (node.LogicData is CustomCircuit customCircuit) {
+                    // CustomCircuitノードの場合、内部回路を展開
+                    var targetCircuitName = customCircuit.TargetCircuitName;
+                    if (!circuitLibrary.TryGetValue(targetCircuitName, out var circuitDef)) {
+                        throw new ArgumentException($"Circuit '{targetCircuitName}' not found in library");
+                    }
+                    // ネストを示すプリフィックス
+                    var idPrefix = $"{prefix}{node.LogicID}.";
+                    ExpandCircuit(idPrefix, circuitDef, level + 1);
+                }
+            }
+        }
+
+        ExpandCircuit("", originalCircuit);
+
+        // 計算量を減らすために辞書にして接続先を高速で検索できるようにする
+        var groupedSourceConnections = expandedConnections
+            .GroupBy(x =>
+                expandedNodes[x.connection.Source.LogicID].node.LogicData is OutputConnector or InputConnector
+                ? x.connection.Source.LogicID
+                : $"{x.connection.Source.LogicID}.{x.connection.Source.PinName}")
+            .ToDictionary(x => x.Key, x => x.ToArray());
+
+        // 接続のソースは1つしか接続されない
+        // このメソッドが呼ばれるよりも先にエラー検知で弾いていることを前提としている
+        // 指定された OutputConnectorから接続されている接続されている接続をリストに追加します。
+        void FindTargetConnections(HashSet<string> skipSourceConnectorNames, LogicConnector outputConnector, List<LogicConnector> resultConnections) {
+            if (!expandedNodes.TryGetValue(outputConnector.LogicID, out var sourceNode)) {
+                throw new ArgumentException($"logic ID not found: '{outputConnector}'");
+            }
+            if (sourceNode.node.LogicData is not OutputConnector and not InputConnector and not CustomCircuit) {
+                resultConnections.Add(outputConnector);
+                return;
+            }
+            // すでに処理済みのノードはスキップ
+            if (!skipSourceConnectorNames.Add(outputConnector.LogicID)) {
+                return;
+            }
+            if (!expandedNodes.TryGetValue(outputConnector.LogicID, out var targetNode)) {
+                throw new ArgumentException($"logic ID not found: '{outputConnector}'");
+            }
+            // 一番その側の回路の場合は、出力用のコネクタを残す
+            if (targetNode.isTop) {
+                if (targetNode.node.LogicData is OutputConnector) {
+                    resultConnections.Add(outputConnector);
+                    return;
+                }
+            }
+            if (targetNode.node.LogicData is OutputConnector or InputConnector) {
+                foreach (var targetConnection in groupedSourceConnections[outputConnector.LogicID]) {
+                    FindTargetConnections(
+                        skipSourceConnectorNames,
+                        targetConnection.connection.Target,
+                        resultConnections);
+                }
+            }
+            else if (targetNode.node.LogicData is CustomCircuit) {
+                FindTargetConnections(
+                    skipSourceConnectorNames,
+                    new LogicConnector($"{outputConnector.LogicID}.{outputConnector.PinName}", ""),
+                    resultConnections);
+            }
+            else {
+                resultConnections.Add(outputConnector);
+            }
+        }
+
+        var alreadyConnectedSourceConnectorNames = new HashSet<string>();
+        var resultTargetConnectors = new List<LogicConnector>();
+        var resultConnections = new List<LogicConnection>();
+
+        // トップレベルのInputConnectorとOutputConnectorは残す
+        foreach (var connection in expandedConnections) {
+            if (!expandedNodes.TryGetValue(connection.connection.Source.LogicID, out var sourceNode)) {
+                throw new ArgumentException($"logic ID not found: '{connection.connection.Source.LogicID}'");
+            }
+            if (sourceNode.node.LogicData is CustomCircuit ||
+                (!connection.isTop && sourceNode.node.LogicData is InputConnector or OutputConnector)) {
+                continue;
+            }
+            resultTargetConnectors.Clear();
+            alreadyConnectedSourceConnectorNames.Clear();
+            FindTargetConnections(alreadyConnectedSourceConnectorNames, connection.connection.Target, resultTargetConnectors);
+            foreach (var targetConnector in resultTargetConnectors) {
+                resultConnections.Add(new LogicConnection(connection.connection.Source, targetConnector));
+            }
+        }
+
+        // 不要なノードを削除する
+        // トップレベルの InputConnector と OutputConnector は残すtrue
+        var resultNodes = expandedNodes
+            .Where(x =>
+                x.Value.node.LogicData is not CustomCircuit &&
+                (x.Value.isTop || x.Value.node.LogicData is not InputConnector and not OutputConnector))
+            .Select(x => x.Value.node)
+            .ToArray();
+
+        return new Circuit(resultNodes, resultConnections);
     }
 
     public void Step() {
