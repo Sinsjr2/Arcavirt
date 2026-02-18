@@ -746,7 +746,7 @@ public class LogicSimulation {
         : this(circuit, new Dictionary<string, Circuit>()) {
     }
 
-    public LogicSimulation(Circuit circuit, Dictionary<string, Circuit> circuitLibrary)
+    public LogicSimulation(Circuit circuit, IReadOnlyDictionary<string, Circuit> circuitLibrary)
         : this(circuit, new Dictionary<Type, ILogicExecutorFactory> {
             { typeof(AndLogic), new LogicExecutorFactory<AndLogic>(new AndLogicExecutorFactory()) },
             { typeof(OrLogic), new LogicExecutorFactory<OrLogic>(new OrLogicExecutorFactory()) },
@@ -763,7 +763,7 @@ public class LogicSimulation {
         : this(circuit, factories, null) {
     }
 
-    private LogicSimulation(Circuit circuit, Dictionary<Type, ILogicExecutorFactory> factories, Dictionary<string, Circuit>? circuitLibrary = null) {
+    private LogicSimulation(Circuit circuit, Dictionary<Type, ILogicExecutorFactory> factories, IReadOnlyDictionary<string, Circuit>? circuitLibrary = null) {
         IReadOnlyList<LogicNode> nodes = circuit.LogicNodes;
         IReadOnlyList<LogicConnection> connections = circuit.LogicConnections;
         if (circuitLibrary != null) {
@@ -890,7 +890,7 @@ public class LogicSimulation {
     }
 
     Circuit ExpandCustomCircuits(
-        Dictionary<string, Circuit> circuitLibrary,
+        IReadOnlyDictionary<string, Circuit> circuitLibrary,
         Circuit originalCircuit) {
         var expandedNodes = new Dictionary<string, (bool isTop, LogicNode node)>();
         var expandedConnections = new List<(bool isTop, LogicConnection connection)>();
