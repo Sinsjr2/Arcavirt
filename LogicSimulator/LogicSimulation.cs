@@ -869,10 +869,10 @@ public class LogicSimulation {
             var targetPinName = connection.Target.PinName;
 
             if (!logicIdAndPinNameToPinIndex.TryGetValue(sourceLogicID, out var sourcePinIndex) || !sourcePinIndex.ContainsKey(sourcePinName)) {
-                throw new ArgumentException($"Source pin {sourceLogicID}.{sourcePinName} not found.");
+                continue;
             }
             if (!logicIdAndPinNameToPinIndex.TryGetValue(targetLogicID, out var targetPinIndex) || !targetPinIndex.ContainsKey(targetPinName)) {
-                throw new ArgumentException($"Target pin {targetLogicID}.{targetPinName} not found.");
+                continue;
             }
 
             var sourcePinInfo = logicIdAndPinNameToPinIndex[sourceLogicID][sourcePinName];
@@ -958,22 +958,22 @@ public class LogicSimulation {
                 }
             }
             if (targetNode.node.LogicData is OutputConnector or InputConnector) {
-                foreach (var targetConnection in groupedSourceConnections[outputConnector.LogicID]) {
+                if (groupedSourceConnections.TryGetValue(outputConnector.LogicID, out var targetConnections)) {
+                    foreach (var targetConnection in targetConnections) {
+                        FindTargetConnections(
+                            skipSourceConnectorNames,
+                            targetConnection.connection.Target,
+                            resultConnections);
+                    }
+                }
+            } else if (targetNode.node.LogicData is CustomCircuit) {
                     FindTargetConnections(
                         skipSourceConnectorNames,
-                        targetConnection.connection.Target,
+                        new LogicConnector($"{outputConnector.LogicID}.{outputConnector.PinName}", ""),
                         resultConnections);
+                } else {
+                    resultConnections.Add(outputConnector);
                 }
-            }
-            else if (targetNode.node.LogicData is CustomCircuit) {
-                FindTargetConnections(
-                    skipSourceConnectorNames,
-                    new LogicConnector($"{outputConnector.LogicID}.{outputConnector.PinName}", ""),
-                    resultConnections);
-            }
-            else {
-                resultConnections.Add(outputConnector);
-            }
         }
 
         var alreadyConnectedSourceConnectorNames = new HashSet<string>();
