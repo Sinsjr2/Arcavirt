@@ -70,11 +70,6 @@ public record XOrLogic(int NumOfInputs) : ILogicElement;
 public class JK_FF_PresetClear : ILogicElement;
 
 /// <summary>
-/// 入力ピンと出力ピンをまとめたり分割したりして、素子間の線の接続本数を減らします。
-/// </summary>
-public record Splitter(IReadOnlyList<int> InputSplits, IReadOnlyList<int> OutputSplits) : ILogicElement;
-
-/// <summary>
 /// 回路一式をコンポートとして使い回しする時に外部と接続するための入力コネクタ
 /// </summary>
 public record InputConnector(int DataBits) : ILogicElement;
@@ -85,33 +80,9 @@ public record InputConnector(int DataBits) : ILogicElement;
 public record OutputConnector(int DataBits) : ILogicElement;
 
 /// <summary>
-/// MCUといったプログラムを書き込み動作するICを名前で指定します。
-/// 外部からプログラムを指定する際は、パスを指定して読み込むファイルを決定します。
-/// <see cref="CustomCircuit"/>で読み込まれた対象に本クラスが含まれているとパスが自動的に追加されます。
-/// </summary>
-public record ProgramableIC(string IcName) : ILogicElement;
-
-/// <summary>
 /// ユーザーが作成した回路を名前で呼び出します。
 /// </summary>
 public record CustomCircuit(string TargetCircuitName) : ILogicElement;
-
-public class Light : ILogicElement;
-
-public record Button(bool ActiveLow) : ILogicElement;
-
-public record ToggleSwitch(bool OutputIsHigh) : ILogicElement;
-
-/// <summary>
-/// 指定したビット幅でデータを出力します。
-/// 下の桁が下のビットに対応します。
-/// </summary>
-public record ConstantValue(int DataBits, ulong Value) : ILogicElement;
-
-/// <summary>
-/// string.Formatによりビット列を数値としてデコードし表示します。
-/// </summary>
-public record NumberDecoder(string Format) : ILogicElement;
 
 public interface ILogicExecutor {
     void Execute(LogicPinReader inputs, LogicPinsWriter outputs);
@@ -622,32 +593,6 @@ public class JK_FF_PresetClearExecutor : ILogicExecutor {
             // bool qN = !clrN || q;
             // outputs.WriteBit(logicNo, 0, q);
             // outputs.WriteBit(logicNo, 1, qN);
-        }
-    }
-}
-
-public class ConstantValueExecutor : ILogicExecutor {
-    /// <summary>
-    /// インデックスは素子の番号と一致します。
-    /// 設定する定数
-    /// </summary>
-    readonly LogicNode<ConstantValue>[] datas;
-
-    public IReadOnlyList<IOConnectorDefinition> GetPinDefinitions() {
-        return datas.Select(x =>
-            new IOConnectorDefinition(
-                x.LogicID,
-                [],
-                [ new PinDefinition("out", 1) ]))
-            .ToArray();
-    }
-
-    public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
-        for (int i = 0; i < datas.Length; i++) {
-            var data = datas[i];
-            for (int pinNo = 0; pinNo < data.LogicData.DataBits; pinNo++) {
-                outputs.WriteBit(i, pinNo, ((data.LogicData.Value >> pinNo) & 1) != 0 ? LogicSignal.High : LogicSignal.Low);
-            }
         }
     }
 }
