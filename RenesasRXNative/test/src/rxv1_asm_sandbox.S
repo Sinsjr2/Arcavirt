@@ -1,3 +1,4 @@
+#define G_WORK_AREA_SIZE 128
 
     .section  .data
 _g_u8Value: .dc.b 0
@@ -6,14 +7,14 @@ _g_u16Value: .dc.w 0
     .global _g_u16Value
 
     .section .bss
-#define G_WORK_AREA_SIZE 128
 _g_workArea: .ds.b G_WORK_AREA_SIZE
+
     .global _g_workArea
 
     .section .text
 
-// 使用するグルーバル変数を初期化します。
-// void sandbox_init();
+;; 使用するグルーバル変数を初期化します。
+;; void sandbox_init();
 sandbox_init:
     mov #_g_u8Value, R1
     mov.b #71h, [R1]
