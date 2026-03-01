@@ -1,0 +1,7 @@
+services:
+  dev:
+    build:
+      context: ./docker/
+      dockerfile: Dockerfile
+      tags:
+        - cpu_sim_dev:latest
