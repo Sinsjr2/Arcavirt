@@ -1,4 +1,8 @@
-
+# dockerのビルド方法
+1. `https://llvm-gcc-renesas.com/ja/rx-download-toolchains/` より `GCC for Renesas 14.2.0.202511-GNURX Linux Toolchain (ELF)`を  
+  ダウンロードする。
+2. `docker/installers`にダウンロードしたファイルを保存する。
+3. `docker compose build` を実行する。
 
 # 使用ツール
 - vs code
