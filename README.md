@@ -1,3 +1,13 @@
+# Arcavirt
+
+## 名前の由来
+
+**Arcavirt** （アルカヴァート）は、**Arcadia**（理想郷）と **Virtual**（仮想）を組み合わせた造語です。
+
+実機のCPU、煩雑な配線が必要なステッパーモーター、高価なオシロスコープ、そしてデバッグ用のJTAG。  
+これら物理ハードウェアの準備や故障のリスクに縛られることなく、
+ソフトウェアの力だけで「エンジニアが真に集中できる理想的な検証空間」を提供したいという願いが込められています。
+
 # dockerのビルド方法
 1. `https://llvm-gcc-renesas.com/ja/rx-download-toolchains/` より `GCC for Renesas 14.2.0.202511-GNURX Linux Toolchain (ELF)`を  
   ダウンロードする。
