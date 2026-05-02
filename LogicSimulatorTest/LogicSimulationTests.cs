@@ -794,6 +794,51 @@ public class LogicSimulationTests {
         Assert.That(simulation.GetOutput("outputB", 0), Is.EqualTo(LogicSignal.High));
         Assert.That(simulation.GetOutput("outputC", 0), Is.EqualTo(LogicSignal.High));
     }
+    [CancelAfter(5000)]
+    [Test]
+    public void UDCounter4Bit() {
+        var simulation = new LogicSimulation(BuiltInCircuit.UDCounter4Bit, BuiltInCircuit.Circuits);
+
+        simulation.SetInput("CLK", 0, LogicSignal.Low);
+        simulation.SetInput("DIR", 0, LogicSignal.Low);
+        simulation.SetInput("LOW", 0, LogicSignal.Low);
+        simulation.SetInput("SET", 0, LogicSignal.Low);
+        simulation.SetInput("INITIAL0", 0, LogicSignal.Low);
+        simulation.SetInput("INITIAL1", 0, LogicSignal.Low);
+        simulation.SetInput("INITIAL2", 0, LogicSignal.Low);
+        simulation.SetInput("INITIAL3", 0, LogicSignal.Low);
+        simulation.Step();
+
+        // 0000 にクリア
+        simulation.SetInput("SET", 0, LogicSignal.High);
+        simulation.Step();
+        simulation.SetInput("SET", 0, LogicSignal.Low);
+        simulation.SetInput("LOW", 0, LogicSignal.High);
+        simulation.Step();
+
+        using (Assert.EnterMultipleScope()) {
+            Assert.That(simulation.GetOutput("D0", 0), Is.EqualTo(LogicSignal.Low), "init D0");
+            Assert.That(simulation.GetOutput("D1", 0), Is.EqualTo(LogicSignal.Low), "init D1");
+            Assert.That(simulation.GetOutput("D2", 0), Is.EqualTo(LogicSignal.Low), "init D2");
+            Assert.That(simulation.GetOutput("D3", 0), Is.EqualTo(LogicSignal.Low), "init D3");
+        }
+
+        // 0→15→0 の 16 クロックをカウントアップ
+        for (int i = 1; i <= 16; i++) {
+            simulation.SetInput("CLK", 0, LogicSignal.High);
+            simulation.Step();
+            simulation.SetInput("CLK", 0, LogicSignal.Low);
+            simulation.Step();
+
+            int expected = i % 16;
+            using (Assert.EnterMultipleScope()) {
+                Assert.That(simulation.GetOutput("D0", 0), Is.EqualTo(((expected & 1) != 0).ToSignal()), $"count={i} D0");
+                Assert.That(simulation.GetOutput("D1", 0), Is.EqualTo(((expected & 2) != 0).ToSignal()), $"count={i} D1");
+                Assert.That(simulation.GetOutput("D2", 0), Is.EqualTo(((expected & 4) != 0).ToSignal()), $"count={i} D2");
+                Assert.That(simulation.GetOutput("D3", 0), Is.EqualTo(((expected & 8) != 0).ToSignal()), $"count={i} D3");
+            }
+        }
+    }
 }
 
 /// <summary>
