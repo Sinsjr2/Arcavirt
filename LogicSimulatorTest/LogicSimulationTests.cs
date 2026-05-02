@@ -794,6 +794,63 @@ public class LogicSimulationTests {
         Assert.That(simulation.GetOutput("outputB", 0), Is.EqualTo(LogicSignal.High));
         Assert.That(simulation.GetOutput("outputC", 0), Is.EqualTo(LogicSignal.High));
     }
+
+    public static IReadOnlyList<SignalTestPattern> UDCounter1Bit_Data = [
+        // SET でクリア（Q=0）
+        new([
+            new([ new("SET", true) ], [ new("D", false) ]),
+            new([ new("SET", false) ], [ new("D", false) ]),
+        ]),
+        // SET でプリセット（Q=1）
+        new([
+            new([ new("SET", true), new("INITIAL", true) ], [ new("D", true) ]),
+            new([ new("SET", false) ], [ new("D", true) ]),
+        ]),
+        // カウントアップ 0→1→0
+        new([
+            new([ new("SET", true) ], []),
+            new([ new("SET", false), new("LOW", true), new("DIR", false) ], [ new("D", false), new("HI", false) ]),
+            new([ new("CLK", true) ], [ new("D", false), new("HI", false) ]),
+            new([ new("CLK", false) ], [ new("D", true), new("HI", true) ]),
+            new([ new("CLK", true) ], [ new("D", true), new("HI", true) ]),
+            new([ new("CLK", false) ], [ new("D", false), new("HI", false) ]),
+            new([ new("CLK", true) ], [ new("D", false), new("HI", false) ]),
+            new([ new("CLK", false) ], [ new("D", true), new("HI", true) ]),
+        ]),
+        // カウントダウン 1→0
+        new([
+            new([ new("SET", true), new("INITIAL", true) ], []),
+            new([ new("SET", false), new("LOW", true), new("DIR", true) ], [ new("D", true), new("HI", false) ]),
+            new([ new("CLK", true) ], [ new("D", true), new("HI", false) ]),
+            new([ new("CLK", false) ], [ new("D", false), new("HI", true) ]),
+            new([ new("CLK", true) ], [ new("D", false), new("HI", true) ]),
+            new([ new("CLK", false) ], [ new("D", true), new("HI", false) ]),
+        ]),
+    ];
+
+    [CancelAfter(1000)]
+    [TestCaseSource(nameof(UDCounter1Bit_Data))]
+    public void UDCounter1Bit(SignalTestPattern testPattern) {
+        var simulation = new LogicSimulation(BuiltInCircuit.UDCounter1Bit, BuiltInCircuit.Circuits);
+
+        simulation.SetInput("CLK", 0, LogicSignal.Low);
+        simulation.SetInput("DIR", 0, LogicSignal.Low);
+        simulation.SetInput("LOW", 0, LogicSignal.Low);
+        simulation.SetInput("SET", 0, LogicSignal.Low);
+        simulation.SetInput("INITIAL", 0, LogicSignal.Low);
+        simulation.Step();
+
+        foreach (var frame in testPattern.Frames) {
+            foreach (var input in frame.Inputs) {
+                simulation.SetInput(input.PinName, 0, input.Value.ToSignal());
+            }
+            simulation.Step();
+            foreach (var expected in frame.Expecteds) {
+                Assert.That(simulation.GetOutput(expected.PinName, 0), Is.EqualTo(expected.Value.ToSignal()));
+            }
+        }
+    }
+
     [CancelAfter(5000)]
     [Test]
     public void UDCounter4Bit() {
