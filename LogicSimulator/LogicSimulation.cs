@@ -845,10 +845,10 @@ public class LogicSimulation {
             // 接続する名前も展開する回路の名前をつけてユニークにする
             foreach (var connection in circuit.LogicConnections) {
                 var source = connection.Source;
-                var targt = connection.Target;
+                var target = connection.Target;
                 expandedConnections.Add((level == 0, new LogicConnection(
                     source with { LogicID = prefix + source.LogicID },
-                    targt with { LogicID = prefix + targt.LogicID })));
+                    target with { LogicID = prefix + target.LogicID })));
             }
             foreach (var node in circuit.LogicNodes) {
                 var newLogicID = prefix + node.LogicID;
