@@ -1008,7 +1008,7 @@ public class LogicSimulation {
                             new LogicPinsWriter(ctx.Outputs, ctx.ValueChangedOutputPins));
                         ctx.ValueChangedInputPins.Clear();
                         // Executor の出力が変化した場合、その出力の伝播処理を実行する必要がある
-                        if (0 < ctx.ValueChangedOutputPins.Count && !ctx.ShouldCopy) {
+                        if (!ctx.ShouldCopy && 0 < ctx.ValueChangedOutputPins.Count) {
                             ctx.ShouldCopy = true;
                             outputValueChangedExecutorIndexes.Add(changedLogicNo);
                         }
