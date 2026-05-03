@@ -973,11 +973,7 @@ public class LogicSimulation {
                     ctx.ShouldCopy = false;
                     foreach (var changedPinNo in ctx.ValueChangedOutputPins) {
                         var outputToInputConnections = ctx.OutputToInputPinConnections[changedPinNo];
-                        if (outputToInputConnections.Count == 0) {
-                            continue;
-                        }
                         var currentOutputValue = ctx.Outputs.Pins[changedPinNo];
-
                         // 複数接続をサポート：各接続先に値を伝播
                         foreach (var outputToInputConnection in outputToInputConnections) {
                             var writeTargetLogic = executorContexts[outputToInputConnection.LogicTypeNumber];
@@ -1015,17 +1011,6 @@ public class LogicSimulation {
                         if (0 < ctx.ValueChangedOutputPins.Count && !ctx.ShouldCopy) {
                             ctx.ShouldCopy = true;
                             outputValueChangedExecutorIndexes.Add(changedLogicNo);
-                        }
-                        foreach (var changedOutputPinNo in ctx.ValueChangedOutputPins) {
-                            // 複数接続先にコピーするように設定する
-                            foreach (var connection in ctx.OutputToInputPinConnections[changedOutputPinNo]) {
-                                var logicTypeNo = connection.LogicTypeNumber;
-                                var writeTarget = executorContexts[logicTypeNo];
-                                if (!writeTarget.ShouldCopy) {
-                                    writeTarget.ShouldCopy = true;
-                                    outputValueChangedExecutorIndexes.Add(logicTypeNo);
-                                }
-                            }
                         }
                     }
                 }
