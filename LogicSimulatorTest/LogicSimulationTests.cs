@@ -869,16 +869,16 @@ public class LogicSimulationTests {
         // 0000 にクリア
         simulation.SetInput("SET", 0, LogicSignal.High);
         simulation.Step();
-        simulation.SetInput("SET", 0, LogicSignal.Low);
-        simulation.SetInput("LOW", 0, LogicSignal.High);
-        simulation.Step();
-
         using (Assert.EnterMultipleScope()) {
             Assert.That(simulation.GetOutput("D0", 0), Is.EqualTo(LogicSignal.Low), "init D0");
             Assert.That(simulation.GetOutput("D1", 0), Is.EqualTo(LogicSignal.Low), "init D1");
             Assert.That(simulation.GetOutput("D2", 0), Is.EqualTo(LogicSignal.Low), "init D2");
             Assert.That(simulation.GetOutput("D3", 0), Is.EqualTo(LogicSignal.Low), "init D3");
         }
+
+        simulation.SetInput("SET", 0, LogicSignal.Low);
+        simulation.SetInput("LOW", 0, LogicSignal.High);
+        simulation.Step();
 
         // 0→15→0 の 16 クロックをカウントアップ
         for (int i = 1; i <= 16; i++) {
