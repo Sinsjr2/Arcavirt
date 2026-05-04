@@ -257,6 +257,11 @@ public struct LogicPinsWriter {
     }
 }
 
+/// <summary>
+/// AND論理素子。全入力がHighのときのみ出力がHigh、それ以外はLow。
+/// 1つでもLow入力があれば他の入力の不定(X)に関わらず出力はLow。
+/// Low がなくX が混在する場合は出力がX になる。入力数は任意に指定可能。
+/// </summary>
 public class AndLogicExecutorFactory : ILogicExecutorFactory<AndLogic> {
     class AndExecutor : ILogicExecutor {
         public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
@@ -300,6 +305,11 @@ public class AndLogicExecutorFactory : ILogicExecutorFactory<AndLogic> {
     }
 }
 
+/// <summary>
+/// OR論理素子。1つでもHigh入力があれば出力がHigh、全Low入力のときのみ出力がLow。
+/// 1つでもHigh入力があれば他の入力の不定(X)に関わらず出力はHigh。
+/// High がなくX が混在する場合は出力がX になる。入力数は任意に指定可能。
+/// </summary>
 public class OrLogicExecutorFactory : ILogicExecutorFactory<OrLogic> {
     class OrLogicExecutor : ILogicExecutor {
         public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
@@ -343,6 +353,10 @@ public class OrLogicExecutorFactory : ILogicExecutorFactory<OrLogic> {
     }
 }
 
+/// <summary>
+/// NOT論理素子。入力を反転して出力する（High → Low、Low → High）。
+/// 不定入力(X)はそのままX として出力する。入力・出力は各1ビット。
+/// </summary>
 public class NotLogicExecutorFactory : ILogicExecutorFactory<NotLogic> {
     class NotLogicExecutor : ILogicExecutor {
         public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
@@ -371,6 +385,11 @@ public class NotLogicExecutorFactory : ILogicExecutorFactory<NotLogic> {
     }
 }
 
+/// <summary>
+/// NAND論理素子。全入力がHighのときのみ出力がLow、それ以外はHigh。
+/// 1つでもLow入力があれば他の入力の不定(X)に関わらず出力はHigh。
+/// Low がなくX が混在する場合は出力がX になる。入力数は任意に指定可能。
+/// </summary>
 public class NAndLogicExecutorFactory : ILogicExecutorFactory<NAndLogic> {
     class NAndLogicExecutor : ILogicExecutor {
         public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
@@ -414,6 +433,11 @@ public class NAndLogicExecutorFactory : ILogicExecutorFactory<NAndLogic> {
     }
 }
 
+/// <summary>
+/// NOR論理素子。全入力がLowのときのみ出力がHigh、それ以外はLow。
+/// 1つでもHigh入力があれば他の入力の不定(X)に関わらず出力はLow。
+/// High がなくX が混在する場合は出力がX になる。入力数は任意に指定可能。
+/// </summary>
 public class NOrLogicExecutorFactory : ILogicExecutorFactory<NOrLogic> {
     class NOrLogicExecutor : ILogicExecutor {
         public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
@@ -457,6 +481,11 @@ public class NOrLogicExecutorFactory : ILogicExecutorFactory<NOrLogic> {
     }
 }
 
+/// <summary>
+/// XOR論理素子。入力のうち奇数個がHighのとき出力がHigh、偶数個のときLow。
+/// いずれかの入力が不定(X)であれば、他の入力値に関わらず出力は常にX になる。
+/// 入力数は任意に指定可能。
+/// </summary>
 public class XOrLogicExecutorFactory : ILogicExecutorFactory<XOrLogic> {
     class XOrLogicExecutor : ILogicExecutor {
         public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {

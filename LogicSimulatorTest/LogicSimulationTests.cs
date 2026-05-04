@@ -283,6 +283,27 @@ public class BuiltInCircuit {
 [TestFixture]
 public class LogicSimulationTests {
 
+    static void TestLogicGate(ILogicElement gate, LogicSignal[] inputs, LogicSignal expected) {
+        int n = inputs.Length;
+        var nodes = Enumerable.Range(0, n)
+            .Select(i => new LogicNode($"input{i}", new InputConnector(1)))
+            .Append(new LogicNode("gate", gate))
+            .Append(new LogicNode("output", new OutputConnector(1)))
+            .ToArray();
+
+        var connections = Enumerable.Range(0, n)
+            .Select(i => new LogicConnection(new($"input{i}", "out"), new("gate", $"in[{i}]")))
+            .Append(new LogicConnection(new("gate", "out"), new("output", "in")))
+            .ToArray();
+
+        var sim = new LogicSimulation(new Circuit(nodes, connections));
+        for (int i = 0; i < n; i++) {
+            sim.SetInput($"input{i}", 0, inputs[i]);
+        }
+        sim.Step();
+        Assert.That(sim.GetOutput("output", 0), Is.EqualTo(expected));
+    }
+
     [TestCase(false, false, false)]
     [TestCase(true, false, true)]
     [TestCase(false, true, true)]
@@ -316,66 +337,42 @@ public class LogicSimulationTests {
         Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected.ToSignal()));
     }
 
-    [TestCase(LogicSignal.Low, LogicSignal.Low, LogicSignal.Low)]
-    [TestCase(LogicSignal.High, LogicSignal.Low, LogicSignal.Low)]
-    [TestCase(LogicSignal.Low, LogicSignal.High, LogicSignal.Low)]
-    [TestCase(LogicSignal.High, LogicSignal.High, LogicSignal.High)]
-    [TestCase(LogicSignal.X, LogicSignal.X, LogicSignal.X)]
-    [TestCase(LogicSignal.X, LogicSignal.Low, LogicSignal.Low)]
-    [TestCase(LogicSignal.X, LogicSignal.High, LogicSignal.X)]
-    [TestCase(LogicSignal.Low, LogicSignal.X, LogicSignal.Low)]
-    [TestCase(LogicSignal.High, LogicSignal.X, LogicSignal.X)]
-    public void AndLogicTest(LogicSignal input1, LogicSignal input2, LogicSignal expected) {
-        var circuit = new Circuit([
-                new("input1", new InputConnector(1)),
-                new("input2", new InputConnector(1)),
-                new("and1", new AndLogic(2)),
-                new("output", new OutputConnector(1))
-            ],
-            [
-                new(new LogicConnector("input1", "out"), new LogicConnector("and1", "in[0]")),
-                new(new LogicConnector("input2", "out"), new LogicConnector("and1", "in[1]")),
-                new(new LogicConnector("and1", "out"), new LogicConnector("output", "in"))
-            ]);
-
-        var simulation = new LogicSimulation(circuit);
-
-        simulation.SetInput("input1", 0, input1);
-        simulation.SetInput("input2", 0, input2);
-        simulation.Step();
-
-        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected));
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.Low }, LogicSignal.Low)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.Low }, LogicSignal.Low)]
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.High }, LogicSignal.Low)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.High }, LogicSignal.High)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.X }, LogicSignal.X)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.Low }, LogicSignal.Low)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.High }, LogicSignal.X)]
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.X }, LogicSignal.Low)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.X }, LogicSignal.X)]
+    // 3入力テストケース: 全入力High → High、Low あり → Low
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.Low, LogicSignal.Low }, LogicSignal.Low)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.High, LogicSignal.High }, LogicSignal.High)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.High, LogicSignal.Low }, LogicSignal.Low)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.High, LogicSignal.High }, LogicSignal.X)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.Low, LogicSignal.High }, LogicSignal.Low)]
+    public void AndLogicTest(LogicSignal[] inputs, LogicSignal expected) {
+        TestLogicGate(new AndLogic(inputs.Length), inputs, expected);
     }
 
-    [TestCase(LogicSignal.Low, LogicSignal.Low, LogicSignal.Low)]
-    [TestCase(LogicSignal.High, LogicSignal.Low, LogicSignal.High)]
-    [TestCase(LogicSignal.Low, LogicSignal.High, LogicSignal.High)]
-    [TestCase(LogicSignal.High, LogicSignal.High, LogicSignal.High)]
-    [TestCase(LogicSignal.X, LogicSignal.X, LogicSignal.X)]
-    [TestCase(LogicSignal.X, LogicSignal.Low, LogicSignal.X)]
-    [TestCase(LogicSignal.X, LogicSignal.High, LogicSignal.High)]
-    [TestCase(LogicSignal.Low, LogicSignal.X, LogicSignal.X)]
-    [TestCase(LogicSignal.High, LogicSignal.X, LogicSignal.High)]
-    public void OrLogicTest(LogicSignal input1, LogicSignal input2, LogicSignal expected) {
-        var circuit = new Circuit([
-                new("input1", new InputConnector(1)),
-                new("input2", new InputConnector(1)),
-                new("or", new OrLogic(2)),
-                new("output", new OutputConnector(1))
-            ],
-            [
-                new(new LogicConnector("input1", "out"), new LogicConnector("or", "in[0]")),
-                new(new LogicConnector("input2", "out"), new LogicConnector("or", "in[1]")),
-                new(new LogicConnector("or", "out"), new LogicConnector("output", "in"))
-            ]);
-
-        var simulation = new LogicSimulation(circuit);
-
-        simulation.SetInput("input1", 0, input1);
-        simulation.SetInput("input2", 0, input2);
-        simulation.Step();
-
-        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected));
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.Low }, LogicSignal.Low)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.Low }, LogicSignal.High)]
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.High }, LogicSignal.High)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.High }, LogicSignal.High)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.X }, LogicSignal.X)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.Low }, LogicSignal.X)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.High }, LogicSignal.High)]
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.X }, LogicSignal.X)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.X }, LogicSignal.High)]
+    // 3入力テストケース: High あり → High、全Low → Low
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.Low, LogicSignal.Low }, LogicSignal.Low)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.High, LogicSignal.High }, LogicSignal.High)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.Low, LogicSignal.Low }, LogicSignal.High)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.Low, LogicSignal.Low }, LogicSignal.X)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.High, LogicSignal.Low }, LogicSignal.High)]
+    public void OrLogicTest(LogicSignal[] inputs, LogicSignal expected) {
+        TestLogicGate(new OrLogic(inputs.Length), inputs, expected);
     }
 
     [TestCase(LogicSignal.Low, LogicSignal.High)]
@@ -400,97 +397,62 @@ public class LogicSimulationTests {
         Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected));
     }
 
-    [TestCase(LogicSignal.Low, LogicSignal.Low, LogicSignal.High)]
-    [TestCase(LogicSignal.High, LogicSignal.Low, LogicSignal.High)]
-    [TestCase(LogicSignal.Low, LogicSignal.High, LogicSignal.High)]
-    [TestCase(LogicSignal.High, LogicSignal.High, LogicSignal.Low)]
-    [TestCase(LogicSignal.X, LogicSignal.X, LogicSignal.X)]
-    [TestCase(LogicSignal.X, LogicSignal.Low, LogicSignal.High)]
-    [TestCase(LogicSignal.X, LogicSignal.High, LogicSignal.X)]
-    [TestCase(LogicSignal.Low, LogicSignal.X, LogicSignal.High)]
-    [TestCase(LogicSignal.High, LogicSignal.X, LogicSignal.X)]
-    public void NAndLogicTest(LogicSignal input1, LogicSignal input2, LogicSignal expected) {
-        var circuit = new Circuit([
-                new("input1", new InputConnector(1)),
-                new("input2", new InputConnector(1)),
-                new("nand1", new NAndLogic(2)),
-                new("output", new OutputConnector(1))
-            ],
-            [
-                new(new LogicConnector("input1", "out"), new LogicConnector("nand1", "in[0]")),
-                new(new LogicConnector("input2", "out"), new LogicConnector("nand1", "in[1]")),
-                new(new LogicConnector("nand1", "out"), new LogicConnector("output", "in"))
-            ]);
-
-        var simulation = new LogicSimulation(circuit);
-
-        simulation.SetInput("input1", 0, input1);
-        simulation.SetInput("input2", 0, input2);
-        simulation.Step();
-
-        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected));
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.Low }, LogicSignal.High)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.Low }, LogicSignal.High)]
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.High }, LogicSignal.High)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.High }, LogicSignal.Low)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.X }, LogicSignal.X)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.Low }, LogicSignal.High)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.High }, LogicSignal.X)]
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.X }, LogicSignal.High)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.X }, LogicSignal.X)]
+    // 3入力テストケース: 全入力High → Low、それ以外 → High
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.Low, LogicSignal.Low }, LogicSignal.High)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.High, LogicSignal.High }, LogicSignal.Low)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.High, LogicSignal.Low }, LogicSignal.High)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.High, LogicSignal.High }, LogicSignal.X)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.Low, LogicSignal.High }, LogicSignal.High)]
+    public void NAndLogicTest(LogicSignal[] inputs, LogicSignal expected) {
+        TestLogicGate(new NAndLogic(inputs.Length), inputs, expected);
     }
 
-    [TestCase(LogicSignal.Low, LogicSignal.Low, LogicSignal.High)]
-    [TestCase(LogicSignal.High, LogicSignal.Low, LogicSignal.Low)]
-    [TestCase(LogicSignal.Low, LogicSignal.High, LogicSignal.Low)]
-    [TestCase(LogicSignal.High, LogicSignal.High, LogicSignal.Low)]
-    [TestCase(LogicSignal.X, LogicSignal.X, LogicSignal.X)]
-    [TestCase(LogicSignal.X, LogicSignal.Low, LogicSignal.X)]
-    [TestCase(LogicSignal.X, LogicSignal.High, LogicSignal.Low)]
-    [TestCase(LogicSignal.Low, LogicSignal.X, LogicSignal.X)]
-    [TestCase(LogicSignal.High, LogicSignal.X, LogicSignal.Low)]
-    public void NOrLogicTest(LogicSignal input1, LogicSignal input2, LogicSignal expected) {
-        var circuit = new Circuit([
-                new("input1", new InputConnector(1)),
-                new("input2", new InputConnector(1)),
-                new("nor", new NOrLogic(2)),
-                new("output", new OutputConnector(1))
-            ],
-            [
-                new(new LogicConnector("input1", "out"), new LogicConnector("nor", "in[0]")),
-                new(new LogicConnector("input2", "out"), new LogicConnector("nor", "in[1]")),
-                new(new LogicConnector("nor", "out"), new LogicConnector("output", "in"))
-            ]);
-
-        var simulation = new LogicSimulation(circuit);
-
-        simulation.SetInput("input1", 0, input1);
-        simulation.SetInput("input2", 0, input2);
-        simulation.Step();
-
-        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected));
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.Low }, LogicSignal.High)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.Low }, LogicSignal.Low)]
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.High }, LogicSignal.Low)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.High }, LogicSignal.Low)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.X }, LogicSignal.X)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.Low }, LogicSignal.X)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.High }, LogicSignal.Low)]
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.X }, LogicSignal.X)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.X }, LogicSignal.Low)]
+    // 3入力テストケース: 全Low → High、High あり → Low
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.Low, LogicSignal.Low }, LogicSignal.High)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.High, LogicSignal.High }, LogicSignal.Low)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.Low, LogicSignal.Low }, LogicSignal.Low)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.Low, LogicSignal.Low }, LogicSignal.X)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.High, LogicSignal.Low }, LogicSignal.Low)]
+    public void NOrLogicTest(LogicSignal[] inputs, LogicSignal expected) {
+        TestLogicGate(new NOrLogic(inputs.Length), inputs, expected);
     }
 
-    [TestCase(LogicSignal.Low, LogicSignal.Low, LogicSignal.Low)]
-    [TestCase(LogicSignal.High, LogicSignal.Low, LogicSignal.High)]
-    [TestCase(LogicSignal.Low, LogicSignal.High, LogicSignal.High)]
-    [TestCase(LogicSignal.High, LogicSignal.High, LogicSignal.Low)]
-    [TestCase(LogicSignal.X, LogicSignal.X, LogicSignal.X)]
-    [TestCase(LogicSignal.X, LogicSignal.Low, LogicSignal.X)]
-    [TestCase(LogicSignal.X, LogicSignal.High, LogicSignal.X)]
-    [TestCase(LogicSignal.Low, LogicSignal.X, LogicSignal.X)]
-    [TestCase(LogicSignal.High, LogicSignal.X, LogicSignal.X)]
-    public void XOrLogicTest(LogicSignal input1, LogicSignal input2, LogicSignal expected) {
-        var circuit = new Circuit([
-                new("input1", new InputConnector(1)),
-                new("input2", new InputConnector(1)),
-                new("xor", new XOrLogic(2)),
-                new("output", new OutputConnector(1))
-            ],
-            [
-                new(new LogicConnector("input1", "out"), new LogicConnector("xor", "in[0]")),
-                new(new LogicConnector("input2", "out"), new LogicConnector("xor", "in[1]")),
-                new(new LogicConnector("xor", "out"), new LogicConnector("output", "in"))
-            ]);
-
-        var simulation = new LogicSimulation(circuit);
-
-        simulation.SetInput("input1", 0, input1);
-        simulation.SetInput("input2", 0, input2);
-        simulation.Step();
-
-        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected));
+    // 2入力テスト
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.Low }, LogicSignal.Low)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.Low }, LogicSignal.High)]
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.High }, LogicSignal.High)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.High }, LogicSignal.Low)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.X }, LogicSignal.X)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.Low }, LogicSignal.X)]
+    [TestCase(new[] { LogicSignal.X, LogicSignal.High }, LogicSignal.X)]
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.X }, LogicSignal.X)]
+    [TestCase(new[] { LogicSignal.High, LogicSignal.X }, LogicSignal.X)]
+    // 3入力テスト
+    [TestCase(new[] { LogicSignal.Low, LogicSignal.Low, LogicSignal.Low }, LogicSignal.Low)] // 全Low → Low (0^0^0=0)
+    [TestCase(new[] { LogicSignal.High, LogicSignal.High, LogicSignal.High }, LogicSignal.High)] // 全High → High (1^1^1=1)
+    [TestCase(new[] { LogicSignal.High, LogicSignal.High, LogicSignal.Low }, LogicSignal.Low)] // 偶数個のHigh → Low (1^1^0=0)
+    [TestCase(new[] { LogicSignal.X, LogicSignal.Low, LogicSignal.Low }, LogicSignal.X)] // X混じりは常に不定
+    [TestCase(new[] { LogicSignal.X, LogicSignal.High, LogicSignal.Low }, LogicSignal.X)] // XOR固有の特性確認：X→確定しない
+    public void XOrLogicTest(LogicSignal[] inputs, LogicSignal expected) {
+        TestLogicGate(new XOrLogic(inputs.Length), inputs, expected);
     }
 
     public static readonly IReadOnlyList<SignalTestPattern> NandSrFFLatchSimulationTest_Data = [
