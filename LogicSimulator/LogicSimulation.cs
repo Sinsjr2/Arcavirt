@@ -918,7 +918,13 @@ public class LogicSimulation {
                 return;
             }
             // すでに処理済みのノードはスキップ
-            if (!skipSourceConnectorNames.Add(outputConnector.LogicID)) {
+            // CustomCircuit は "CC:" プレフィックスと PinName を加えてスキップキーとする。
+            // こうすることで同じ CustomCircuit の異なるピン（J と K など）を独立して処理でき、
+            // かつ内部の InputConnector のスキップキー（"LogicID" 形式）と競合しない。
+            var skipKey = sourceNode.node.LogicData is CustomCircuit
+                ? $"CC:{outputConnector.LogicID}:{outputConnector.PinName}"
+                : outputConnector.LogicID;
+            if (!skipSourceConnectorNames.Add(skipKey)) {
                 return;
             }
             if (!expandedNodes.TryGetValue(outputConnector.LogicID, out var targetNode)) {

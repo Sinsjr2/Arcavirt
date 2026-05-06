@@ -223,6 +223,111 @@ public class BuiltInCircuit {
             new(new LogicConnector("xor1", "out"), new LogicConnector("and1", "in[1]")),
         ]);
 
+    public static readonly Circuit UDCounter2Bit = new([
+            new("LOW", new InputConnector(1)),
+            new("SET", new InputConnector(1)),
+            new("CLK", new InputConnector(1)),
+            new("DIR", new InputConnector(1)),
+            new("INITIAL0", new InputConnector(1)),
+            new("INITIAL1", new InputConnector(1)),
+            new("HI", new OutputConnector(1)),
+            new("D0", new OutputConnector(1)),
+            new("D1", new OutputConnector(1)),
+            new("udc1bit_1", new CustomCircuit("ud_counter_1bit")),
+            new("udc1bit_2", new CustomCircuit("ud_counter_1bit")),
+        ],
+        [
+            new(new LogicConnector("INITIAL0", "out"), new LogicConnector("udc1bit_1", "INITIAL")),
+            new(new LogicConnector("INITIAL1", "out"), new LogicConnector("udc1bit_2", "INITIAL")),
+            new(new LogicConnector("SET", "out"), new LogicConnector("udc1bit_1", "SET")),
+            new(new LogicConnector("SET", "out"), new LogicConnector("udc1bit_2", "SET")),
+            new(new LogicConnector("CLK", "out"), new LogicConnector("udc1bit_1", "CLK")),
+            new(new LogicConnector("CLK", "out"), new LogicConnector("udc1bit_2", "CLK")),
+            new(new LogicConnector("DIR", "out"), new LogicConnector("udc1bit_1", "DIR")),
+            new(new LogicConnector("DIR", "out"), new LogicConnector("udc1bit_2", "DIR")),
+            new(new LogicConnector("LOW", "out"), new LogicConnector("udc1bit_1", "LOW")),
+            new(new LogicConnector("udc1bit_1", "HI"), new LogicConnector("udc1bit_2", "LOW")),
+            new(new LogicConnector("udc1bit_2", "HI"), new LogicConnector("HI", "in")),
+            new(new LogicConnector("udc1bit_1", "D"), new LogicConnector("D0", "in")),
+            new(new LogicConnector("udc1bit_2", "D"), new LogicConnector("D1", "in")),
+        ]);
+
+    public static readonly Circuit UDCounter2BitDirect = new([
+            new("LOW", new InputConnector(1)),
+            new("SET", new InputConnector(1)),
+            new("CLK", new InputConnector(1)),
+            new("DIR", new InputConnector(1)),
+            new("INITIAL0", new InputConnector(1)),
+            new("INITIAL1", new InputConnector(1)),
+            new("D0", new OutputConnector(1)),
+            new("D1", new OutputConnector(1)),
+            new("HI", new OutputConnector(1)),
+            new("jkff0", new CustomCircuit("jk_ff_preset_clear")),
+            new("jkff1", new CustomCircuit("jk_ff_preset_clear")),
+            new("not0", new NotLogic()),
+            new("not1", new NotLogic()),
+            new("pre_nand0", new NAndLogic(2)),
+            new("pre_nand1", new NAndLogic(2)),
+            new("clr_nand0", new NAndLogic(2)),
+            new("clr_nand1", new NAndLogic(2)),
+            new("xor0", new XOrLogic(2)),
+            new("xor1", new XOrLogic(2)),
+            new("and0", new AndLogic(2)),
+            new("and1", new AndLogic(2)),
+        ],
+        [
+            // ビット0 プリセット・クリア回路
+            new(new LogicConnector("INITIAL0", "out"), new LogicConnector("pre_nand0", "in[0]")),
+            new(new LogicConnector("SET", "out"), new LogicConnector("pre_nand0", "in[1]")),
+            new(new LogicConnector("pre_nand0", "out"), new LogicConnector("jkff0", "~PRE~")),
+
+            new(new LogicConnector("INITIAL0", "out"), new LogicConnector("not0", "in")),
+            new(new LogicConnector("not0", "out"), new LogicConnector("clr_nand0", "in[1]")),
+            new(new LogicConnector("SET", "out"), new LogicConnector("clr_nand0", "in[0]")),
+            new(new LogicConnector("clr_nand0", "out"), new LogicConnector("jkff0", "~CLR~")),
+
+            // ビット0 JK-FF
+            new(new LogicConnector("LOW", "out"), new LogicConnector("jkff0", "J")),
+            new(new LogicConnector("LOW", "out"), new LogicConnector("jkff0", "K")),
+            new(new LogicConnector("CLK", "out"), new LogicConnector("jkff0", "CLK")),
+
+            // ビット0 桁上がり
+            new(new LogicConnector("jkff0", "Q"), new LogicConnector("xor0", "in[0]")),
+            new(new LogicConnector("DIR", "out"), new LogicConnector("xor0", "in[1]")),
+            new(new LogicConnector("xor0", "out"), new LogicConnector("and0", "in[1]")),
+            new(new LogicConnector("LOW", "out"), new LogicConnector("and0", "in[0]")),
+
+            // ビット0 出力
+            new(new LogicConnector("jkff0", "Q"), new LogicConnector("D0", "in")),
+
+            // ビット1 プリセット・クリア回路
+            new(new LogicConnector("INITIAL1", "out"), new LogicConnector("pre_nand1", "in[0]")),
+            new(new LogicConnector("SET", "out"), new LogicConnector("pre_nand1", "in[1]")),
+            new(new LogicConnector("pre_nand1", "out"), new LogicConnector("jkff1", "~PRE~")),
+
+            new(new LogicConnector("INITIAL1", "out"), new LogicConnector("not1", "in")),
+            new(new LogicConnector("not1", "out"), new LogicConnector("clr_nand1", "in[1]")),
+            new(new LogicConnector("SET", "out"), new LogicConnector("clr_nand1", "in[0]")),
+            new(new LogicConnector("clr_nand1", "out"), new LogicConnector("jkff1", "~CLR~")),
+
+            // ビット1 JK-FF（LOW_1 としてビット0の HI_0 を使用）
+            new(new LogicConnector("and0", "out"), new LogicConnector("jkff1", "J")),
+            new(new LogicConnector("and0", "out"), new LogicConnector("jkff1", "K")),
+            new(new LogicConnector("CLK", "out"), new LogicConnector("jkff1", "CLK")),
+
+            // ビット1 桁上がり
+            new(new LogicConnector("jkff1", "Q"), new LogicConnector("xor1", "in[0]")),
+            new(new LogicConnector("DIR", "out"), new LogicConnector("xor1", "in[1]")),
+            new(new LogicConnector("xor1", "out"), new LogicConnector("and1", "in[1]")),
+            new(new LogicConnector("and0", "out"), new LogicConnector("and1", "in[0]")),
+
+            // ビット1 出力
+            new(new LogicConnector("jkff1", "Q"), new LogicConnector("D1", "in")),
+
+            // HI 出力
+            new(new LogicConnector("and1", "out"), new LogicConnector("HI", "in")),
+        ]);
+
     public static readonly Circuit UDCounter4Bit = new([
             new("LOW", new InputConnector(1)),
             new("SET", new InputConnector(1)),
@@ -230,7 +335,7 @@ public class BuiltInCircuit {
             new("DIR", new InputConnector(1)),
             new("INITIAL0", new InputConnector(1)),
             new("INITIAL1", new InputConnector(1)),
-            new("INITIAL2", new InputConnector(1)),  
+            new("INITIAL2", new InputConnector(1)),
             new("INITIAL3", new InputConnector(1)),
             new("HI", new OutputConnector(1)),
             new("D0", new OutputConnector(1)),
@@ -276,6 +381,8 @@ public class BuiltInCircuit {
         { "comparator_1bit", Comparator1Bit },
         { "comparator_4bit", Comparator4Bit },
         { "ud_counter_1bit", UDCounter1Bit },
+        { "ud_counter_2bit", UDCounter2Bit },
+        { "ud_counter_2bit_direct", UDCounter2BitDirect },
         { "ud_counter_4bit", UDCounter4Bit }
     };
 }
@@ -813,6 +920,94 @@ public class LogicSimulationTests {
         }
     }
 
+    [CancelAfter(2000)]
+    [Test]
+    public void UDCounter2Bit()
+    {
+        var simulation = new LogicSimulation(BuiltInCircuit.UDCounter2Bit, BuiltInCircuit.Circuits);
+
+        // 全入力を初期化
+        simulation.SetInput("CLK", 0, LogicSignal.Low);
+        simulation.SetInput("DIR", 0, LogicSignal.Low);
+        simulation.SetInput("LOW", 0, LogicSignal.Low);
+        simulation.SetInput("SET", 0, LogicSignal.Low);
+        simulation.SetInput("INITIAL0", 0, LogicSignal.Low);
+        simulation.SetInput("INITIAL1", 0, LogicSignal.Low);
+        simulation.Step();
+
+        // 0000 にクリア
+        simulation.SetInput("SET", 0, LogicSignal.High);
+        simulation.Step();
+        Assert.That(simulation.GetOutput("D0", 0), Is.EqualTo(LogicSignal.Low), "init D0");
+        Assert.That(simulation.GetOutput("D1", 0), Is.EqualTo(LogicSignal.Low), "init D1");
+
+        simulation.SetInput("SET", 0, LogicSignal.Low);
+        simulation.SetInput("LOW", 0, LogicSignal.High);
+        simulation.Step();
+
+        // 0→3→0 の 4 クロックをカウントアップ
+        for (int i = 1; i <= 4; i++)
+        {
+            simulation.SetInput("CLK", 0, LogicSignal.High);
+            simulation.Step();
+            simulation.SetInput("CLK", 0, LogicSignal.Low);
+            simulation.Step();
+
+            int expected = i % 4;
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(simulation.GetOutput("D0", 0),
+                    Is.EqualTo(((expected & 1) != 0).ToSignal()), $"count={i} D0");
+                Assert.That(simulation.GetOutput("D1", 0),
+                    Is.EqualTo(((expected & 2) != 0).ToSignal()), $"count={i} D1");
+            }
+        }
+    }
+
+    [CancelAfter(2000)]
+    [Test]
+    public void UDCounter2BitDirect()
+    {
+        var simulation = new LogicSimulation(BuiltInCircuit.UDCounter2BitDirect, BuiltInCircuit.Circuits);
+
+        // 全入力を初期化
+        simulation.SetInput("CLK", 0, LogicSignal.Low);
+        simulation.SetInput("DIR", 0, LogicSignal.Low);
+        simulation.SetInput("LOW", 0, LogicSignal.Low);
+        simulation.SetInput("SET", 0, LogicSignal.Low);
+        simulation.SetInput("INITIAL0", 0, LogicSignal.Low);
+        simulation.SetInput("INITIAL1", 0, LogicSignal.Low);
+        simulation.Step();
+
+        // 0000 にクリア
+        simulation.SetInput("SET", 0, LogicSignal.High);
+        simulation.Step();
+        Assert.That(simulation.GetOutput("D0", 0), Is.EqualTo(LogicSignal.Low), "init D0");
+        Assert.That(simulation.GetOutput("D1", 0), Is.EqualTo(LogicSignal.Low), "init D1");
+
+        simulation.SetInput("SET", 0, LogicSignal.Low);
+        simulation.SetInput("LOW", 0, LogicSignal.High);
+        simulation.Step();
+
+        // 0→3→0 の 4 クロックをカウントアップ
+        for (int i = 1; i <= 4; i++)
+        {
+            simulation.SetInput("CLK", 0, LogicSignal.High);
+            simulation.Step();
+            simulation.SetInput("CLK", 0, LogicSignal.Low);
+            simulation.Step();
+
+            int expected = i % 4;
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(simulation.GetOutput("D0", 0),
+                    Is.EqualTo(((expected & 1) != 0).ToSignal()), $"count={i} D0");
+                Assert.That(simulation.GetOutput("D1", 0),
+                    Is.EqualTo(((expected & 2) != 0).ToSignal()), $"count={i} D1");
+            }
+        }
+    }
+
     [CancelAfter(5000)]
     [Test]
     public void UDCounter4Bit() {
@@ -1038,5 +1233,59 @@ public class LogicPinsWriterTests {
 
         Assert.That(changedPins.Count, Is.EqualTo(4));
         Assert.That(pins.Pins.All(p => p == LogicSignal.High), Is.True);
+    }
+
+    [Explicit("デバッグ用：UDCounter1Bit の展開前後の Mermaid 図を出力")]
+    [Test]
+    public void DebugDumpUDCounter1BitCircuitStructure() {
+        var debugDir = Path.Combine(TestContext.CurrentContext.TestDirectory, "..", "..", "doc", "debug_output", "ud_counter_1bit");
+        debugDir = Path.GetFullPath(debugDir);
+
+        var circuit = BuiltInCircuit.UDCounter1Bit;
+        var simulation = new LogicSimulation(circuit, BuiltInCircuit.Circuits, debugDir);
+
+        Console.WriteLine($"デバッグ出力ディレクトリ: {debugDir}");
+        Console.WriteLine("circuit_before_expand.md と circuit_after_expand.md を出力しました");
+    }
+
+    [Explicit("デバッグ用：UDCounter2Bit の展開前後の Mermaid 図を出力")]
+    [Test]
+    public void DebugDumpUDCounter2BitCircuitStructure()
+    {
+        var debugDir = Path.Combine(TestContext.CurrentContext.TestDirectory, "..", "..", "doc", "debug_output", "ud_counter_2bit");
+        debugDir = Path.GetFullPath(debugDir);
+
+        var circuit = BuiltInCircuit.UDCounter2Bit;
+        var simulation = new LogicSimulation(circuit, BuiltInCircuit.Circuits, debugDir);
+
+        Console.WriteLine($"デバッグ出力ディレクトリ: {debugDir}");
+        Console.WriteLine("circuit_before_expand.md と circuit_after_expand.md を出力しました");
+    }
+
+    [Explicit("デバッグ用：UDCounter2BitDirect の展開前後の Mermaid 図を出力")]
+    [Test]
+    public void DebugDumpUDCounter2BitDirectCircuitStructure()
+    {
+        var debugDir = Path.Combine(TestContext.CurrentContext.TestDirectory, "..", "..", "doc", "debug_output", "ud_counter_2bit_direct");
+        debugDir = Path.GetFullPath(debugDir);
+
+        var circuit = BuiltInCircuit.UDCounter2BitDirect;
+        var simulation = new LogicSimulation(circuit, BuiltInCircuit.Circuits, debugDir);
+
+        Console.WriteLine($"デバッグ出力ディレクトリ: {debugDir}");
+        Console.WriteLine("circuit_before_expand.md と circuit_after_expand.md を出力しました");
+    }
+
+    [Explicit("デバッグ用：UDCounter4Bit の展開前後の Mermaid 図を出力")]
+    [Test]
+    public void DebugDumpUDCounter4BitCircuitStructure() {
+        var debugDir = Path.Combine(TestContext.CurrentContext.TestDirectory, "..", "..", "doc", "debug_output", "ud_counter_4bit");
+        debugDir = Path.GetFullPath(debugDir);
+
+        var circuit = BuiltInCircuit.UDCounter4Bit;
+        var simulation = new LogicSimulation(circuit, BuiltInCircuit.Circuits, debugDir);
+
+        Console.WriteLine($"デバッグ出力ディレクトリ: {debugDir}");
+        Console.WriteLine("circuit_before_expand.md と circuit_after_expand.md を出力しました");
     }
 }
