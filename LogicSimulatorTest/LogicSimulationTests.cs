@@ -79,6 +79,108 @@ public class BuiltInCircuit {
         ]);
 
     /// <summary>
+    /// N ビット UD カウンタを動的に生成します
+    /// </summary>
+    public static Circuit CreateUDCounter(int bitCount)
+    {
+        if (bitCount < 1) {
+            throw new ArgumentException("bitCount must be >= 1");
+        }
+
+        if (bitCount == 1) {
+            // 1ビットカウンタ: 直接配線（CustomCircuit を使わない）
+            return new([
+                new("LOW", new InputConnector(1)),
+                new("SET", new InputConnector(1)),
+                new("CLK", new InputConnector(1)),
+                new("DIR", new InputConnector(1)),
+                new("INITIAL0", new InputConnector(1)),
+                new("HI", new OutputConnector(1)),
+                new("D0", new OutputConnector(1)),
+                new("jkff1", new CustomCircuit("jk_ff_preset_clear")),
+                new("not1", new NotLogic()),
+                new("nand1", new NAndLogic(2)),
+                new("nand2", new NAndLogic(2)),
+                new("and1", new AndLogic(2)),
+                new("xor1", new XOrLogic(2)),
+            ],
+            [
+                new(new LogicConnector("LOW", "out"), new LogicConnector("and1", "in[0]")),
+                new(new LogicConnector("and1", "out"), new LogicConnector("HI", "in")),
+                new(new LogicConnector("LOW", "out"), new LogicConnector("jkff1", "J")),
+                new(new LogicConnector("LOW", "out"), new LogicConnector("jkff1", "K")),
+                new(new LogicConnector("INITIAL0", "out"), new LogicConnector("nand1", "in[0]")),
+                new(new LogicConnector("INITIAL0", "out"), new LogicConnector("not1", "in")),
+                new(new LogicConnector("SET", "out"), new LogicConnector("nand1", "in[1]")),
+                new(new LogicConnector("SET", "out"), new LogicConnector("nand2", "in[0]")),
+                new(new LogicConnector("not1", "out"), new LogicConnector("nand2", "in[1]")),
+                new(new LogicConnector("nand2", "out"), new LogicConnector("jkff1", "~CLR~")),
+                new(new LogicConnector("CLK", "out"), new LogicConnector("jkff1", "CLK")),
+                new(new LogicConnector("nand1", "out"), new LogicConnector("jkff1", "~PRE~")),
+                new(new LogicConnector("DIR", "out"), new LogicConnector("xor1", "in[1]")),
+                new(new LogicConnector("jkff1", "Q"), new LogicConnector("xor1", "in[0]")),
+                new(new LogicConnector("jkff1", "Q"), new LogicConnector("D0", "in")),
+                new(new LogicConnector("xor1", "out"), new LogicConnector("and1", "in[1]")),
+            ]);
+        }
+        else
+        {
+            // N>1ビットカウンタ: ud_counter_1bit の CustomCircuit を N個直列接続
+            var nodes = new List<LogicNode>();
+
+            // 入力・出力ピンの追加
+            nodes.Add(new("LOW", new InputConnector(1)));
+            nodes.Add(new("SET", new InputConnector(1)));
+            nodes.Add(new("CLK", new InputConnector(1)));
+            nodes.Add(new("DIR", new InputConnector(1)));
+            for (int i = 0; i < bitCount; i++) {
+                nodes.Add(new($"INITIAL{i}", new InputConnector(1)));
+            }
+            nodes.Add(new("HI", new OutputConnector(1)));
+            for (int i = 0; i < bitCount; i++) {
+                nodes.Add(new($"D{i}", new OutputConnector(1)));
+            }
+
+            // ud_counter_1bit カスタム回路の追加
+            for (int i = 1; i <= bitCount; i++) {
+                nodes.Add(new($"udc1bit_{i}", new CustomCircuit("ud_counter_1bit")));
+            }
+
+            var wires = new List<LogicConnection>();
+
+            // LOW → udc1bit_1.LOW
+            wires.Add(new(new LogicConnector("LOW", "out"), new LogicConnector("udc1bit_1", "LOW")));
+
+            // SET, CLK, DIR → 全カウンタ共通接続
+            for (int i = 1; i <= bitCount; i++) {
+                wires.Add(new(new LogicConnector("SET", "out"), new LogicConnector($"udc1bit_{i}", "SET")));
+                wires.Add(new(new LogicConnector("CLK", "out"), new LogicConnector($"udc1bit_{i}", "CLK")));
+                wires.Add(new(new LogicConnector("DIR", "out"), new LogicConnector($"udc1bit_{i}", "DIR")));
+            }
+
+            // udc1bit_i.HI → udc1bit_(i+1).LOW (i=1..N-1)
+            for (int i = 1; i < bitCount; i++) {
+                wires.Add(new(new LogicConnector($"udc1bit_{i}", "HI"), new LogicConnector($"udc1bit_{i + 1}", "LOW")));
+            }
+
+            // udc1bit_N.HI → HI出力
+            wires.Add(new(new LogicConnector($"udc1bit_{bitCount}", "HI"), new LogicConnector("HI", "in")));
+
+            // INITIALi → udc1bit_(i+1).INITIAL0 (i=0..N-1)
+            for (int i = 0; i < bitCount; i++) {
+                wires.Add(new(new LogicConnector($"INITIAL{i}", "out"), new LogicConnector($"udc1bit_{i+1}", "INITIAL0")));
+            }
+
+            // udc1bit_i.D0 → D(i-1) 出力
+            for (int i = 1; i <= bitCount; i++) {
+                wires.Add(new(new LogicConnector($"udc1bit_{i}", "D0"), new LogicConnector($"D{i-1}", "in")));
+            }
+
+            return new(nodes, wires);
+        }
+    }
+
+    /// <summary>
     /// 1ビット比較器、<、==、> を判定する
     /// </summary>
     public static readonly Circuit Comparator1Bit = new([
@@ -188,117 +290,9 @@ public class BuiltInCircuit {
 
         ]);
 
-    public static readonly Circuit UDCounter1Bit = new(
-        [
-            new("LOW", new InputConnector(1)),
-            new("SET", new InputConnector(1)),
-            new("CLK", new InputConnector(1)),
-            new("DIR", new InputConnector(1)),
-            new("INITIAL", new InputConnector(1)),
-            new("HI", new OutputConnector(1)),
-            new("D", new OutputConnector(1)),
-            new("jkff1", new CustomCircuit("jk_ff_preset_clear")),
-            new("not1", new NotLogic()),
-            new("nand1", new NAndLogic(2)),
-            new("nand2", new NAndLogic(2)),
-            new("and1", new AndLogic(2)),
-            new("xor1", new XOrLogic(2)),
-        ],
-        [
-            new(new LogicConnector("LOW", "out"), new LogicConnector("and1", "in[0]")),
-            new(new LogicConnector("and1", "out"), new LogicConnector("HI", "in")),
-            new(new LogicConnector("LOW", "out"), new LogicConnector("jkff1", "J")),
-            new(new LogicConnector("LOW", "out"), new LogicConnector("jkff1", "K")),
-            new(new LogicConnector("INITIAL", "out"), new LogicConnector("nand1", "in[0]")),
-            new(new LogicConnector("INITIAL", "out"), new LogicConnector("not1", "in")),
-            new(new LogicConnector("SET", "out"), new LogicConnector("nand1", "in[1]")),
-            new(new LogicConnector("SET", "out"), new LogicConnector("nand2", "in[0]")),
-            new(new LogicConnector("not1", "out"), new LogicConnector("nand2", "in[1]")),
-            new(new LogicConnector("nand2", "out"), new LogicConnector("jkff1", "~CLR~")),
-            new(new LogicConnector("CLK", "out"), new LogicConnector("jkff1", "CLK")),
-            new(new LogicConnector("nand1", "out"), new LogicConnector("jkff1", "~PRE~")),
-            new(new LogicConnector("DIR", "out"), new LogicConnector("xor1", "in[1]")),
-            new(new LogicConnector("jkff1", "Q"), new LogicConnector("xor1", "in[0]")),
-            new(new LogicConnector("jkff1", "Q"), new LogicConnector("D", "in")),
-            new(new LogicConnector("xor1", "out"), new LogicConnector("and1", "in[1]")),
-        ]);
-
-    public static readonly Circuit UDCounter2Bit = new([
-            new("LOW", new InputConnector(1)),
-            new("SET", new InputConnector(1)),
-            new("CLK", new InputConnector(1)),
-            new("DIR", new InputConnector(1)),
-            new("INITIAL0", new InputConnector(1)),
-            new("INITIAL1", new InputConnector(1)),
-            new("HI", new OutputConnector(1)),
-            new("D0", new OutputConnector(1)),
-            new("D1", new OutputConnector(1)),
-            new("udc1bit_1", new CustomCircuit("ud_counter_1bit")),
-            new("udc1bit_2", new CustomCircuit("ud_counter_1bit")),
-        ],
-        [
-            new(new LogicConnector("INITIAL0", "out"), new LogicConnector("udc1bit_1", "INITIAL")),
-            new(new LogicConnector("INITIAL1", "out"), new LogicConnector("udc1bit_2", "INITIAL")),
-            new(new LogicConnector("SET", "out"), new LogicConnector("udc1bit_1", "SET")),
-            new(new LogicConnector("SET", "out"), new LogicConnector("udc1bit_2", "SET")),
-            new(new LogicConnector("CLK", "out"), new LogicConnector("udc1bit_1", "CLK")),
-            new(new LogicConnector("CLK", "out"), new LogicConnector("udc1bit_2", "CLK")),
-            new(new LogicConnector("DIR", "out"), new LogicConnector("udc1bit_1", "DIR")),
-            new(new LogicConnector("DIR", "out"), new LogicConnector("udc1bit_2", "DIR")),
-            new(new LogicConnector("LOW", "out"), new LogicConnector("udc1bit_1", "LOW")),
-            new(new LogicConnector("udc1bit_1", "HI"), new LogicConnector("udc1bit_2", "LOW")),
-            new(new LogicConnector("udc1bit_2", "HI"), new LogicConnector("HI", "in")),
-            new(new LogicConnector("udc1bit_1", "D"), new LogicConnector("D0", "in")),
-            new(new LogicConnector("udc1bit_2", "D"), new LogicConnector("D1", "in")),
-        ]);
-
-    public static readonly Circuit UDCounter4Bit = new([
-            new("LOW", new InputConnector(1)),
-            new("SET", new InputConnector(1)),
-            new("CLK", new InputConnector(1)),
-            new("DIR", new InputConnector(1)),
-            new("INITIAL0", new InputConnector(1)),
-            new("INITIAL1", new InputConnector(1)),
-            new("INITIAL2", new InputConnector(1)),
-            new("INITIAL3", new InputConnector(1)),
-            new("HI", new OutputConnector(1)),
-            new("D0", new OutputConnector(1)),
-            new("D1", new OutputConnector(1)),
-            new("D2", new OutputConnector(1)),
-            new("D3", new OutputConnector(1)),
-            new("udc1bit_1", new CustomCircuit("ud_counter_1bit")),
-            new("udc1bit_2", new CustomCircuit("ud_counter_1bit")),
-            new("udc1bit_3", new CustomCircuit("ud_counter_1bit")),
-            new("udc1bit_4", new CustomCircuit("ud_counter_1bit")),
-        ],
-        [
-            new(new LogicConnector("INITIAL0", "out"), new LogicConnector("udc1bit_1", "INITIAL")),
-            new(new LogicConnector("INITIAL1", "out"), new LogicConnector("udc1bit_2", "INITIAL")),
-            new(new LogicConnector("INITIAL2", "out"), new LogicConnector("udc1bit_3", "INITIAL")),
-            new(new LogicConnector("INITIAL3", "out"), new LogicConnector("udc1bit_4", "INITIAL")),
-            new(new LogicConnector("SET", "out"), new LogicConnector("udc1bit_1", "SET")),
-            new(new LogicConnector("SET", "out"), new LogicConnector("udc1bit_2", "SET")),
-            new(new LogicConnector("SET", "out"), new LogicConnector("udc1bit_3", "SET")),
-            new(new LogicConnector("SET", "out"), new LogicConnector("udc1bit_4", "SET")),
-            new(new LogicConnector("CLK", "out"), new LogicConnector("udc1bit_1", "CLK")),
-            new(new LogicConnector("CLK", "out"), new LogicConnector("udc1bit_2", "CLK")),
-            new(new LogicConnector("CLK", "out"), new LogicConnector("udc1bit_3", "CLK")),
-            new(new LogicConnector("CLK", "out"), new LogicConnector("udc1bit_4", "CLK")),
-            new(new LogicConnector("DIR", "out"), new LogicConnector("udc1bit_1", "DIR")),
-            new(new LogicConnector("DIR", "out"), new LogicConnector("udc1bit_2", "DIR")),
-            new(new LogicConnector("DIR", "out"), new LogicConnector("udc1bit_3", "DIR")),
-            new(new LogicConnector("DIR", "out"), new LogicConnector("udc1bit_4", "DIR")),
-            new(new LogicConnector("LOW", "out"), new LogicConnector("udc1bit_1", "LOW")),
-            new(new LogicConnector("udc1bit_1", "HI"), new LogicConnector("udc1bit_2", "LOW")),
-            new(new LogicConnector("udc1bit_2", "HI"), new LogicConnector("udc1bit_3", "LOW")),
-            new(new LogicConnector("udc1bit_3", "HI"), new LogicConnector("udc1bit_4", "LOW")),
-            new(new LogicConnector("udc1bit_4", "HI"), new LogicConnector("HI", "in")),
-            new(new LogicConnector("udc1bit_1", "D"), new LogicConnector("D0", "in")),
-            new(new LogicConnector("udc1bit_2", "D"), new LogicConnector("D1", "in")),
-            new(new LogicConnector("udc1bit_3", "D"), new LogicConnector("D2", "in")),
-            new(new LogicConnector("udc1bit_4", "D"), new LogicConnector("D3", "in")),
-
-        ]);
+    public static readonly Circuit UDCounter1Bit = CreateUDCounter(1);
+    public static readonly Circuit UDCounter2Bit = CreateUDCounter(2);
+    public static readonly Circuit UDCounter4Bit = CreateUDCounter(4);
 
     public static readonly IReadOnlyDictionary<string, Circuit> Circuits = new Dictionary<string, Circuit> {
         { "jk_ff_preset_clear", JK_FFMasterSlavePresetClear },
