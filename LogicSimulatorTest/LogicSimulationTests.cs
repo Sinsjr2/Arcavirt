@@ -3,6 +3,27 @@ using LogicSimulator;
 
 namespace LogicSimulatorTest;
 
+/// <summary>
+/// カウントシナリオ1つ分（開始値、クロック回数、ラベル、カウント方向）
+/// </summary>
+public record CountScenario(
+    int StartValue,
+    int ClockCount,
+    bool IsUp,      // true=カウントアップ, false=カウントダウン
+    string Label
+);
+
+/// <summary>
+/// UDCounter データ駆動テスト用 Config
+/// </summary>
+public record UDCounterTestConfig(
+    int BitCount,
+    // null → Enumerable.Range(0, 1<<BitCount) で全件生成
+    int[]? ExplicitPresetValues,
+    CountScenario[] CountUpScenarios,
+    CountScenario[] CountDownScenarios
+);
+
 public record PinValue(string PinName, bool Value);
 
 /// <summary>
@@ -83,8 +104,8 @@ public class BuiltInCircuit {
     /// </summary>
     public static Circuit CreateUDCounter(int bitCount)
     {
-        if (bitCount < 1) {
-            throw new ArgumentException("bitCount must be >= 1");
+        if (bitCount < 1 || bitCount > 31) {
+            throw new ArgumentException($"bitCount must be between 1 and 31, but was {bitCount}.", nameof(bitCount));
         }
 
         if (bitCount == 1) {
@@ -781,148 +802,169 @@ public class LogicSimulationTests {
         Assert.That(simulation.GetOutput("outputC", 0), Is.EqualTo(LogicSignal.High));
     }
 
-    public static IReadOnlyList<SignalTestPattern> UDCounter1Bit_Data = [
-        // SET でクリア（Q=0）
-        new([
-            new([ new("SET", true) ], [ new("D", false) ]),
-            new([ new("SET", false) ], [ new("D", false) ]),
-        ]),
-        // SET でプリセット（Q=1）
-        new([
-            new([ new("SET", true), new("INITIAL", true) ], [ new("D", true) ]),
-            new([ new("SET", false) ], [ new("D", true) ]),
-        ]),
-        // カウントアップ 0→1→0
-        new([
-            new([ new("SET", true) ], []),
-            new([ new("SET", false), new("LOW", true), new("DIR", false) ], [ new("D", false), new("HI", false) ]),
-            new([ new("CLK", true) ], [ new("D", false), new("HI", false) ]),
-            new([ new("CLK", false) ], [ new("D", true), new("HI", true) ]),
-            new([ new("CLK", true) ], [ new("D", true), new("HI", true) ]),
-            new([ new("CLK", false) ], [ new("D", false), new("HI", false) ]),
-            new([ new("CLK", true) ], [ new("D", false), new("HI", false) ]),
-            new([ new("CLK", false) ], [ new("D", true), new("HI", true) ]),
-        ]),
-        // カウントダウン 1→0
-        new([
-            new([ new("SET", true), new("INITIAL", true) ], []),
-            new([ new("SET", false), new("LOW", true), new("DIR", true) ], [ new("D", true), new("HI", false) ]),
-            new([ new("CLK", true) ], [ new("D", true), new("HI", false) ]),
-            new([ new("CLK", false) ], [ new("D", false), new("HI", true) ]),
-            new([ new("CLK", true) ], [ new("D", false), new("HI", true) ]),
-            new([ new("CLK", false) ], [ new("D", true), new("HI", false) ]),
-        ]),
+    public static IEnumerable<TestCaseData> UDCounterTestCases => [
+        // 1bit
+        new TestCaseData(new UDCounterTestConfig(
+            BitCount: 1,
+            ExplicitPresetValues: null,
+            CountUpScenarios: [ new(StartValue: 0, ClockCount: 4, IsUp: true, Label: "countup_full") ],
+            CountDownScenarios: [ new(StartValue: 1, ClockCount: 4, IsUp: false, Label: "countdown_full") ]
+        )).SetName("1bit"),
+
+        // 2bit
+        new TestCaseData(new UDCounterTestConfig(
+            BitCount: 2,
+            ExplicitPresetValues: null,
+            CountUpScenarios: [ new(StartValue: 0, ClockCount: 8, IsUp: true, Label: "countup_full") ],
+            CountDownScenarios: [ new(StartValue: 3, ClockCount: 8, IsUp: false, Label: "countdown_full") ]
+        )).SetName("2bit"),
+
+        // 4bit
+        new TestCaseData(new UDCounterTestConfig(
+            BitCount: 4,
+            ExplicitPresetValues: null,
+            CountUpScenarios: [ new(StartValue: 0, ClockCount: 32, IsUp: true, Label: "countup_full") ],
+            CountDownScenarios: [ new(StartValue: 15, ClockCount: 32, IsUp: false, Label: "countdown_full") ]
+        )).SetName("4bit"),
+
+        // 8bit（修正4適用: StartValue: 0x01, ClockCount: 3）
+        new TestCaseData(new UDCounterTestConfig(
+            BitCount: 8,
+            ExplicitPresetValues: [0x00, 0x01, 0x7F, 0x80, 0xFF],
+            CountUpScenarios: [
+                new(StartValue: 0x00, ClockCount: 16, IsUp: true,  Label: "countup_boundary"),
+                new(StartValue: 0xFF, ClockCount: 3,  IsUp: true,  Label: "overflow"),
+                new(StartValue: 0x80, ClockCount: 4,  IsUp: true,  Label: "midvalue"),
+            ],
+            CountDownScenarios: [
+                new(StartValue: 0x01, ClockCount: 3, IsUp: false, Label: "countdown_underflow"),
+            ]
+        )).SetName("8bit"),
+
+        // 16bit（修正4適用: StartValue: 0x0001, ClockCount: 3）
+        new TestCaseData(new UDCounterTestConfig(
+            BitCount: 16,
+            ExplicitPresetValues: [0x0000, 0x0001, 0x8000, 0xFFFF],
+            CountUpScenarios: [
+                new(StartValue: 0x0000, ClockCount: 2, IsUp: true,  Label: "countup_boundary"),
+                new(StartValue: 0xFFFF, ClockCount: 4, IsUp: true,  Label: "overflow"),
+                new(StartValue: 0x8000, ClockCount: 2, IsUp: true,  Label: "midvalue"),
+            ],
+            CountDownScenarios: [
+                new(StartValue: 0x0001, ClockCount: 3, IsUp: false, Label: "countdown_underflow"),
+            ]
+        )).SetName("16bit"),
     ];
 
-    [CancelAfter(1000)]
-    [TestCaseSource(nameof(UDCounter1Bit_Data))]
-    public void UDCounter1Bit(SignalTestPattern testPattern) {
-        var simulation = new LogicSimulation(BuiltInCircuit.UDCounter1Bit, BuiltInCircuit.Circuits);
+    [TestCaseSource(nameof(UDCounterTestCases))]
+    [CancelAfter(10000)] // 動的設定不可のため最大値を固定（1/2/4bit全件でも余裕あり）
+    public void UDCounter_DataDriven(UDCounterTestConfig cfg) {
+        int bitCount = cfg.BitCount;
+        int maxValue = (1 << bitCount) - 1;
+        int modulus  = maxValue + 1;
 
+        // Phase 0: 初期化
+        var circuit    = BuiltInCircuit.CreateUDCounter(bitCount);
+        var simulation = new LogicSimulation(circuit, BuiltInCircuit.Circuits);
         simulation.SetInput("CLK", 0, LogicSignal.Low);
         simulation.SetInput("DIR", 0, LogicSignal.Low);
         simulation.SetInput("LOW", 0, LogicSignal.Low);
         simulation.SetInput("SET", 0, LogicSignal.Low);
-        simulation.SetInput("INITIAL", 0, LogicSignal.Low);
+        for (int j = 0; j < bitCount; j++) {
+            simulation.SetInput($"INITIAL{j}", 0, LogicSignal.Low);
+        }
         simulation.Step();
 
-        foreach (var frame in testPattern.Frames) {
-            foreach (var input in frame.Inputs) {
-                simulation.SetInput(input.PinName, 0, input.Value.ToSignal());
+        // Phase 1: リセット確認
+        simulation.SetInput("SET", 0, LogicSignal.High);
+        simulation.Step();
+        for (int j = 0; j < bitCount; j++) {
+            Assert.That(simulation.GetOutput($"D{j}", 0), Is.EqualTo(LogicSignal.Low), $"reset: D{j}");
+        }
+
+        // Phase 2: プリセット確認
+        var presetValues = cfg.ExplicitPresetValues ?? Enumerable.Range(0, modulus).ToArray();
+        foreach (int preset in presetValues) {
+            for (int j = 0; j < bitCount; j++) {
+                simulation.SetInput($"INITIAL{j}", 0, ((preset & (1 << j)) != 0).ToSignal());
             }
+            simulation.SetInput("SET", 0, LogicSignal.High);
             simulation.Step();
-            foreach (var expected in frame.Expecteds) {
-                Assert.That(simulation.GetOutput(expected.PinName, 0), Is.EqualTo(expected.Value.ToSignal()));
+            // 2a. SET=High中の確認
+            for (int j = 0; j < bitCount; j++) {
+                Assert.That(simulation.GetOutput($"D{j}", 0),
+                    Is.EqualTo(((preset & (1 << j)) != 0).ToSignal()),
+                    $"preset=0x{preset:X}: D{j}");
             }
+            // 2b. SET解除後のホールド確認
+            simulation.SetInput("SET", 0, LogicSignal.Low);
+            simulation.Step();
+            for (int j = 0; j < bitCount; j++) {
+                Assert.That(simulation.GetOutput($"D{j}", 0),
+                    Is.EqualTo(((preset & (1 << j)) != 0).ToSignal()),
+                    $"after preset clear, preset=0x{preset:X}: D{j}");
+            }
+        }
+
+        // Phase 3: カウントアップシナリオ群
+        foreach (var scenario in cfg.CountUpScenarios) {
+            SetupCountScenario(simulation, bitCount, scenario.StartValue, isUp: true);
+            RunCountScenario(simulation, bitCount, maxValue, modulus, scenario);
+        }
+
+        // Phase 4: カウントダウンシナリオ群
+        foreach (var scenario in cfg.CountDownScenarios) {
+            SetupCountScenario(simulation, bitCount, scenario.StartValue, isUp: false);
+            RunCountScenario(simulation, bitCount, maxValue, modulus, scenario);
         }
     }
 
-    [CancelAfter(2000)]
-    [Test]
-    public void UDCounter2Bit()
-    {
-        var simulation = new LogicSimulation(BuiltInCircuit.UDCounter2Bit, BuiltInCircuit.Circuits);
-
-        // 全入力を初期化
-        simulation.SetInput("CLK", 0, LogicSignal.Low);
-        simulation.SetInput("DIR", 0, LogicSignal.Low);
-        simulation.SetInput("LOW", 0, LogicSignal.Low);
-        simulation.SetInput("SET", 0, LogicSignal.Low);
-        simulation.SetInput("INITIAL0", 0, LogicSignal.Low);
-        simulation.SetInput("INITIAL1", 0, LogicSignal.Low);
-        simulation.Step();
-
-        // 0000 にクリア
+    private static void SetupCountScenario(LogicSimulation simulation, int bitCount,
+        int startValue, bool isUp) {
+        for (int j = 0; j < bitCount; j++) {
+            simulation.SetInput($"INITIAL{j}", 0, ((startValue & (1 << j)) != 0).ToSignal());
+        }
         simulation.SetInput("SET", 0, LogicSignal.High);
         simulation.Step();
-        Assert.That(simulation.GetOutput("D0", 0), Is.EqualTo(LogicSignal.Low), "init D0");
-        Assert.That(simulation.GetOutput("D1", 0), Is.EqualTo(LogicSignal.Low), "init D1");
 
         simulation.SetInput("SET", 0, LogicSignal.Low);
+        // LOW=High: 上位ビットからのキャリー入力をHighにし、カウンタを動作可能にする
         simulation.SetInput("LOW", 0, LogicSignal.High);
+        simulation.SetInput("DIR", 0, isUp ? LogicSignal.Low : LogicSignal.High);
         simulation.Step();
+        // この時点でHIが組み合わせ論理として確定
+    }
 
-        // 0→3→0 の 4 クロックをカウントアップ
-        for (int i = 1; i <= 4; i++)
-        {
+    private static void RunCountScenario(LogicSimulation simulation, int bitCount,
+        int maxValue, int modulus, CountScenario scenario) {
+        int startValue = scenario.StartValue;
+        bool isUp      = scenario.IsUp;
+        string label   = scenario.Label;
+
+        // 初期HI確認（クロック前）
+        bool hiInitial = (isUp && startValue == maxValue) || (!isUp && startValue == 0);
+        Assert.That(simulation.GetOutput("HI", 0), Is.EqualTo(hiInitial.ToSignal()),
+            $"{label} pre-clk HI");
+
+        for (int i = 0; i < scenario.ClockCount; i++) {
             simulation.SetInput("CLK", 0, LogicSignal.High);
             simulation.Step();
             simulation.SetInput("CLK", 0, LogicSignal.Low);
             simulation.Step();
 
-            int expected = i % 4;
-            using (Assert.EnterMultipleScope())
-            {
-                Assert.That(simulation.GetOutput("D0", 0),
-                    Is.EqualTo(((expected & 1) != 0).ToSignal()), $"count={i} D0");
-                Assert.That(simulation.GetOutput("D1", 0),
-                    Is.EqualTo(((expected & 2) != 0).ToSignal()), $"count={i} D1");
-            }
-        }
-    }
+            int expectedValue = isUp
+                ? (startValue + i + 1) % modulus
+                : ((startValue - (i + 1)) & maxValue);
 
-    [CancelAfter(5000)]
-    [Test]
-    public void UDCounter4Bit() {
-        var simulation = new LogicSimulation(BuiltInCircuit.UDCounter4Bit, BuiltInCircuit.Circuits);
-
-        simulation.SetInput("CLK", 0, LogicSignal.Low);
-        simulation.SetInput("DIR", 0, LogicSignal.Low);
-        simulation.SetInput("LOW", 0, LogicSignal.Low);
-        simulation.SetInput("SET", 0, LogicSignal.Low);
-        simulation.SetInput("INITIAL0", 0, LogicSignal.Low);
-        simulation.SetInput("INITIAL1", 0, LogicSignal.Low);
-        simulation.SetInput("INITIAL2", 0, LogicSignal.Low);
-        simulation.SetInput("INITIAL3", 0, LogicSignal.Low);
-        simulation.Step();
-
-        // 0000 にクリア
-        simulation.SetInput("SET", 0, LogicSignal.High);
-        simulation.Step();
-        using (Assert.EnterMultipleScope()) {
-            Assert.That(simulation.GetOutput("D0", 0), Is.EqualTo(LogicSignal.Low), "init D0");
-            Assert.That(simulation.GetOutput("D1", 0), Is.EqualTo(LogicSignal.Low), "init D1");
-            Assert.That(simulation.GetOutput("D2", 0), Is.EqualTo(LogicSignal.Low), "init D2");
-            Assert.That(simulation.GetOutput("D3", 0), Is.EqualTo(LogicSignal.Low), "init D3");
-        }
-
-        simulation.SetInput("SET", 0, LogicSignal.Low);
-        simulation.SetInput("LOW", 0, LogicSignal.High);
-        simulation.Step();
-
-        // 0→15→0 の 16 クロックをカウントアップ
-        for (int i = 1; i <= 16; i++) {
-            simulation.SetInput("CLK", 0, LogicSignal.High);
-            simulation.Step();
-            simulation.SetInput("CLK", 0, LogicSignal.Low);
-            simulation.Step();
-
-            int expected = i % 16;
             using (Assert.EnterMultipleScope()) {
-                Assert.That(simulation.GetOutput("D0", 0), Is.EqualTo(((expected & 1) != 0).ToSignal()), $"count={i} D0");
-                Assert.That(simulation.GetOutput("D1", 0), Is.EqualTo(((expected & 2) != 0).ToSignal()), $"count={i} D1");
-                Assert.That(simulation.GetOutput("D2", 0), Is.EqualTo(((expected & 4) != 0).ToSignal()), $"count={i} D2");
-                Assert.That(simulation.GetOutput("D3", 0), Is.EqualTo(((expected & 8) != 0).ToSignal()), $"count={i} D3");
+                for (int j = 0; j < bitCount; j++) {
+                    bool expectedBit = (expectedValue & (1 << j)) != 0;
+                    Assert.That(simulation.GetOutput($"D{j}", 0), Is.EqualTo(expectedBit.ToSignal()),
+                        $"{label} i={i}: D{j}");
+                }
+                bool hiExpected = (isUp && expectedValue == maxValue) || (!isUp && expectedValue == 0);
+                Assert.That(simulation.GetOutput("HI", 0), Is.EqualTo(hiExpected.ToSignal()),
+                    $"{label} i={i}: HI");
             }
         }
     }
