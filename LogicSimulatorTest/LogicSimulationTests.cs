@@ -201,115 +201,101 @@ public class BuiltInCircuit {
         }
     }
 
-    /// <summary>
-    /// 1ビット比較器、<、==、> を判定する
-    /// </summary>
-    public static readonly Circuit Comparator1Bit = new([
-            new("A", new InputConnector(1)),
-            new("B", new InputConnector(1)),
-            new("GT", new OutputConnector(1)),
-            new("EQ", new OutputConnector(1)),
-            new("LE", new OutputConnector(1)),
-            new("not1", new NotLogic()),
-            new("not2", new NotLogic()),
-            new("and1", new AndLogic(2)),
-            new("and2", new AndLogic(2)),
-            new("and3", new AndLogic(2)),
-            new("and4", new AndLogic(2)),
-            new("or1", new OrLogic(2)),
-        ],
-        [
-            new(new LogicConnector("A", "out"), new LogicConnector("and1", "in[0]")),
-            new(new LogicConnector("A", "out"), new LogicConnector("not1", "in")),
-            new(new LogicConnector("A", "out"), new LogicConnector("and3", "in[0]")),
-            new(new LogicConnector("B", "out"), new LogicConnector("not2", "in")),
-            new(new LogicConnector("B", "out"), new LogicConnector("and3", "in[1]")),
-            new(new LogicConnector("B", "out"), new LogicConnector("and4", "in[1]")),
-            new(new LogicConnector("not1", "out"), new LogicConnector("and2", "in[0]")),
-            new(new LogicConnector("not1", "out"), new LogicConnector("and4", "in[0]")),
-            new(new LogicConnector("not2", "out"), new LogicConnector("and1", "in[1]")),
-            new(new LogicConnector("not2", "out"), new LogicConnector("and2", "in[1]")),
-            new(new LogicConnector("and1", "out"), new LogicConnector("GT", "in")),
-            new(new LogicConnector("and2", "out"), new LogicConnector("or1", "in[0]")),
-            new(new LogicConnector("and3", "out"), new LogicConnector("or1", "in[1]")),
-            new(new LogicConnector("or1", "out"), new LogicConnector("EQ", "in")),
-            new(new LogicConnector("and4", "out"), new LogicConnector("LE", "in")),
-        ]);
+    public static Circuit CreateComparator(int bitCount) {
+        if (bitCount < 1 || bitCount > 31) {
+            throw new ArgumentException($"bitCount must be between 1 and 31, but was {bitCount}.", nameof(bitCount));
+        }
+        if (bitCount == 1) {
+            return new([
+                new("A", new InputConnector(1)),
+                new("B", new InputConnector(1)),
+                new("GT", new OutputConnector(1)),
+                new("EQ", new OutputConnector(1)),
+                new("LE", new OutputConnector(1)),
+                new("not1", new NotLogic()),
+                new("not2", new NotLogic()),
+                new("and1", new AndLogic(2)),
+                new("and2", new AndLogic(2)),
+                new("and3", new AndLogic(2)),
+                new("and4", new AndLogic(2)),
+                new("or1", new OrLogic(2)),
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("and1", "in[0]")),
+                new(new LogicConnector("A", "out"), new LogicConnector("not1", "in")),
+                new(new LogicConnector("A", "out"), new LogicConnector("and3", "in[0]")),
+                new(new LogicConnector("B", "out"), new LogicConnector("not2", "in")),
+                new(new LogicConnector("B", "out"), new LogicConnector("and3", "in[1]")),
+                new(new LogicConnector("B", "out"), new LogicConnector("and4", "in[1]")),
+                new(new LogicConnector("not1", "out"), new LogicConnector("and2", "in[0]")),
+                new(new LogicConnector("not1", "out"), new LogicConnector("and4", "in[0]")),
+                new(new LogicConnector("not2", "out"), new LogicConnector("and1", "in[1]")),
+                new(new LogicConnector("not2", "out"), new LogicConnector("and2", "in[1]")),
+                new(new LogicConnector("and1", "out"), new LogicConnector("GT", "in")),
+                new(new LogicConnector("and2", "out"), new LogicConnector("or1", "in[0]")),
+                new(new LogicConnector("and3", "out"), new LogicConnector("or1", "in[1]")),
+                new(new LogicConnector("or1", "out"), new LogicConnector("EQ", "in")),
+                new(new LogicConnector("and4", "out"), new LogicConnector("LE", "in")),
+            ]);
+        }
 
-    public static readonly Circuit Comparator4Bit = new([
-            new("A0", new InputConnector(1)),
-            new("A1", new InputConnector(1)),
-            new("A2", new InputConnector(1)),
-            new("A3", new InputConnector(1)),
-            new("B0", new InputConnector(1)),
-            new("B1", new InputConnector(1)),
-            new("B2", new InputConnector(1)),
-            new("B3", new InputConnector(1)),
-            new("GT", new OutputConnector(1)),
-            new("EQ", new OutputConnector(1)),
-            new("LE", new OutputConnector(1)),
-            new("comparator1", new CustomCircuit("comparator_1bit")),
-            new("comparator2", new CustomCircuit("comparator_1bit")),
-            new("comparator3", new CustomCircuit("comparator_1bit")),
-            new("comparator4", new CustomCircuit("comparator_1bit")),
-            new("and1", new AndLogic(2)),
-            new("and2", new AndLogic(2)),
-            new("and3", new AndLogic(2)),
-            new("and4", new AndLogic(2)),
-            new("and5", new AndLogic(2)),
-            new("and6", new AndLogic(2)),
-            new("and7", new AndLogic(4)),
-            new("or1", new OrLogic(2)),
-            new("or2", new OrLogic(2)),
-            new("or3", new OrLogic(2)),
-            new("or4", new OrLogic(2)),
-            new("or5", new OrLogic(2)),
-            new("or6", new OrLogic(2)),
-        ],
-        [
-            new(new LogicConnector("A0", "out"), new LogicConnector("comparator1", "A")),
-            new(new LogicConnector("A1", "out"), new LogicConnector("comparator2", "A")),
-            new(new LogicConnector("A2", "out"), new LogicConnector("comparator3", "A")),
-            new(new LogicConnector("A3", "out"), new LogicConnector("comparator4", "A")),
-            new(new LogicConnector("B0", "out"), new LogicConnector("comparator1", "B")),
-            new(new LogicConnector("B1", "out"), new LogicConnector("comparator2", "B")),
-            new(new LogicConnector("B2", "out"), new LogicConnector("comparator3", "B")),
-            new(new LogicConnector("B3", "out"), new LogicConnector("comparator4", "B")),
-            new(new LogicConnector("comparator1", "GT"), new LogicConnector("and1", "in[0]")),
-            new(new LogicConnector("comparator2", "EQ"), new LogicConnector("and1", "in[1]")),
-            new(new LogicConnector("comparator1", "LE"), new LogicConnector("and2", "in[0]")),
-            new(new LogicConnector("comparator2", "GT"), new LogicConnector("or1", "in[1]")),
-            new(new LogicConnector("and1", "out"), new LogicConnector("or1", "in[0]")),
-            new(new LogicConnector("comparator2", "EQ"), new LogicConnector("and2", "in[1]")),
-            new(new LogicConnector("comparator2", "LE"), new LogicConnector("or2", "in[1]")),
-            new(new LogicConnector("and2", "out"), new LogicConnector("or2", "in[0]")),
-            new(new LogicConnector("comparator3", "GT"), new LogicConnector("or3", "in[1]")),
-            new(new LogicConnector("or1", "out"), new LogicConnector("and3", "in[0]")),
-            new(new LogicConnector("comparator3", "EQ"), new LogicConnector("and3", "in[1]")),
-            new(new LogicConnector("comparator3", "EQ"), new LogicConnector("and4", "in[1]")),
-            new(new LogicConnector("comparator3", "LE"), new LogicConnector("or4", "in[1]")),
-            new(new LogicConnector("and4", "out"), new LogicConnector("or4", "in[0]")),
-            new(new LogicConnector("comparator4", "GT"), new LogicConnector("or5", "in[1]")),
-            new(new LogicConnector("comparator4", "EQ"), new LogicConnector("and5", "in[1]")),
-            new(new LogicConnector("comparator4", "EQ"), new LogicConnector("and6", "in[1]")),
-            new(new LogicConnector("comparator4", "LE"), new LogicConnector("or6", "in[1]")),
-            new(new LogicConnector("and3", "out"), new LogicConnector("or3", "in[0]")),
-            new(new LogicConnector("or3", "out"), new LogicConnector("and5", "in[0]")),
-            new(new LogicConnector("or4", "out"), new LogicConnector("and6", "in[0]")),
-            new(new LogicConnector("comparator3", "GT"), new LogicConnector("or3", "in[1]")),
-            new(new LogicConnector("and5", "out"), new LogicConnector("or5", "in[0]")),
-            new(new LogicConnector("comparator4", "GT"), new LogicConnector("or5", "in[1]")),
-            new(new LogicConnector("and6", "out"), new LogicConnector("or6", "in[0]")),
-            new(new LogicConnector("or2", "out"), new LogicConnector("and4", "in[0]")),
-            new(new LogicConnector("comparator1", "EQ"), new LogicConnector("and7", "in[0]")),
-            new(new LogicConnector("comparator2", "EQ"), new LogicConnector("and7", "in[1]")),
-            new(new LogicConnector("comparator3", "EQ"), new LogicConnector("and7", "in[2]")),
-            new(new LogicConnector("comparator4", "EQ"), new LogicConnector("and7", "in[3]")),
-            new(new LogicConnector("or5", "out"), new LogicConnector("GT", "in")),
-            new(new LogicConnector("and7", "out"), new LogicConnector("EQ", "in")),
-            new(new LogicConnector("or6", "out"), new LogicConnector("LE", "in")),
+        var nodes = new List<LogicNode>();
+        var wires = new List<LogicConnection>();
 
-        ]);
+        for (int i = 0; i < bitCount; i++) {
+            nodes.Add(new($"A{i}", new InputConnector(1)));
+        }
+        for (int i = 0; i < bitCount; i++) {
+            nodes.Add(new($"B{i}", new InputConnector(1)));
+        }
+        nodes.Add(new("GT", new OutputConnector(1)));
+        nodes.Add(new("EQ", new OutputConnector(1)));
+        nodes.Add(new("LE", new OutputConnector(1)));
+
+        for (int i = 0; i < bitCount; i++) {
+            nodes.Add(new($"comp_{i}", new CustomCircuit("comparator_1bit")));
+        }
+        for (int k = 1; k < bitCount; k++) {
+            nodes.Add(new($"and_gt_{k}", new AndLogic(2)));
+            nodes.Add(new($"or_gt_{k}", new OrLogic(2)));
+            nodes.Add(new($"and_le_{k}", new AndLogic(2)));
+            nodes.Add(new($"or_le_{k}", new OrLogic(2)));
+        }
+        nodes.Add(new("and_eq", new AndLogic(bitCount)));
+
+        for (int i = 0; i < bitCount; i++) {
+            wires.Add(new(new LogicConnector($"A{i}", "out"), new LogicConnector($"comp_{i}", "A")));
+            wires.Add(new(new LogicConnector($"B{i}", "out"), new LogicConnector($"comp_{i}", "B")));
+        }
+        for (int i = 0; i < bitCount; i++) {
+            wires.Add(new(new LogicConnector($"comp_{i}", "EQ"), new LogicConnector("and_eq", $"in[{i}]")));
+        }
+        for (int k = 1; k < bitCount; k++) {
+            string prevGtNode = k == 1 ? "comp_0" : $"or_gt_{k - 1}";
+            string prevGtPin  = k == 1 ? "GT" : "out";
+            string prevLeNode = k == 1 ? "comp_0" : $"or_le_{k - 1}";
+            string prevLePin  = k == 1 ? "LE" : "out";
+
+            wires.Add(new(new LogicConnector(prevGtNode, prevGtPin), new LogicConnector($"and_gt_{k}", "in[0]")));
+            wires.Add(new(new LogicConnector($"comp_{k}", "EQ"), new LogicConnector($"and_gt_{k}", "in[1]")));
+            wires.Add(new(new LogicConnector($"and_gt_{k}", "out"), new LogicConnector($"or_gt_{k}", "in[0]")));
+            wires.Add(new(new LogicConnector($"comp_{k}", "GT"), new LogicConnector($"or_gt_{k}", "in[1]")));
+
+            wires.Add(new(new LogicConnector(prevLeNode, prevLePin), new LogicConnector($"and_le_{k}", "in[0]")));
+            wires.Add(new(new LogicConnector($"comp_{k}", "EQ"), new LogicConnector($"and_le_{k}", "in[1]")));
+            wires.Add(new(new LogicConnector($"and_le_{k}", "out"), new LogicConnector($"or_le_{k}", "in[0]")));
+            wires.Add(new(new LogicConnector($"comp_{k}", "LE"), new LogicConnector($"or_le_{k}", "in[1]")));
+        }
+        wires.Add(new(new LogicConnector($"or_gt_{bitCount - 1}", "out"), new LogicConnector("GT", "in")));
+        wires.Add(new(new LogicConnector("and_eq", "out"), new LogicConnector("EQ", "in")));
+        wires.Add(new(new LogicConnector($"or_le_{bitCount - 1}", "out"), new LogicConnector("LE", "in")));
+
+        return new(nodes, wires);
+    }
+
+    public static readonly Circuit Comparator1Bit = CreateComparator(1);
+
+    public static readonly Circuit Comparator4Bit = CreateComparator(4);
 
     public static readonly Circuit UDCounter1Bit = CreateUDCounter(1);
     public static readonly Circuit UDCounter2Bit = CreateUDCounter(2);
@@ -659,44 +645,26 @@ public class LogicSimulationTests {
         }
     }
 
-    [TestCase(LogicSignal.Low, LogicSignal.Low, LogicSignal.Low, LogicSignal.High, LogicSignal.Low)]
-    [TestCase(LogicSignal.Low, LogicSignal.High, LogicSignal.Low, LogicSignal.Low, LogicSignal.High)]
-    [TestCase(LogicSignal.High, LogicSignal.Low, LogicSignal.High, LogicSignal.Low, LogicSignal.Low)]
-    [TestCase(LogicSignal.High, LogicSignal.High, LogicSignal.Low, LogicSignal.High, LogicSignal.Low)]
-    public void Comparator1Bit(LogicSignal a, LogicSignal b, LogicSignal expectedGT, LogicSignal expectedEQ, LogicSignal expectedLE) {
-        var simulation = new LogicSimulation(BuiltInCircuit.Comparator1Bit);
-        
-        simulation.SetInput("A", 0, a);
-        simulation.SetInput("B", 0, b);
-        simulation.Step();
-        
-        Assert.That(simulation.GetOutput("GT", 0), Is.EqualTo(expectedGT));
-        Assert.That(simulation.GetOutput("EQ", 0), Is.EqualTo(expectedEQ));
-        Assert.That(simulation.GetOutput("LE", 0), Is.EqualTo(expectedLE));
-    }
-
-    [Test]
-    public void Comparator4Bit() {
-        // 全パターン(0x0～0xF)テスト
-        for (int a = 0; a <= 0xF; a++) {
-            for (int b = 0; b <= 0xF; b++) {
-                var simulation = new LogicSimulation(BuiltInCircuit.Comparator4Bit, BuiltInCircuit.Circuits);
-
-                // A と B を各ビットに分解
-                simulation.SetInput("A0", 0, ((a & (1 << 0)) != 0).ToSignal());
-                simulation.SetInput("A1", 0, ((a & (1 << 1)) != 0).ToSignal());
-                simulation.SetInput("A2", 0, ((a & (1 << 2)) != 0).ToSignal());
-                simulation.SetInput("A3", 0, ((a & (1 << 3)) != 0).ToSignal());
-                simulation.SetInput("B0", 0, ((b & (1 << 0)) != 0).ToSignal());
-                simulation.SetInput("B1", 0, ((b & (1 << 1)) != 0).ToSignal());
-                simulation.SetInput("B2", 0, ((b & (1 << 2)) != 0).ToSignal());
-                simulation.SetInput("B3", 0, ((b & (1 << 3)) != 0).ToSignal());
+    [TestCase(1)]
+    [TestCase(2)]
+    [TestCase(4)]
+    public void Comparator_DataDriven(int bitCount) {
+        int maxVal = (1 << bitCount) - 1;
+        for (int a = 0; a <= maxVal; a++) {
+            for (int b = 0; b <= maxVal; b++) {
+                var simulation = new LogicSimulation(
+                    BuiltInCircuit.CreateComparator(bitCount), BuiltInCircuit.Circuits);
+                for (int i = 0; i < bitCount; i++) {
+                    string aPin = bitCount == 1 ? "A" : $"A{i}";
+                    string bPin = bitCount == 1 ? "B" : $"B{i}";
+                    simulation.SetInput(aPin, 0, ((a >> i & 1) != 0).ToSignal());
+                    simulation.SetInput(bPin, 0, ((b >> i & 1) != 0).ToSignal());
+                }
                 simulation.Step();
-
                 using (Assert.EnterMultipleScope()) {
-                    Assert.That(simulation.GetOutput("GT", 0), Is.EqualTo((a > b).ToSignal()),$"A={a:X} > B={b:X}");
-                    Assert.That(simulation.GetOutput("EQ", 0), Is.EqualTo((a == b).ToSignal()), $"A={a:X} == B={b:X}");
-                    Assert.That(simulation.GetOutput("LE", 0), Is.EqualTo((a < b).ToSignal()), $"A={a:X} < B={b:X}");
+                    Assert.That(simulation.GetOutput("GT", 0), Is.EqualTo((a > b).ToSignal()), $"A=0x{a:X} > B=0x{b:X}");
+                    Assert.That(simulation.GetOutput("EQ", 0), Is.EqualTo((a == b).ToSignal()), $"A=0x{a:X} == B=0x{b:X}");
+                    Assert.That(simulation.GetOutput("LE", 0), Is.EqualTo((a < b).ToSignal()), $"A=0x{a:X} < B=0x{b:X}");
                 }
             }
         }
