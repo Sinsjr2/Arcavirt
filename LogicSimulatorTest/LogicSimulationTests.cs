@@ -100,6 +100,49 @@ public class BuiltInCircuit {
         ]);
 
     /// <summary>
+    /// D型フリップフロップ（マスタースレーブ JK-FF を使用した実装）。
+    /// クロック C の立ち下がりエッジ（High → Low）で入力 D の値を Q に取り込みます。
+    ///
+    /// ピン一覧:
+    /// - ~Clr~ : クリア（アクティブLow）。Low のとき Q=Low に強制リセットします。
+    /// - C     : クロック入力。立ち下がりエッジ（High → Low）で D の値を取り込みます。
+    /// - D     : データ入力。クロック立ち下がり時にこの値が Q に転送されます。
+    /// - ~Set~ : セット（アクティブLow）。Low のとき Q=High に強制セットします。
+    /// - Q     : 出力。
+    /// - ~Q~   : Q の反転出力。
+    ///
+    /// 真理値表:
+    /// <code>
+    /// ~Set~ | ~Clr~ | D | C  | Q | ~Q~ | 説明
+    /// ------|-------|---|----|---|-----|--------------------------------------------------
+    ///   H   |   H   | X | ↓  | D | ~D~ | 通常動作（立ち下がりエッジでラッチ）
+    ///   L   |   H   | X | X  | H |  L  | セット有効（~Set~=Low）
+    ///   H   |   L   | X | X  | L |  H  | クリア有効（~Clr~=Low）
+    ///   L   |   L   | X | X  | H |  H  | 禁止状態（両方有効、発振なし）
+    /// </code>
+    /// </summary>
+    public static readonly Circuit D_FF = new([
+            new("~Clr~", new InputConnector(1)),
+            new("C",     new InputConnector(1)),
+            new("D",     new InputConnector(1)),
+            new("~Set~", new InputConnector(1)),
+            new("not_d", new NotLogic()),
+            new("jkff1", new CustomCircuit("jk_ff_preset_clear")),
+            new("Q",     new OutputConnector(1)),
+            new("~Q~",   new OutputConnector(1))
+        ],
+        [
+            new(new LogicConnector("~Clr~", "out"), new LogicConnector("jkff1",  "~CLR~")),
+            new(new LogicConnector("~Set~", "out"), new LogicConnector("jkff1",  "~PRE~")),
+            new(new LogicConnector("C",     "out"), new LogicConnector("jkff1",  "CLK")),
+            new(new LogicConnector("D",     "out"), new LogicConnector("jkff1",  "J")),
+            new(new LogicConnector("D",     "out"), new LogicConnector("not_d",  "in")),
+            new(new LogicConnector("not_d", "out"), new LogicConnector("jkff1",  "K")),
+            new(new LogicConnector("jkff1", "Q"),   new LogicConnector("Q",      "in")),
+            new(new LogicConnector("jkff1", "~Q~"), new LogicConnector("~Q~",    "in")),
+        ]);
+
+    /// <summary>
     /// N ビット UD カウンタを動的に生成します
     /// </summary>
     public static Circuit CreateUDCounter(int bitCount)
@@ -303,6 +346,7 @@ public class BuiltInCircuit {
 
     public static readonly IReadOnlyDictionary<string, Circuit> Circuits = new Dictionary<string, Circuit> {
         { "jk_ff_preset_clear", JK_FFMasterSlavePresetClear },
+        { "d_ff", D_FF },
         { "comparator_1bit", Comparator1Bit },
         { "comparator_4bit", Comparator4Bit },
         { "ud_counter_1bit", UDCounter1Bit },
@@ -931,6 +975,64 @@ public class LogicSimulationTests {
                 bool hiExpected = (isUp && expectedValue == maxValue) || (!isUp && expectedValue == 0);
                 Assert.That(simulation.GetOutput("HI", 0), Is.EqualTo(hiExpected.ToSignal()),
                     $"{label} i={i}: HI");
+            }
+        }
+    }
+
+    public static IReadOnlyList<SignalTestPattern> DFF_Data = [
+        // 1. ~Clr~=Low でクリア → Q=Low, ~Q~=High
+        new([
+            new([ new("~Clr~", false) ], [ new("Q", false), new("~Q~", true) ])
+        ]),
+        // 2. ~Set~=Low でセット → Q=High, ~Q~=Low
+        new([
+            new([ new("~Set~", false) ], [ new("Q", true), new("~Q~", false) ])
+        ]),
+        // 3. 通常動作: D=High、C 立ち下がり → Q=High
+        new([
+            new([ new("~Clr~", false) ], [ new("Q", false), new("~Q~", true) ]),
+            new([ new("~Clr~", true) ], []),
+            new([ new("D", true), new("C", true) ], []),
+            new([ new("C", false) ], [ new("Q", true), new("~Q~", false) ])
+        ]),
+        // 4. 通常動作: D=Low、C 立ち下がり → Q=Low
+        new([
+            new([ new("~Set~", false) ], [ new("Q", true), new("~Q~", false) ]),
+            new([ new("~Set~", true) ], []),
+            new([ new("D", false), new("C", true) ], []),
+            new([ new("C", false) ], [ new("Q", false), new("~Q~", true) ])
+        ]),
+        // 5. 禁止パターン: ~Set~=Low かつ ~Clr~=Low → Q=High, ~Q~=High（両方High）
+        new([
+            new([ new("~Set~", false), new("~Clr~", false) ], [ new("Q", true), new("~Q~", true) ])
+        ]),
+        // 6. クロック保持中（C=High）は D 変化しても Q 不変
+        new([
+            new([ new("~Clr~", false) ], [ new("Q", false), new("~Q~", true) ]),
+            new([ new("~Clr~", true) ], []),
+            new([ new("C", true) ], []),
+            new([ new("D", true)  ], [ new("Q", false), new("~Q~", true) ]),
+            new([ new("D", false) ], [ new("Q", false), new("~Q~", true) ])
+        ]),
+    ];
+
+    [CancelAfter(1000)]
+    [TestCaseSource(nameof(DFF_Data))]
+    public void DFF_SignalTest(SignalTestPattern testPattern) {
+        var simulation = new LogicSimulation(BuiltInCircuit.D_FF, BuiltInCircuit.Circuits);
+        simulation.SetInput("~Clr~", 0, LogicSignal.High);
+        simulation.SetInput("~Set~", 0, LogicSignal.High);
+        simulation.SetInput("C",     0, LogicSignal.Low);
+        simulation.SetInput("D",     0, LogicSignal.Low);
+        simulation.Step();
+
+        foreach (var frame in testPattern.Frames) {
+            foreach (var input in frame.Inputs) {
+                simulation.SetInput(input.PinName, 0, input.Value.ToSignal());
+            }
+            simulation.Step();
+            foreach (var expected in frame.Expecteds) {
+                Assert.That(simulation.GetOutput(expected.PinName, 0), Is.EqualTo(expected.Value.ToSignal()));
             }
         }
     }
