@@ -207,11 +207,11 @@ public class BuiltInCircuit {
         }
         if (bitCount == 1) {
             return new([
-                new("A", new InputConnector(1)),
-                new("B", new InputConnector(1)),
+                new("A0", new InputConnector(1)),
+                new("B0", new InputConnector(1)),
                 new("GT", new OutputConnector(1)),
                 new("EQ", new OutputConnector(1)),
-                new("LE", new OutputConnector(1)),
+                new("LT", new OutputConnector(1)),
                 new("not1", new NotLogic()),
                 new("not2", new NotLogic()),
                 new("and1", new AndLogic(2)),
@@ -221,12 +221,12 @@ public class BuiltInCircuit {
                 new("or1", new OrLogic(2)),
             ],
             [
-                new(new LogicConnector("A", "out"), new LogicConnector("and1", "in[0]")),
-                new(new LogicConnector("A", "out"), new LogicConnector("not1", "in")),
-                new(new LogicConnector("A", "out"), new LogicConnector("and3", "in[0]")),
-                new(new LogicConnector("B", "out"), new LogicConnector("not2", "in")),
-                new(new LogicConnector("B", "out"), new LogicConnector("and3", "in[1]")),
-                new(new LogicConnector("B", "out"), new LogicConnector("and4", "in[1]")),
+                new(new LogicConnector("A0", "out"), new LogicConnector("and1", "in[0]")),
+                new(new LogicConnector("A0", "out"), new LogicConnector("not1", "in")),
+                new(new LogicConnector("A0", "out"), new LogicConnector("and3", "in[0]")),
+                new(new LogicConnector("B0", "out"), new LogicConnector("not2", "in")),
+                new(new LogicConnector("B0", "out"), new LogicConnector("and3", "in[1]")),
+                new(new LogicConnector("B0", "out"), new LogicConnector("and4", "in[1]")),
                 new(new LogicConnector("not1", "out"), new LogicConnector("and2", "in[0]")),
                 new(new LogicConnector("not1", "out"), new LogicConnector("and4", "in[0]")),
                 new(new LogicConnector("not2", "out"), new LogicConnector("and1", "in[1]")),
@@ -235,7 +235,7 @@ public class BuiltInCircuit {
                 new(new LogicConnector("and2", "out"), new LogicConnector("or1", "in[0]")),
                 new(new LogicConnector("and3", "out"), new LogicConnector("or1", "in[1]")),
                 new(new LogicConnector("or1", "out"), new LogicConnector("EQ", "in")),
-                new(new LogicConnector("and4", "out"), new LogicConnector("LE", "in")),
+                new(new LogicConnector("and4", "out"), new LogicConnector("LT", "in")),
             ]);
         }
 
@@ -250,7 +250,7 @@ public class BuiltInCircuit {
         }
         nodes.Add(new("GT", new OutputConnector(1)));
         nodes.Add(new("EQ", new OutputConnector(1)));
-        nodes.Add(new("LE", new OutputConnector(1)));
+        nodes.Add(new("LT", new OutputConnector(1)));
 
         for (int i = 0; i < bitCount; i++) {
             nodes.Add(new($"comp_{i}", new CustomCircuit("comparator_1bit")));
@@ -264,8 +264,8 @@ public class BuiltInCircuit {
         nodes.Add(new("and_eq", new AndLogic(bitCount)));
 
         for (int i = 0; i < bitCount; i++) {
-            wires.Add(new(new LogicConnector($"A{i}", "out"), new LogicConnector($"comp_{i}", "A")));
-            wires.Add(new(new LogicConnector($"B{i}", "out"), new LogicConnector($"comp_{i}", "B")));
+            wires.Add(new(new LogicConnector($"A{i}", "out"), new LogicConnector($"comp_{i}", "A0")));
+            wires.Add(new(new LogicConnector($"B{i}", "out"), new LogicConnector($"comp_{i}", "B0")));
         }
         for (int i = 0; i < bitCount; i++) {
             wires.Add(new(new LogicConnector($"comp_{i}", "EQ"), new LogicConnector("and_eq", $"in[{i}]")));
@@ -274,7 +274,7 @@ public class BuiltInCircuit {
             string prevGtNode = k == 1 ? "comp_0" : $"or_gt_{k - 1}";
             string prevGtPin  = k == 1 ? "GT" : "out";
             string prevLeNode = k == 1 ? "comp_0" : $"or_le_{k - 1}";
-            string prevLePin  = k == 1 ? "LE" : "out";
+            string prevLePin  = k == 1 ? "LT" : "out";
 
             wires.Add(new(new LogicConnector(prevGtNode, prevGtPin), new LogicConnector($"and_gt_{k}", "in[0]")));
             wires.Add(new(new LogicConnector($"comp_{k}", "EQ"), new LogicConnector($"and_gt_{k}", "in[1]")));
@@ -284,11 +284,11 @@ public class BuiltInCircuit {
             wires.Add(new(new LogicConnector(prevLeNode, prevLePin), new LogicConnector($"and_le_{k}", "in[0]")));
             wires.Add(new(new LogicConnector($"comp_{k}", "EQ"), new LogicConnector($"and_le_{k}", "in[1]")));
             wires.Add(new(new LogicConnector($"and_le_{k}", "out"), new LogicConnector($"or_le_{k}", "in[0]")));
-            wires.Add(new(new LogicConnector($"comp_{k}", "LE"), new LogicConnector($"or_le_{k}", "in[1]")));
+            wires.Add(new(new LogicConnector($"comp_{k}", "LT"), new LogicConnector($"or_le_{k}", "in[1]")));
         }
         wires.Add(new(new LogicConnector($"or_gt_{bitCount - 1}", "out"), new LogicConnector("GT", "in")));
         wires.Add(new(new LogicConnector("and_eq", "out"), new LogicConnector("EQ", "in")));
-        wires.Add(new(new LogicConnector($"or_le_{bitCount - 1}", "out"), new LogicConnector("LE", "in")));
+        wires.Add(new(new LogicConnector($"or_le_{bitCount - 1}", "out"), new LogicConnector("LT", "in")));
 
         return new(nodes, wires);
     }
@@ -655,16 +655,14 @@ public class LogicSimulationTests {
                 var simulation = new LogicSimulation(
                     BuiltInCircuit.CreateComparator(bitCount), BuiltInCircuit.Circuits);
                 for (int i = 0; i < bitCount; i++) {
-                    string aPin = bitCount == 1 ? "A" : $"A{i}";
-                    string bPin = bitCount == 1 ? "B" : $"B{i}";
-                    simulation.SetInput(aPin, 0, ((a >> i & 1) != 0).ToSignal());
-                    simulation.SetInput(bPin, 0, ((b >> i & 1) != 0).ToSignal());
+                    simulation.SetInput($"A{i}", 0, ((a >> i & 1) != 0).ToSignal());
+                    simulation.SetInput($"B{i}", 0, ((b >> i & 1) != 0).ToSignal());
                 }
                 simulation.Step();
                 using (Assert.EnterMultipleScope()) {
                     Assert.That(simulation.GetOutput("GT", 0), Is.EqualTo((a > b).ToSignal()), $"A=0x{a:X} > B=0x{b:X}");
                     Assert.That(simulation.GetOutput("EQ", 0), Is.EqualTo((a == b).ToSignal()), $"A=0x{a:X} == B=0x{b:X}");
-                    Assert.That(simulation.GetOutput("LE", 0), Is.EqualTo((a < b).ToSignal()), $"A=0x{a:X} < B=0x{b:X}");
+                    Assert.That(simulation.GetOutput("LT", 0), Is.EqualTo((a < b).ToSignal()), $"A=0x{a:X} < B=0x{b:X}");
                 }
             }
         }
