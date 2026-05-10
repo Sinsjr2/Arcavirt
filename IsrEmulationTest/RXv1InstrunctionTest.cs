@@ -6,8 +6,6 @@ using Pheripheral;
 using System.Buffers;
 using Peripheral.Renesas;
 using Util;
-using System.Runtime.Intrinsics.Arm;
-using ScottPlot;
 
 namespace IsrEmulationTest;
 public class RXv1InstrunctionTest {
