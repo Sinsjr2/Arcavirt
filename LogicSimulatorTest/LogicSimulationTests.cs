@@ -340,9 +340,135 @@ public class BuiltInCircuit {
 
     public static readonly Circuit Comparator4Bit = CreateComparator(4);
 
+    public static readonly Circuit Comparator8Bit = CreateComparator(8);
+
+    public static readonly Circuit Comparator16Bit = CreateComparator(16);
+
     public static readonly Circuit UDCounter1Bit = CreateUDCounter(1);
     public static readonly Circuit UDCounter2Bit = CreateUDCounter(2);
     public static readonly Circuit UDCounter4Bit = CreateUDCounter(4);
+
+    public static readonly Circuit UDCounter8Bit = CreateUDCounter(8);
+
+    public static readonly Circuit UDCounter16Bit = CreateUDCounter(16);
+
+    /// <summary>
+    /// 16ビット レンジカウンタを生成します。
+    ///
+    /// ピン仕様:
+    /// 入力: LOW, ZERO, CLK, SET, DIR, INITIAL{i} (i=0..15), A{i} (i=0..15), B{i} (i=0..15), MAX{i} (i=0..15)
+    /// 出力: RANGE, D{i} (i=0..15)
+    ///
+    /// 動作:
+    /// - カウンタが A <= D <= B の範囲内にあるとき RANGE=1
+    /// - SET=1 中は RANGE を強制的に High に
+    /// - オーバーフロー時に MAX 値をラップアラウンド値として使用
+    /// </summary>
+    public static Circuit CreateRangeCounter16Bit()
+    {
+        var nodes = new List<LogicNode>();
+        var wires = new List<LogicConnection>();
+
+        int bitCount = 16;
+
+        nodes.Add(new("LOW", new InputConnector(1)));
+        nodes.Add(new("ZERO", new InputConnector(1)));
+        nodes.Add(new("CLK", new InputConnector(1)));
+        nodes.Add(new("SET", new InputConnector(1)));
+        nodes.Add(new("DIR", new InputConnector(1)));
+
+        for (int i = 0; i < bitCount; i++) {
+            nodes.Add(new($"INITIAL{i}", new InputConnector(1)));
+        }
+        for (int i = 0; i < bitCount; i++) {
+            nodes.Add(new($"A{i}", new InputConnector(1)));
+        }
+        for (int i = 0; i < bitCount; i++) {
+            nodes.Add(new($"B{i}", new InputConnector(1)));
+        }
+        for (int i = 0; i < bitCount; i++) {
+            nodes.Add(new($"MAX{i}", new InputConnector(1)));
+        }
+
+        nodes.Add(new("RANGE", new OutputConnector(1)));
+        for (int i = 0; i < bitCount; i++) {
+            nodes.Add(new($"D{i}", new OutputConnector(1)));
+        }
+
+        nodes.Add(new("counter", new CustomCircuit("ud_counter_16bit")));
+        nodes.Add(new("comp_a", new CustomCircuit("comparator_16bit")));
+        nodes.Add(new("comp_b", new CustomCircuit("comparator_16bit")));
+        nodes.Add(new("dff", new CustomCircuit("d_ff")));
+
+        nodes.Add(new("not_dir", new NotLogic()));
+        nodes.Add(new("not_set", new NotLogic()));
+        nodes.Add(new("not_hi", new NotLogic()));
+
+        for (int i = 0; i < bitCount; i++) {
+            nodes.Add(new($"and_wrap_{i}", new AndLogic(2)));
+            nodes.Add(new($"and_init_wrap_{i}", new AndLogic(2)));
+            nodes.Add(new($"and_init_user_{i}", new AndLogic(2)));
+            nodes.Add(new($"or_init_{i}", new OrLogic(2)));
+        }
+
+        nodes.Add(new("or_comp_a_eq_lt", new OrLogic(2)));
+        nodes.Add(new("or_comp_b_gt_eq", new OrLogic(2)));
+        nodes.Add(new("and_range_comb", new AndLogic(2)));
+        nodes.Add(new("or_range_final", new OrLogic(2)));
+        nodes.Add(new("or_hi_set", new OrLogic(2)));
+
+        wires.Add(new(new LogicConnector("DIR", "out"), new LogicConnector("not_dir", "in")));
+        wires.Add(new(new LogicConnector("SET", "out"), new LogicConnector("not_set", "in")));
+
+        for (int i = 0; i < bitCount; i++) {
+            wires.Add(new(new LogicConnector("not_dir", "out"), new LogicConnector($"and_wrap_{i}", "in[0]")));
+            wires.Add(new(new LogicConnector($"MAX{i}", "out"), new LogicConnector($"and_wrap_{i}", "in[1]")));
+            wires.Add(new(new LogicConnector($"and_wrap_{i}", "out"), new LogicConnector($"and_init_wrap_{i}", "in[0]")));
+            wires.Add(new(new LogicConnector("not_set", "out"), new LogicConnector($"and_init_wrap_{i}", "in[1]")));
+            wires.Add(new(new LogicConnector("SET", "out"), new LogicConnector($"and_init_user_{i}", "in[0]")));
+            wires.Add(new(new LogicConnector($"INITIAL{i}", "out"), new LogicConnector($"and_init_user_{i}", "in[1]")));
+            wires.Add(new(new LogicConnector($"and_init_wrap_{i}", "out"), new LogicConnector($"or_init_{i}", "in[0]")));
+            wires.Add(new(new LogicConnector($"and_init_user_{i}", "out"), new LogicConnector($"or_init_{i}", "in[1]")));
+            wires.Add(new(new LogicConnector($"or_init_{i}", "out"), new LogicConnector("counter", $"INITIAL{i}")));
+        }
+
+        wires.Add(new(new LogicConnector("LOW", "out"), new LogicConnector("counter", "LOW")));
+        wires.Add(new(new LogicConnector("SET", "out"), new LogicConnector("or_hi_set", "in[1]")));
+        wires.Add(new(new LogicConnector("counter", "HI"), new LogicConnector("not_hi", "in")));
+        wires.Add(new(new LogicConnector("counter", "HI"), new LogicConnector("or_hi_set", "in[0]")));
+        wires.Add(new(new LogicConnector("or_hi_set", "out"), new LogicConnector("counter", "SET")));
+        wires.Add(new(new LogicConnector("CLK", "out"), new LogicConnector("counter", "CLK")));
+        wires.Add(new(new LogicConnector("DIR", "out"), new LogicConnector("counter", "DIR")));
+
+        for (int i = 0; i < bitCount; i++) {
+            wires.Add(new(new LogicConnector("counter", $"D{i}"), new LogicConnector("comp_a", $"B{i}")));
+            wires.Add(new(new LogicConnector($"A{i}", "out"), new LogicConnector("comp_a", $"A{i}")));
+            wires.Add(new(new LogicConnector("counter", $"D{i}"), new LogicConnector("comp_b", $"A{i}")));
+            wires.Add(new(new LogicConnector($"B{i}", "out"), new LogicConnector("comp_b", $"B{i}")));
+            wires.Add(new(new LogicConnector("counter", $"D{i}"), new LogicConnector($"D{i}", "in")));
+        }
+
+        wires.Add(new(new LogicConnector("comp_a", "EQ"), new LogicConnector("or_comp_a_eq_lt", "in[0]")));
+        wires.Add(new(new LogicConnector("comp_a", "LT"), new LogicConnector("or_comp_a_eq_lt", "in[1]")));
+        wires.Add(new(new LogicConnector("comp_b", "EQ"), new LogicConnector("or_comp_b_gt_eq", "in[0]")));
+        wires.Add(new(new LogicConnector("comp_b", "LT"), new LogicConnector("or_comp_b_gt_eq", "in[1]")));
+
+        wires.Add(new(new LogicConnector("or_comp_a_eq_lt", "out"), new LogicConnector("and_range_comb", "in[0]")));
+        wires.Add(new(new LogicConnector("or_comp_b_gt_eq", "out"), new LogicConnector("and_range_comb", "in[1]")));
+
+        wires.Add(new(new LogicConnector("and_range_comb", "out"), new LogicConnector("or_range_final", "in[0]")));
+        wires.Add(new(new LogicConnector("dff", "Q"), new LogicConnector("or_range_final", "in[1]")));
+        wires.Add(new(new LogicConnector("or_range_final", "out"), new LogicConnector("RANGE", "in")));
+
+        wires.Add(new(new LogicConnector("not_set", "out"), new LogicConnector("dff", "~Set~")));
+        wires.Add(new(new LogicConnector("LOW", "out"), new LogicConnector("dff", "~Clr~")));
+        wires.Add(new(new LogicConnector("ZERO", "out"), new LogicConnector("dff", "D")));
+        wires.Add(new(new LogicConnector("CLK", "out"), new LogicConnector("dff", "C")));
+
+        return new(nodes, wires);
+    }
+
+    public static readonly Circuit RangeCounter16Bit = CreateRangeCounter16Bit();
 
     /// <summary>
     /// N ビット マルチプレクサを動的に生成します。
@@ -586,9 +712,13 @@ public class BuiltInCircuit {
         { "d_ff", D_FF },
         { "comparator_1bit", Comparator1Bit },
         { "comparator_4bit", Comparator4Bit },
+        { "comparator_8bit", Comparator8Bit },
+        { "comparator_16bit", Comparator16Bit },
         { "ud_counter_1bit", UDCounter1Bit },
         { "ud_counter_2bit", UDCounter2Bit },
-        { "ud_counter_4bit", UDCounter4Bit }
+        { "ud_counter_4bit", UDCounter4Bit },
+        { "ud_counter_8bit", UDCounter8Bit },
+        { "ud_counter_16bit", UDCounter16Bit }
     };
 }
 
@@ -1370,6 +1500,149 @@ public class LogicSimulationTests {
                     }
                 }
             }
+        }
+    }
+
+    public record RangeCounter16BitTestCase(
+        int A,
+        int B,
+        int Initial,
+        int Max,
+        int ExpectedRangeInitial,
+        string Label
+    );
+
+    public static IEnumerable<TestCaseData> RangeCounter16BitTestCases => [
+        new TestCaseData(new RangeCounter16BitTestCase(
+            A: 10,
+            B: 20,
+            Initial: 15,
+            Max: 65535,
+            ExpectedRangeInitial: 1,
+            Label: "in_range_middle"
+        )).SetName("in_range_middle"),
+
+        new TestCaseData(new RangeCounter16BitTestCase(
+            A: 10,
+            B: 20,
+            Initial: 5,
+            Max: 65535,
+            ExpectedRangeInitial: 0,
+            Label: "out_range_below"
+        )).SetName("out_range_below"),
+
+        new TestCaseData(new RangeCounter16BitTestCase(
+            A: 10,
+            B: 20,
+            Initial: 25,
+            Max: 65535,
+            ExpectedRangeInitial: 0,
+            Label: "out_range_above"
+        )).SetName("out_range_above"),
+
+        new TestCaseData(new RangeCounter16BitTestCase(
+            A: 10,
+            B: 20,
+            Initial: 10,
+            Max: 65535,
+            ExpectedRangeInitial: 1,
+            Label: "at_lower_bound"
+        )).SetName("at_lower_bound"),
+
+        new TestCaseData(new RangeCounter16BitTestCase(
+            A: 10,
+            B: 20,
+            Initial: 20,
+            Max: 65535,
+            ExpectedRangeInitial: 1,
+            Label: "at_upper_bound"
+        )).SetName("at_upper_bound"),
+    ];
+
+    [TestCaseSource(nameof(RangeCounter16BitTestCases))]
+    [CancelAfter(10000)]
+    public void RangeCounter16Bit_DataDriven(RangeCounter16BitTestCase testCase) {
+        var sim = new LogicSimulation(
+            BuiltInCircuit.RangeCounter16Bit,
+            BuiltInCircuit.Circuits);
+
+        InitializeRangeCounter(sim);
+
+        SetupRangeCounterInputs(sim, testCase.A, testCase.B, testCase.Initial, testCase.Max);
+
+        sim.SetInput("SET", 0, LogicSignal.High);
+        sim.Step();
+
+        sim.SetInput("SET", 0, LogicSignal.Low);
+        sim.Step();
+
+        CheckRangeOutput(sim, testCase.ExpectedRangeInitial, testCase.Label);
+
+        CheckCounterOutput(sim, testCase.Initial, testCase.Label);
+    }
+
+    private static void InitializeRangeCounter(LogicSimulation sim) {
+        sim.SetInput("LOW", 0, LogicSignal.Low);
+        sim.SetInput("ZERO", 0, LogicSignal.Low);
+        sim.SetInput("CLK", 0, LogicSignal.Low);
+        sim.SetInput("SET", 0, LogicSignal.Low);
+        sim.SetInput("DIR", 0, LogicSignal.Low);
+
+        for (int i = 0; i < 16; i++) {
+            sim.SetInput($"INITIAL{i}", 0, LogicSignal.Low);
+            sim.SetInput($"A{i}", 0, LogicSignal.Low);
+            sim.SetInput($"B{i}", 0, LogicSignal.Low);
+            sim.SetInput($"MAX{i}", 0, LogicSignal.Low);
+        }
+
+        sim.Step();
+
+        sim.SetInput("SET", 0, LogicSignal.High);
+        sim.Step();
+        sim.SetInput("SET", 0, LogicSignal.Low);
+        sim.Step();
+    }
+
+    private static void SetupRangeCounterInputs(LogicSimulation sim, int a, int b, int initial, int max) {
+        for (int i = 0; i < 16; i++) {
+            sim.SetInput($"INITIAL{i}", 0, ((initial & (1 << i)) != 0).ToSignal());
+            sim.SetInput($"A{i}", 0, ((a & (1 << i)) != 0).ToSignal());
+            sim.SetInput($"B{i}", 0, ((b & (1 << i)) != 0).ToSignal());
+            sim.SetInput($"MAX{i}", 0, ((max & (1 << i)) != 0).ToSignal());
+        }
+    }
+
+    private static void CheckRangeOutput(LogicSimulation sim, int expectedRange, string label) {
+        LogicSignal expected = (expectedRange != 0) ? LogicSignal.High : LogicSignal.Low;
+        Assert.That(
+            sim.GetOutput("RANGE", 0),
+            Is.EqualTo(expected),
+            $"{label}: RANGE");
+    }
+
+    private static void CheckCounterOutput(LogicSimulation sim, int expectedValue, string label) {
+        for (int i = 0; i < 16; i++) {
+            LogicSignal expected = ((expectedValue & (1 << i)) != 0) ? LogicSignal.High : LogicSignal.Low;
+            Assert.That(
+                sim.GetOutput($"D{i}", 0),
+                Is.EqualTo(expected),
+                $"{label}: D{i}");
+        }
+    }
+
+    private static void SimulateSetRelease(LogicSimulation sim) {
+        sim.SetInput("SET", 0, LogicSignal.High);
+        sim.Step();
+        sim.SetInput("SET", 0, LogicSignal.Low);
+        sim.Step();
+    }
+
+    private static void SimulateCountUp(LogicSimulation sim, int count) {
+        for (int i = 0; i < count; i++) {
+            sim.SetInput("CLK", 0, LogicSignal.High);
+            sim.Step();
+            sim.SetInput("CLK", 0, LogicSignal.Low);
+            sim.Step();
         }
     }
 }
