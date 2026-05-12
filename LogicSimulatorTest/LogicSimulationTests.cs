@@ -4,7 +4,7 @@ using LogicSimulator;
 namespace LogicSimulatorTest;
 
 /// <summary>
-/// カウントシナリオ1つ分（開始値、クロック回数、ラベル、カウント方向）
+/// カウントシナリオ1つ分(開始値、クロック回数、ラベル、カウント方向)
 /// </summary>
 public record CountScenario(
     int StartValue,
@@ -100,40 +100,44 @@ public class BuiltInCircuit {
         ]);
 
     /// <summary>
-    /// D型フリップフロップ（マスタースレーブ JK-FF を使用した実装）。
-    /// クロック C の立ち下がりエッジ（High → Low）で入力 D の値を Q に取り込みます。
+    /// D型フリップフロップ(マスタースレーブ JK-FF を使用した実装)。
+    /// クロック C の立ち下がりエッジ(High → Low)で入力 D の値を Q に取り込みます。
     ///
     /// ピン一覧:
-    /// - ~Clr~ : クリア（アクティブLow）。Low のとき Q=Low に強制リセットします。
-    /// - C     : クロック入力。立ち下がりエッジ（High → Low）で D の値を取り込みます。
+    /// - Clr : クリア。High のとき Q=Low に強制リセットします。
+    /// - C     : クロック入力。立ち下がりエッジ(High → Low)で D の値を取り込みます。
     /// - D     : データ入力。クロック立ち下がり時にこの値が Q に転送されます。
-    /// - ~Set~ : セット（アクティブLow）。Low のとき Q=High に強制セットします。
+    /// - Set : セット。High のとき Q=High に強制セットします。
     /// - Q     : 出力。
     /// - ~Q~   : Q の反転出力。
     ///
     /// 真理値表:
     /// <code>
-    /// ~Set~ | ~Clr~ | D | C  | Q | ~Q~ | 説明
-    /// ------|-------|---|----|---|-----|--------------------------------------------------
-    ///   H   |   H   | X | ↓  | D | ~D~ | 通常動作（立ち下がりエッジでラッチ）
-    ///   L   |   H   | X | X  | H |  L  | セット有効（~Set~=Low）
-    ///   H   |   L   | X | X  | L |  H  | クリア有効（~Clr~=Low）
-    ///   L   |   L   | X | X  | H |  H  | 禁止状態（両方有効、発振なし）
+    /// Set | Clr | D | C  | Q | ~Q~ | 説明
+    /// ----|-----|---|----|---|-----|--------------------------------------
+    ///   L |  L  | X | ↓ | D | ~D~ | 通常動作(立ち下がりエッジでラッチ)
+    ///   H |  L  | X | X  | H |  L  | セット有効(Set=High)
+    ///   L |  H  | X | X  | L |  H  | クリア有効(Clr=High)
+    ///   H |  H  | X | X  | H |  H  | 禁止状態(両方有効、発振なし)
     /// </code>
     /// </summary>
     public static readonly Circuit D_FF = new([
-            new("~Clr~", new InputConnector(1)),
+            new("Clr", new InputConnector(1)),
             new("C",     new InputConnector(1)),
             new("D",     new InputConnector(1)),
-            new("~Set~", new InputConnector(1)),
+            new("Set", new InputConnector(1)),
+            new("not_set", new NotLogic()),
+            new("not_clr", new NotLogic()),
             new("not_d", new NotLogic()),
             new("jkff1", new CustomCircuit("jk_ff_preset_clear")),
             new("Q",     new OutputConnector(1)),
             new("~Q~",   new OutputConnector(1))
         ],
         [
-            new(new LogicConnector("~Clr~", "out"), new LogicConnector("jkff1",  "~CLR~")),
-            new(new LogicConnector("~Set~", "out"), new LogicConnector("jkff1",  "~PRE~")),
+            new(new LogicConnector("Clr",     "out"), new LogicConnector("not_clr", "in")),
+            new(new LogicConnector("not_clr", "out"), new LogicConnector("jkff1",   "~CLR~")),
+            new(new LogicConnector("Set",     "out"), new LogicConnector("not_set", "in")),
+            new(new LogicConnector("not_set", "out"), new LogicConnector("jkff1",   "~PRE~")),
             new(new LogicConnector("C",     "out"), new LogicConnector("jkff1",  "CLK")),
             new(new LogicConnector("D",     "out"), new LogicConnector("jkff1",  "J")),
             new(new LogicConnector("D",     "out"), new LogicConnector("not_d",  "in")),
@@ -152,7 +156,7 @@ public class BuiltInCircuit {
         }
 
         if (bitCount == 1) {
-            // 1ビットカウンタ: 直接配線（CustomCircuit を使わない）
+            // 1ビットカウンタ: 直接配線(CustomCircuit を使わない)
             return new([
                 new("LOW", new InputConnector(1)),
                 new("SET", new InputConnector(1)),
@@ -690,7 +694,7 @@ public class BuiltInCircuit {
             }
         }
 
-        // データ AND: D{b}.out → and_{ch}_{b}.in[1]（全チャンネル共通）
+        // データ AND: D{b}.out → and_{ch}_{b}.in[1](全チャンネル共通)
         for (int ch = 0; ch < numOfChannel; ch++) {
             for (int b = 0; b < dataBit; b++) {
                 wires.Add(new(new LogicConnector($"D{b}", "out"), new LogicConnector($"and_{ch}_{b}", "in[1]")));
@@ -1143,12 +1147,12 @@ public class LogicSimulationTests {
                 // 入力 → OR[0]
                 new(new LogicConnector("input", "out"), new LogicConnector("or1", "in[0]")),
                 
-                // OR出力 → 複数のAND素子の入力[0]（複数接続）
+                // OR出力 → 複数のAND素子の入力[0](複数接続)
                 new(new LogicConnector("or1", "out"), new LogicConnector("and1", "in[0]")),
                 new(new LogicConnector("or1", "out"), new LogicConnector("and2", "in[0]")),
                 new(new LogicConnector("or1", "out"), new LogicConnector("and3", "in[0]")),
                 
-                // 入力をAND素子の入力[1]にも接続（全ANDが同じ入力を受け取る）
+                // 入力をAND素子の入力[1]にも接続(全ANDが同じ入力を受け取る)
                 new(new LogicConnector("input", "out"), new LogicConnector("and1", "in[1]")),
                 new(new LogicConnector("input", "out"), new LogicConnector("and2", "in[1]")),
                 new(new LogicConnector("input", "out"), new LogicConnector("and3", "in[1]")),
@@ -1173,7 +1177,7 @@ public class LogicSimulationTests {
         simulation.SetInput("input", 0, LogicSignal.High);
         simulation.Step();
 
-        // すべての出力がTRUEであることを確認（複数接続がすべて正しくコピーされたことを検証）
+        // すべての出力がTRUEであることを確認(複数接続がすべて正しくコピーされたことを検証)
         Assert.That(simulation.GetOutput("outputA", 0), Is.EqualTo(LogicSignal.High));
         Assert.That(simulation.GetOutput("outputB", 0), Is.EqualTo(LogicSignal.High));
         Assert.That(simulation.GetOutput("outputC", 0), Is.EqualTo(LogicSignal.High));
@@ -1186,7 +1190,7 @@ public class LogicSimulationTests {
             ExplicitPresetValues: null,
             CountUpScenarios: [ new(StartValue: 0, ClockCount: 4, IsUp: true, Label: "countup_full") ],
             CountDownScenarios: [ new(StartValue: 1, ClockCount: 4, IsUp: false, Label: "countdown_full") ]
-        )).SetName("1bit"),
+        )).SetDescription("1bit"),
 
         // 2bit
         new TestCaseData(new UDCounterTestConfig(
@@ -1194,7 +1198,7 @@ public class LogicSimulationTests {
             ExplicitPresetValues: null,
             CountUpScenarios: [ new(StartValue: 0, ClockCount: 8, IsUp: true, Label: "countup_full") ],
             CountDownScenarios: [ new(StartValue: 3, ClockCount: 8, IsUp: false, Label: "countdown_full") ]
-        )).SetName("2bit"),
+        )).SetDescription("2bit"),
 
         // 4bit
         new TestCaseData(new UDCounterTestConfig(
@@ -1202,9 +1206,9 @@ public class LogicSimulationTests {
             ExplicitPresetValues: null,
             CountUpScenarios: [ new(StartValue: 0, ClockCount: 32, IsUp: true, Label: "countup_full") ],
             CountDownScenarios: [ new(StartValue: 15, ClockCount: 32, IsUp: false, Label: "countdown_full") ]
-        )).SetName("4bit"),
+        )).SetDescription("4bit"),
 
-        // 8bit（修正4適用: StartValue: 0x01, ClockCount: 3）
+        // 8bit(修正4適用: StartValue: 0x01, ClockCount: 3)
         new TestCaseData(new UDCounterTestConfig(
             BitCount: 8,
             ExplicitPresetValues: [0x00, 0x01, 0x7F, 0x80, 0xFF],
@@ -1216,9 +1220,9 @@ public class LogicSimulationTests {
             CountDownScenarios: [
                 new(StartValue: 0x01, ClockCount: 3, IsUp: false, Label: "countdown_underflow"),
             ]
-        )).SetName("8bit"),
+        )).SetDescription("8bit"),
 
-        // 16bit（修正4適用: StartValue: 0x0001, ClockCount: 3）
+        // 16bit(修正4適用: StartValue: 0x0001, ClockCount: 3)
         new TestCaseData(new UDCounterTestConfig(
             BitCount: 16,
             ExplicitPresetValues: [0x0000, 0x0001, 0x8000, 0xFFFF],
@@ -1230,11 +1234,11 @@ public class LogicSimulationTests {
             CountDownScenarios: [
                 new(StartValue: 0x0001, ClockCount: 3, IsUp: false, Label: "countdown_underflow"),
             ]
-        )).SetName("16bit"),
+        )).SetDescription("16bit"),
     ];
 
     [TestCaseSource(nameof(UDCounterTestCases))]
-    [CancelAfter(10000)] // 動的設定不可のため最大値を固定（1/2/4bit全件でも余裕あり）
+    [CancelAfter(10000)] // 動的設定不可のため最大値を固定(1/2/4bit全件でも余裕あり)
     public void UDCounter_DataDriven(UDCounterTestConfig cfg) {
         int bitCount = cfg.BitCount;
         int maxValue = (1 << bitCount) - 1;
@@ -1318,7 +1322,7 @@ public class LogicSimulationTests {
         bool isUp      = scenario.IsUp;
         string label   = scenario.Label;
 
-        // 初期HI確認（クロック前）
+        // 初期HI確認(クロック前)
         bool hiInitial = (isUp && startValue == maxValue) || (!isUp && startValue == 0);
         Assert.That(simulation.GetOutput("HI", 0), Is.EqualTo(hiInitial.ToSignal()),
             $"{label} pre-clk HI");
@@ -1346,38 +1350,38 @@ public class LogicSimulationTests {
         }
     }
 
-    public static IReadOnlyList<SignalTestPattern> DFF_Data = [
-        // 1. ~Clr~=Low でクリア → Q=Low, ~Q~=High
+    public static readonly IReadOnlyList<SignalTestPattern> DFF_Data = [
+        // Clr=High でクリア → Q=Low, ~Q~=High
         new([
-            new([ new("~Clr~", false) ], [ new("Q", false), new("~Q~", true) ])
+            new([ new("Clr", true) ], [ new("Q", false), new("~Q~", true) ])
         ]),
-        // 2. ~Set~=Low でセット → Q=High, ~Q~=Low
+        // Set=High でセット → Q=High, ~Q~=Low
         new([
-            new([ new("~Set~", false) ], [ new("Q", true), new("~Q~", false) ])
+            new([ new("Set", true) ], [ new("Q", true), new("~Q~", false) ])
         ]),
-        // 3. 通常動作: D=High、C 立ち下がり → Q=High
+        // 通常動作: D=High、C 立ち下がり → Q=High
         new([
-            new([ new("~Clr~", false) ], [ new("Q", false), new("~Q~", true) ]),
-            new([ new("~Clr~", true) ], []),
+            new([ new("Clr", true) ], [ new("Q", false), new("~Q~", true) ]),
+            new([ new("Clr", false) ], [ new("Q", false), new("~Q~", true) ]),
             new([ new("D", true), new("C", true) ], []),
             new([ new("C", false) ], [ new("Q", true), new("~Q~", false) ])
         ]),
-        // 4. 通常動作: D=Low、C 立ち下がり → Q=Low
+        // 通常動作: D=Low、C 立ち下がり → Q=Low
         new([
-            new([ new("~Set~", false) ], [ new("Q", true), new("~Q~", false) ]),
-            new([ new("~Set~", true) ], []),
+            new([ new("Set", true) ], [ new("Q", true), new("~Q~", false) ]),
+            new([ new("Set", false) ], []),
             new([ new("D", false), new("C", true) ], []),
             new([ new("C", false) ], [ new("Q", false), new("~Q~", true) ])
         ]),
-        // 5. 禁止パターン: ~Set~=Low かつ ~Clr~=Low → Q=High, ~Q~=High（両方High）
+        // 禁止パターン: Set=High かつ Clr=High → Q=High, ~Q~=High(両方High)
         new([
-            new([ new("~Set~", false), new("~Clr~", false) ], [ new("Q", true), new("~Q~", true) ])
+            new([ new("Set", true), new("Clr", true) ], [ new("Q", true), new("~Q~", true) ])
         ]),
-        // 6. クロック保持中（C=High）は D 変化しても Q 不変
+        // クロック保持中(C=High)は D 変化しても Q 不変
         new([
-            new([ new("~Clr~", false) ], [ new("Q", false), new("~Q~", true) ]),
-            new([ new("~Clr~", true) ], []),
-            new([ new("C", true) ], []),
+            new([ new("Clr", true) ], [ new("Q", false), new("~Q~", true) ]),
+            new([ new("Clr", true) ], [ new("Q", false), new("~Q~", true) ]),
+            new([ new("C", true) ],  [ new("Q", false), new("~Q~", true) ]),
             new([ new("D", true)  ], [ new("Q", false), new("~Q~", true) ]),
             new([ new("D", false) ], [ new("Q", false), new("~Q~", true) ])
         ]),
@@ -1387,10 +1391,10 @@ public class LogicSimulationTests {
     [TestCaseSource(nameof(DFF_Data))]
     public void DFF_SignalTest(SignalTestPattern testPattern) {
         var simulation = new LogicSimulation(BuiltInCircuit.D_FF, BuiltInCircuit.Circuits);
-        simulation.SetInput("~Clr~", 0, LogicSignal.High);
-        simulation.SetInput("~Set~", 0, LogicSignal.High);
-        simulation.SetInput("C",     0, LogicSignal.Low);
-        simulation.SetInput("D",     0, LogicSignal.Low);
+        simulation.SetInput("Clr", 0, LogicSignal.Low);
+        simulation.SetInput("Set", 0, LogicSignal.Low);
+        simulation.SetInput("C",   0, LogicSignal.Low);
+        simulation.SetInput("D",   0, LogicSignal.Low);
         simulation.Step();
 
         foreach (var frame in testPattern.Frames) {
@@ -1508,8 +1512,7 @@ public class LogicSimulationTests {
         int B,
         int Initial,
         int Max,
-        int ExpectedRangeInitial,
-        string Label
+        int ExpectedRangeInitial
     );
 
     public static IEnumerable<TestCaseData> RangeCounter16BitTestCases => [
@@ -1518,45 +1521,40 @@ public class LogicSimulationTests {
             B: 20,
             Initial: 15,
             Max: 65535,
-            ExpectedRangeInitial: 1,
-            Label: "in_range_middle"
-        )).SetName("in_range_middle"),
+            ExpectedRangeInitial: 1
+        )).SetDescription("in_range_middle"),
 
         new TestCaseData(new RangeCounter16BitTestCase(
             A: 10,
             B: 20,
             Initial: 5,
             Max: 65535,
-            ExpectedRangeInitial: 0,
-            Label: "out_range_below"
-        )).SetName("out_range_below"),
+            ExpectedRangeInitial: 0
+        )).SetDescription("out_range_below"),
 
         new TestCaseData(new RangeCounter16BitTestCase(
             A: 10,
             B: 20,
             Initial: 25,
             Max: 65535,
-            ExpectedRangeInitial: 0,
-            Label: "out_range_above"
-        )).SetName("out_range_above"),
+            ExpectedRangeInitial: 0
+        )).SetDescription("out_range_above"),
 
         new TestCaseData(new RangeCounter16BitTestCase(
             A: 10,
             B: 20,
             Initial: 10,
             Max: 65535,
-            ExpectedRangeInitial: 1,
-            Label: "at_lower_bound"
-        )).SetName("at_lower_bound"),
+            ExpectedRangeInitial: 1
+        )).SetDescription("at_lower_bound"),
 
         new TestCaseData(new RangeCounter16BitTestCase(
             A: 10,
             B: 20,
             Initial: 20,
             Max: 65535,
-            ExpectedRangeInitial: 1,
-            Label: "at_upper_bound"
-        )).SetName("at_upper_bound"),
+            ExpectedRangeInitial: 1
+        )).SetDescription("at_upper_bound"),
     ];
 
     [TestCaseSource(nameof(RangeCounter16BitTestCases))]
@@ -1576,9 +1574,9 @@ public class LogicSimulationTests {
         sim.SetInput("SET", 0, LogicSignal.Low);
         sim.Step();
 
-        CheckRangeOutput(sim, testCase.ExpectedRangeInitial, testCase.Label);
+        CheckRangeOutput(sim, testCase.ExpectedRangeInitial);
 
-        CheckCounterOutput(sim, testCase.Initial, testCase.Label);
+        CheckCounterOutput(sim, testCase.Initial);
     }
 
     private static void InitializeRangeCounter(LogicSimulation sim) {
@@ -1612,21 +1610,19 @@ public class LogicSimulationTests {
         }
     }
 
-    private static void CheckRangeOutput(LogicSimulation sim, int expectedRange, string label) {
+    private static void CheckRangeOutput(LogicSimulation sim, int expectedRange) {
         LogicSignal expected = (expectedRange != 0) ? LogicSignal.High : LogicSignal.Low;
         Assert.That(
             sim.GetOutput("RANGE", 0),
-            Is.EqualTo(expected),
-            $"{label}: RANGE");
+            Is.EqualTo(expected));
     }
 
-    private static void CheckCounterOutput(LogicSimulation sim, int expectedValue, string label) {
+    private static void CheckCounterOutput(LogicSimulation sim, int expectedValue) {
         for (int i = 0; i < 16; i++) {
             LogicSignal expected = ((expectedValue & (1 << i)) != 0) ? LogicSignal.High : LogicSignal.Low;
             Assert.That(
                 sim.GetOutput($"D{i}", 0),
-                Is.EqualTo(expected),
-                $"{label}: D{i}");
+                Is.EqualTo(expected));
         }
     }
 
@@ -1712,7 +1708,7 @@ public class LogicPinReaderTests {
 
     [Test]
     public void TryGetNextChangedLogicNumber_SkipsDuplicates() {
-        // Arrange: Logic 0のPin 0と1が両方変化（Logic 0は1回だけ返す）
+        // Arrange: Logic 0のPin 0と1が両方変化(Logic 0は1回だけ返す)
         var pins = new LogicPins {
             Pins = [ LogicSignal.High, LogicSignal.Low, LogicSignal.High],
             NumOfPins = [(0, 2), (2, 1)],
@@ -1770,7 +1766,7 @@ public class LogicPinsWriterTests {
         var writer = new LogicPinsWriter(pins, changedPins);
 
         writer.WriteBit(0, 0, LogicSignal.High);  // 変更あり
-        writer.WriteBit(0, 1, LogicSignal.Low); // 変更なし（既にfalse）
+        writer.WriteBit(0, 1, LogicSignal.Low); // 変更なし(既にfalse)
         writer.WriteBit(0, 0, LogicSignal.Low); // 変更あり
 
         Assert.That(changedPins.Count, Is.EqualTo(2));
