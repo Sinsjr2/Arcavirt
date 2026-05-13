@@ -363,7 +363,7 @@ public class BuiltInCircuit {
     /// 16ビット レンジカウンタを生成します。
     ///
     /// ピン仕様:
-    /// 入力: LOW, ZERO, CLK, SET, DIR, INITIAL{i} (i=0..15), A{i} (i=0..15), B{i} (i=0..15), MAX{i} (i=0..15)
+    /// 入力: CLK, SET, DIR, INITIAL{i} (i=0..15), A{i} (i=0..15), B{i} (i=0..15), MAX{i} (i=0..15)
     /// 出力: RANGE, D{i} (i=0..15)
     ///
     /// 動作:
@@ -377,8 +377,8 @@ public class BuiltInCircuit {
 
         int bitCount = 16;
 
-        nodes.Add(new("LOW", new InputConnector(1)));
-        nodes.Add(new("ZERO", new InputConnector(1)));
+        nodes.Add(new("LOW",  ConstValueLogic.FromBool(true)));
+        nodes.Add(new("ZERO", ConstValueLogic.FromBool(false)));
         nodes.Add(new("CLK", new InputConnector(1)));
         nodes.Add(new("SET", new InputConnector(1)));
         nodes.Add(new("DIR", new InputConnector(1)));
@@ -423,7 +423,7 @@ public class BuiltInCircuit {
         nodes.Add(new("or3", new OrLogic(2)));
         nodes.Add(new("or4", new OrLogic(2)));
 
-        wires.Add(new(new LogicConnector("LOW", "out"), new LogicConnector("counter", "LOW")));
+        wires.Add(new(new LogicConnector("LOW", "out[0]"), new LogicConnector("counter", "LOW")));
         wires.Add(new(new LogicConnector("CLK", "out"), new LogicConnector("counter", "CLK")));
         wires.Add(new(new LogicConnector("CLK", "out"), new LogicConnector("not1", "in")));
         wires.Add(new(new LogicConnector("CLK", "out"), new LogicConnector("dff", "C")));
@@ -431,14 +431,14 @@ public class BuiltInCircuit {
         wires.Add(new(new LogicConnector("DIR", "out"), new LogicConnector("counter", "DIR")));
         wires.Add(new(new LogicConnector("SET", "out"), new LogicConnector("or1", "in[1]")));
         wires.Add(new(new LogicConnector("SET", "out"), new LogicConnector("dff", "Clr")));
-        wires.Add(new(new LogicConnector("LOW", "out"), new LogicConnector("counter", "LOW")));
+        wires.Add(new(new LogicConnector("LOW", "out[0]"), new LogicConnector("counter", "LOW")));
 
         wires.Add(new(new LogicConnector("not1", "out"), new LogicConnector("and1", "in[0]")));
         wires.Add(new(new LogicConnector("and1", "out"), new LogicConnector("or1", "in[0]")));
         wires.Add(new(new LogicConnector("or1", "out"), new LogicConnector("counter", "SET")));
 
         for (int i = 0; i < bitCount; i++) {
-            wires.Add(new(new LogicConnector("ZERO", "out"), new LogicConnector($"mux1_{i}", $"D0_{i}")));
+            wires.Add(new(new LogicConnector("ZERO", "out[0]"), new LogicConnector($"mux1_{i}", $"D0_{i}")));
             wires.Add(new(new LogicConnector($"MAX{i}", "out"), new LogicConnector($"mux1_{i}", $"D1_{i}")));
             wires.Add(new(new LogicConnector($"mux1_{i}", $"Y{i}"), new LogicConnector($"mux2_{i}", $"D0_{i}")));
             wires.Add(new(new LogicConnector("DIR", "out"), new LogicConnector($"mux1_{i}", "S0")));
@@ -466,7 +466,7 @@ public class BuiltInCircuit {
         for (int i = 0; i < bitCount; i++) {
             wires.Add(new(new LogicConnector($"MAX{i}", "out"), new LogicConnector("comp3", $"A{i}")));
             wires.Add(new(new LogicConnector("counter", $"D{i}"), new LogicConnector("comp3", $"B{i}")));
-            wires.Add(new(new LogicConnector("ZERO", "out"), new LogicConnector("comp4", $"A{i}")));
+            wires.Add(new(new LogicConnector("ZERO", "out[0]"), new LogicConnector("comp4", $"A{i}")));
             wires.Add(new(new LogicConnector("counter", $"D{i}"), new LogicConnector("comp4", $"B{i}")));
         }
 
@@ -479,7 +479,7 @@ public class BuiltInCircuit {
         wires.Add(new(new LogicConnector("and2", "out"), new LogicConnector("RANGE", "in")));
         wires.Add(new(new LogicConnector("dff", "Q"), new LogicConnector("and1", "in[1]")));
 
-        wires.Add(new(new LogicConnector("ZERO", "out"), new LogicConnector("dff", "Set")));
+        wires.Add(new(new LogicConnector("ZERO", "out[0]"), new LogicConnector("dff", "Set")));
         wires.Add(new(new LogicConnector("mux3", "Y0"), new LogicConnector("dff", "D")));
 
         return new(nodes, wires);
@@ -2061,8 +2061,6 @@ public class LogicSimulationTests {
     }
 
     private static void InitializeRangeCounter(LogicSimulation sim) {
-        sim.SetInput("LOW", 0, LogicSignal.High);
-        sim.SetInput("ZERO", 0, LogicSignal.Low);
         sim.SetInput("CLK", 0, LogicSignal.Low);
         sim.SetInput("SET", 0, LogicSignal.Low);
         sim.SetInput("DIR", 0, LogicSignal.Low);
