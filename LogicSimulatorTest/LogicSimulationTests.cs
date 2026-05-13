@@ -1538,6 +1538,18 @@ public class LogicSimulationTests {
         int? ExpectedRangeAfter
     );
 
+    public record RangeCounter16BitRangeTransitionTestCase(
+        int A,
+        int B,
+        int Initial,
+        int Max,
+        int Dir,
+        int ClockCount,
+        int ExpectedD,
+        int ExpectedRangeInitial,
+        int ExpectedRangeFinal
+    );
+
     public static IEnumerable<TestCaseData> RangeCounter16BitTestCases => [
         new TestCaseData(new RangeCounter16BitTestCase(
             A: 10,
@@ -1761,6 +1773,80 @@ public class LogicSimulationTests {
         )).SetDescription("G5-05: MAX=10でラップ"),
     ];
 
+    public static IEnumerable<TestCaseData> RangeCounter16BitRangeTransitionTestCases => [
+        new TestCaseData(new RangeCounter16BitRangeTransitionTestCase(
+            A: 10,
+            B: 20,
+            Initial: 9,
+            Max: 65535,
+            Dir: 0,
+            ClockCount: 1,
+            ExpectedD: 10,
+            ExpectedRangeInitial: 0,
+            ExpectedRangeFinal: 1
+        )).SetDescription("G7-01: Up、D=A-1→Aでレンジ入り"),
+
+        new TestCaseData(new RangeCounter16BitRangeTransitionTestCase(
+            A: 10,
+            B: 20,
+            Initial: 20,
+            Max: 65535,
+            Dir: 0,
+            ClockCount: 1,
+            ExpectedD: 21,
+            ExpectedRangeInitial: 1,
+            ExpectedRangeFinal: 0
+        )).SetDescription("G7-02: Up、D=B→B+1でレンジ外"),
+
+        new TestCaseData(new RangeCounter16BitRangeTransitionTestCase(
+            A: 10,
+            B: 20,
+            Initial: 21,
+            Max: 65535,
+            Dir: 1,
+            ClockCount: 1,
+            ExpectedD: 20,
+            ExpectedRangeInitial: 0,
+            ExpectedRangeFinal: 1
+        )).SetDescription("G7-03: Down、D=B+1→Bでレンジ入り"),
+
+        new TestCaseData(new RangeCounter16BitRangeTransitionTestCase(
+            A: 10,
+            B: 20,
+            Initial: 10,
+            Max: 65535,
+            Dir: 1,
+            ClockCount: 1,
+            ExpectedD: 9,
+            ExpectedRangeInitial: 1,
+            ExpectedRangeFinal: 0
+        )).SetDescription("G7-04: Down、D=A→A-1でレンジ外"),
+
+        new TestCaseData(new RangeCounter16BitRangeTransitionTestCase(
+            A: 0,
+            B: 5,
+            Initial: 3,
+            Max: 3,
+            Dir: 0,
+            ClockCount: 1,
+            ExpectedD: 0,
+            ExpectedRangeInitial: 1,
+            ExpectedRangeFinal: 1
+        )).SetDescription("G7-05: ラップ後の値がRange内"),
+
+        new TestCaseData(new RangeCounter16BitRangeTransitionTestCase(
+            A: 5,
+            B: 10,
+            Initial: 3,
+            Max: 3,
+            Dir: 0,
+            ClockCount: 1,
+            ExpectedD: 0,
+            ExpectedRangeInitial: 0,
+            ExpectedRangeFinal: 0
+        )).SetDescription("G7-06: ラップ後の値がRange外"),
+    ];
+
     [TestCaseSource(nameof(RangeCounter16BitCountTestCases))]
     [CancelAfter(10000)]
     public void RangeCounter16Bit_Count_DataDriven(RangeCounter16BitCountTestCase testCase) {
@@ -1787,6 +1873,39 @@ public class LogicSimulationTests {
         if (testCase.ExpectedRangeAfter.HasValue) {
             CheckRangeOutput(sim, testCase.ExpectedRangeAfter.Value);
         }
+    }
+
+    [TestCaseSource(nameof(RangeCounter16BitRangeTransitionTestCases))]
+    [CancelAfter(10000)]
+    public void RangeCounter16Bit_RangeTransition_DataDriven(RangeCounter16BitRangeTransitionTestCase testCase) {
+        var sim = new LogicSimulation(
+            BuiltInCircuit.RangeCounter16Bit,
+            BuiltInCircuit.Circuits);
+
+        InitializeRangeCounter(sim);
+
+        SetupRangeCounterInputs(sim, testCase.A, testCase.B, testCase.Initial, testCase.Max);
+
+        sim.SetInput("SET", 0, LogicSignal.High);
+        sim.Step();
+        sim.SetInput("SET", 0, LogicSignal.Low);
+        sim.Step();
+
+        // RANGE初期値を確認
+        CheckRangeOutput(sim, testCase.ExpectedRangeInitial);
+
+        // DIR信号を設定（0:カウントアップ, 1:カウントダウン）
+        sim.SetInput("DIR", 0, testCase.Dir == 0 ? LogicSignal.Low : LogicSignal.High);
+        sim.Step();
+
+        // クロックパルスを実行
+        SimulateClockPulses(sim, testCase.ClockCount);
+
+        // D値を確認
+        CheckCounterOutput(sim, testCase.ExpectedD);
+
+        // RANGE最終値を確認
+        CheckRangeOutput(sim, testCase.ExpectedRangeFinal);
     }
 
     private static void InitializeRangeCounter(LogicSimulation sim) {
