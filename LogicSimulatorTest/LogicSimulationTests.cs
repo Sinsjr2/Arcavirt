@@ -1805,6 +1805,84 @@ public class LogicSimulationTests {
             B: null,
             ExpectedRangeAfter: null
         )).SetDescription("G5-05: MAX=10でラップ"),
+
+        // グループ4: ラップアラウンド（Up方向）
+        new TestCaseData(new RangeCounter16BitCountTestCase(
+            Initial: 65535,
+            Max: 65535,
+            Dir: 0,
+            ClockCount: 1,
+            ExpectedD: 0,
+            A: null,
+            B: null,
+            ExpectedRangeAfter: null
+        )).SetDescription("G4-01: D=MAX→ラップして0"),
+
+        new TestCaseData(new RangeCounter16BitCountTestCase(
+            Initial: 100,
+            Max: 100,
+            Dir: 0,
+            ClockCount: 1,
+            ExpectedD: 0,
+            A: null,
+            B: null,
+            ExpectedRangeAfter: null
+        )).SetDescription("G4-02: 任意MAX（100）でラップ"),
+
+        new TestCaseData(new RangeCounter16BitCountTestCase(
+            Initial: 65535,
+            Max: 65535,
+            Dir: 0,
+            ClockCount: 1,
+            ExpectedD: 0,
+            A: null,
+            B: null,
+            ExpectedRangeAfter: null
+        )).SetDescription("G4-03: MAX=65535（全ビット1）でラップ"),
+
+        new TestCaseData(new RangeCounter16BitCountTestCase(
+            Initial: 1,
+            Max: 1,
+            Dir: 0,
+            ClockCount: 1,
+            ExpectedD: 0,
+            A: null,
+            B: null,
+            ExpectedRangeAfter: null
+        )).SetDescription("G4-04: MAX=1でラップ（最小限のカウント幅）"),
+
+        new TestCaseData(new RangeCounter16BitCountTestCase(
+            Initial: 0,
+            Max: 0,
+            Dir: 0,
+            ClockCount: 1,
+            ExpectedD: 0,
+            A: null,
+            B: null,
+            ExpectedRangeAfter: null
+        )).SetDescription("G4-05: MAX=0でラップ→0のまま（極端）"),
+
+        new TestCaseData(new RangeCounter16BitCountTestCase(
+            Initial: 5,
+            Max: 10,
+            Dir: 0,
+            ClockCount: 1,
+            ExpectedD: 6,
+            A: null,
+            B: null,
+            ExpectedRangeAfter: null
+        )).SetDescription("G4-06: D<MAXはラップしない"),
+
+        new TestCaseData(new RangeCounter16BitCountTestCase(
+            Initial: 65535,
+            Max: 65535,
+            Dir: 0,
+            ClockCount: 3,
+            ExpectedD: 2,
+            A: null,
+            B: null,
+            ExpectedRangeAfter: null
+        )).SetDescription("G4-07: ラップ後も継続してカウント（3CLK）"),
     ];
 
     public static IEnumerable<TestCaseData> RangeCounter16BitRangeTransitionTestCases => [
@@ -1985,7 +2063,8 @@ public class LogicSimulationTests {
             LogicSignal expected = ((expectedValue & (1 << i)) != 0) ? LogicSignal.High : LogicSignal.Low;
             Assert.That(
                 sim.GetOutput($"D{i}", 0),
-                Is.EqualTo(expected));
+                Is.EqualTo(expected),
+                $"D{i}");
         }
     }
 
