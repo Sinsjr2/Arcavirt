@@ -1527,6 +1527,17 @@ public class LogicSimulationTests {
         int ExpectedRangeInitial
     );
 
+    public record RangeCounter16BitCountTestCase(
+        int Initial,
+        int Max,
+        int Dir,
+        int ClockCount,
+        int ExpectedD,
+        int? A,
+        int? B,
+        int? ExpectedRangeAfter
+    );
+
     public static IEnumerable<TestCaseData> RangeCounter16BitTestCases => [
         new TestCaseData(new RangeCounter16BitTestCase(
             A: 10,
@@ -1591,6 +1602,142 @@ public class LogicSimulationTests {
         CheckCounterOutput(sim, testCase.Initial);
     }
 
+    public static IEnumerable<TestCaseData> RangeCounter16BitCountTestCases => [
+        // グループ2: カウントアップ（DIR=0）
+        new TestCaseData(new RangeCounter16BitCountTestCase(
+            Initial: 0,
+            Max: 65535,
+            Dir: 0,
+            ClockCount: 1,
+            ExpectedD: 1,
+            A: null,
+            B: null,
+            ExpectedRangeAfter: null
+        )).SetDescription("G2-01: 1回カウント"),
+
+        new TestCaseData(new RangeCounter16BitCountTestCase(
+            Initial: 0,
+            Max: 65535,
+            Dir: 0,
+            ClockCount: 5,
+            ExpectedD: 5,
+            A: null,
+            B: null,
+            ExpectedRangeAfter: null
+        )).SetDescription("G2-02: 複数回カウント（5回）"),
+
+        new TestCaseData(new RangeCounter16BitCountTestCase(
+            Initial: 9,
+            Max: 65535,
+            Dir: 0,
+            ClockCount: 1,
+            ExpectedD: 10,
+            A: 10,
+            B: 20,
+            ExpectedRangeAfter: 1
+        )).SetDescription("G2-03: 下限境界到達"),
+
+        new TestCaseData(new RangeCounter16BitCountTestCase(
+            Initial: 20,
+            Max: 65535,
+            Dir: 0,
+            ClockCount: 1,
+            ExpectedD: 21,
+            A: 10,
+            B: 20,
+            ExpectedRangeAfter: 0
+        )).SetDescription("G2-04: 上限超過"),
+
+        new TestCaseData(new RangeCounter16BitCountTestCase(
+            Initial: 0,
+            Max: 65535,
+            Dir: 0,
+            ClockCount: -1,
+            ExpectedD: 0,
+            A: null,
+            B: null,
+            ExpectedRangeAfter: null
+        )).SetDescription("G2-05: CLK継続High時にカウントなし"),
+
+        // グループ3: カウントダウン（DIR=1）
+        new TestCaseData(new RangeCounter16BitCountTestCase(
+            Initial: 10,
+            Max: 65535,
+            Dir: 1,
+            ClockCount: 1,
+            ExpectedD: 9,
+            A: null,
+            B: null,
+            ExpectedRangeAfter: null
+        )).SetDescription("G3-01: 1回カウントダウン"),
+
+        new TestCaseData(new RangeCounter16BitCountTestCase(
+            Initial: 10,
+            Max: 65535,
+            Dir: 1,
+            ClockCount: 5,
+            ExpectedD: 5,
+            A: null,
+            B: null,
+            ExpectedRangeAfter: null
+        )).SetDescription("G3-02: 複数回カウントダウン（5回）"),
+
+        new TestCaseData(new RangeCounter16BitCountTestCase(
+            Initial: 21,
+            Max: 65535,
+            Dir: 1,
+            ClockCount: 1,
+            ExpectedD: 20,
+            A: 10,
+            B: 20,
+            ExpectedRangeAfter: 1
+        )).SetDescription("G3-03: 上限境界到達"),
+
+        new TestCaseData(new RangeCounter16BitCountTestCase(
+            Initial: 10,
+            Max: 65535,
+            Dir: 1,
+            ClockCount: 1,
+            ExpectedD: 9,
+            A: 10,
+            B: 20,
+            ExpectedRangeAfter: 0
+        )).SetDescription("G3-04: 下限超過"),
+    ];
+
+    [TestCaseSource(nameof(RangeCounter16BitCountTestCases))]
+    [CancelAfter(10000)]
+    public void RangeCounter16Bit_Count_DataDriven(RangeCounter16BitCountTestCase testCase) {
+        var sim = new LogicSimulation(
+            BuiltInCircuit.RangeCounter16Bit,
+            BuiltInCircuit.Circuits);
+
+        InitializeRangeCounter(sim);
+
+        SetupRangeCounterInputs(sim, testCase.A ?? 0, testCase.B ?? 0, testCase.Initial, testCase.Max);
+
+        SimulateSetRelease(sim);
+
+        // DIR信号を設定（0:カウントアップ, 1:カウントダウン）
+        sim.SetInput("DIR", 0, testCase.Dir == 0 ? LogicSignal.Low : LogicSignal.High);
+        sim.Step();
+
+        // クロックパルスをシミュレート
+        if (testCase.ClockCount == -1) {
+            // CLKが継続High時はカウントなし
+            sim.SetInput("CLK", 0, LogicSignal.High);
+            sim.Step();
+        } else {
+            SimulateClockPulses(sim, testCase.ClockCount);
+        }
+
+        CheckCounterOutput(sim, testCase.ExpectedD);
+
+        if (testCase.ExpectedRangeAfter.HasValue) {
+            CheckRangeOutput(sim, testCase.ExpectedRangeAfter.Value);
+        }
+    }
+
     private static void InitializeRangeCounter(LogicSimulation sim) {
         sim.SetInput("LOW", 0, LogicSignal.High);
         sim.SetInput("ZERO", 0, LogicSignal.Low);
@@ -1646,6 +1793,15 @@ public class LogicSimulationTests {
     }
 
     private static void SimulateCountUp(LogicSimulation sim, int count) {
+        for (int i = 0; i < count; i++) {
+            sim.SetInput("CLK", 0, LogicSignal.High);
+            sim.Step();
+            sim.SetInput("CLK", 0, LogicSignal.Low);
+            sim.Step();
+        }
+    }
+
+    private static void SimulateClockPulses(LogicSimulation sim, int count) {
         for (int i = 0; i < count; i++) {
             sim.SetInput("CLK", 0, LogicSignal.High);
             sim.Step();
