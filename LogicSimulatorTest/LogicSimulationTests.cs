@@ -368,8 +368,7 @@ public class BuiltInCircuit {
     /// - SET=1 中は RANGE を強制的に High に
     /// - オーバーフロー時に MAX 値をラップアラウンド値として使用
     /// </summary>
-    public static Circuit CreateRangeCounter16Bit()
-    {
+    public static Circuit CreateRangeCounter16Bit() {
         var nodes = new List<LogicNode>();
         var wires = new List<LogicConnection>();
 
@@ -399,75 +398,86 @@ public class BuiltInCircuit {
             nodes.Add(new($"D{i}", new OutputConnector(1)));
         }
 
+        nodes.Add(new("not1", new NotLogic()));
         nodes.Add(new("counter", new CustomCircuit("ud_counter_16bit")));
-        nodes.Add(new("comp_a", new CustomCircuit("comparator_16bit")));
-        nodes.Add(new("comp_b", new CustomCircuit("comparator_16bit")));
+        nodes.Add(new("comp1", new CustomCircuit("comparator_16bit")));
+        nodes.Add(new("comp2", new CustomCircuit("comparator_16bit")));
+        nodes.Add(new("comp3", new CustomCircuit("comparator_16bit")));
+        nodes.Add(new("comp4", new CustomCircuit("comparator_16bit")));
         nodes.Add(new("dff", new CustomCircuit("d_ff")));
 
-        nodes.Add(new("not_dir", new NotLogic()));
-        nodes.Add(new("not_set", new NotLogic()));
-        nodes.Add(new("not_hi", new NotLogic()));
-
         for (int i = 0; i < bitCount; i++) {
-            nodes.Add(new($"and_wrap_{i}", new AndLogic(2)));
-            nodes.Add(new($"and_init_wrap_{i}", new AndLogic(2)));
-            nodes.Add(new($"and_init_user_{i}", new AndLogic(2)));
-            nodes.Add(new($"or_init_{i}", new OrLogic(2)));
+            nodes.Add(new($"mux1_{i}", new CustomCircuit("mux_16bit_1sel")));
+            nodes.Add(new($"mux2_{i}", new CustomCircuit("mux_16bit_1sel")));
         }
+        nodes.Add(new("mux3", new CustomCircuit("mux_2bit_1sel")));
 
-        nodes.Add(new("or_comp_a_eq_lt", new OrLogic(2)));
-        nodes.Add(new("or_comp_b_gt_eq", new OrLogic(2)));
-        nodes.Add(new("and_range_comb", new AndLogic(2)));
-        nodes.Add(new("or_range_final", new OrLogic(2)));
-        nodes.Add(new("or_hi_set", new OrLogic(2)));
-
-        wires.Add(new(new LogicConnector("DIR", "out"), new LogicConnector("not_dir", "in")));
-        wires.Add(new(new LogicConnector("SET", "out"), new LogicConnector("not_set", "in")));
-
-        for (int i = 0; i < bitCount; i++) {
-            wires.Add(new(new LogicConnector("not_dir", "out"), new LogicConnector($"and_wrap_{i}", "in[0]")));
-            wires.Add(new(new LogicConnector($"MAX{i}", "out"), new LogicConnector($"and_wrap_{i}", "in[1]")));
-            wires.Add(new(new LogicConnector($"and_wrap_{i}", "out"), new LogicConnector($"and_init_wrap_{i}", "in[0]")));
-            wires.Add(new(new LogicConnector("not_set", "out"), new LogicConnector($"and_init_wrap_{i}", "in[1]")));
-            wires.Add(new(new LogicConnector("SET", "out"), new LogicConnector($"and_init_user_{i}", "in[0]")));
-            wires.Add(new(new LogicConnector($"INITIAL{i}", "out"), new LogicConnector($"and_init_user_{i}", "in[1]")));
-            wires.Add(new(new LogicConnector($"and_init_wrap_{i}", "out"), new LogicConnector($"or_init_{i}", "in[0]")));
-            wires.Add(new(new LogicConnector($"and_init_user_{i}", "out"), new LogicConnector($"or_init_{i}", "in[1]")));
-            wires.Add(new(new LogicConnector($"or_init_{i}", "out"), new LogicConnector("counter", $"INITIAL{i}")));
-        }
+        nodes.Add(new("and1", new AndLogic(2)));
+        nodes.Add(new("and2", new AndLogic(2)));
+        
+        nodes.Add(new("or1", new OrLogic(2)));
+        nodes.Add(new("or2", new OrLogic(2)));
+        nodes.Add(new("or3", new OrLogic(2)));
+        nodes.Add(new("or4", new OrLogic(2)));
 
         wires.Add(new(new LogicConnector("LOW", "out"), new LogicConnector("counter", "LOW")));
-        wires.Add(new(new LogicConnector("SET", "out"), new LogicConnector("or_hi_set", "in[1]")));
-        wires.Add(new(new LogicConnector("counter", "HI"), new LogicConnector("not_hi", "in")));
-        wires.Add(new(new LogicConnector("counter", "HI"), new LogicConnector("or_hi_set", "in[0]")));
-        wires.Add(new(new LogicConnector("or_hi_set", "out"), new LogicConnector("counter", "SET")));
         wires.Add(new(new LogicConnector("CLK", "out"), new LogicConnector("counter", "CLK")));
+        wires.Add(new(new LogicConnector("CLK", "out"), new LogicConnector("not1", "in")));
+        wires.Add(new(new LogicConnector("CLK", "out"), new LogicConnector("dff", "C")));
+
         wires.Add(new(new LogicConnector("DIR", "out"), new LogicConnector("counter", "DIR")));
+        wires.Add(new(new LogicConnector("SET", "out"), new LogicConnector("or1", "in[1]")));
+        wires.Add(new(new LogicConnector("SET", "out"), new LogicConnector("dff", "Clr")));
+        wires.Add(new(new LogicConnector("LOW", "out"), new LogicConnector("counter", "LOW")));
+
+        wires.Add(new(new LogicConnector("not1", "out"), new LogicConnector("and1", "in[0]")));
+        wires.Add(new(new LogicConnector("and1", "out"), new LogicConnector("or1", "in[0]")));
+        wires.Add(new(new LogicConnector("or1", "out"), new LogicConnector("counter", "SET")));
 
         for (int i = 0; i < bitCount; i++) {
-            wires.Add(new(new LogicConnector("counter", $"D{i}"), new LogicConnector("comp_a", $"B{i}")));
-            wires.Add(new(new LogicConnector($"A{i}", "out"), new LogicConnector("comp_a", $"A{i}")));
-            wires.Add(new(new LogicConnector("counter", $"D{i}"), new LogicConnector("comp_b", $"A{i}")));
-            wires.Add(new(new LogicConnector($"B{i}", "out"), new LogicConnector("comp_b", $"B{i}")));
+            wires.Add(new(new LogicConnector("ZERO", "out"), new LogicConnector($"mux1_{i}", $"D0_{i}")));
+            wires.Add(new(new LogicConnector($"MAX{i}", "out"), new LogicConnector($"mux1_{i}", $"D1_{i}")));
+            wires.Add(new(new LogicConnector($"mux1_{i}", $"Y{i}"), new LogicConnector($"mux2_{i}", $"D0_{i}")));
+            wires.Add(new(new LogicConnector("DIR", "out"), new LogicConnector($"mux1_{i}", "S0")));
+            wires.Add(new(new LogicConnector($"INITIAL{i}", "out"), new LogicConnector($"mux2_{i}", $"D1_{i}")));
+            wires.Add(new(new LogicConnector($"mux2_{i}", $"Y{i}"), new LogicConnector("counter", $"INITIAL{i}")));
+            wires.Add(new(new LogicConnector("SET", "out"), new LogicConnector($"mux2_{i}", "S0")));
+        }
+
+        for (int i = 0; i < bitCount; i++) {
+            wires.Add(new(new LogicConnector($"A{i}", "out"), new LogicConnector("comp1", $"A{i}")));
+            wires.Add(new(new LogicConnector("counter", $"D{i}"), new LogicConnector("comp1", $"B{i}")));
+            wires.Add(new(new LogicConnector($"B{i}", "out"), new LogicConnector("comp2", $"A{i}")));
+            wires.Add(new(new LogicConnector("counter", $"D{i}"), new LogicConnector("comp2", $"B{i}")));
             wires.Add(new(new LogicConnector("counter", $"D{i}"), new LogicConnector($"D{i}", "in")));
         }
 
-        wires.Add(new(new LogicConnector("comp_a", "EQ"), new LogicConnector("or_comp_a_eq_lt", "in[0]")));
-        wires.Add(new(new LogicConnector("comp_a", "LT"), new LogicConnector("or_comp_a_eq_lt", "in[1]")));
-        wires.Add(new(new LogicConnector("comp_b", "EQ"), new LogicConnector("or_comp_b_gt_eq", "in[0]")));
-        wires.Add(new(new LogicConnector("comp_b", "LT"), new LogicConnector("or_comp_b_gt_eq", "in[1]")));
+        wires.Add(new(new LogicConnector("comp1", "EQ"), new LogicConnector("or2", "in[0]")));
+        wires.Add(new(new LogicConnector("comp1", "LT"), new LogicConnector("or2", "in[1]")));
+        wires.Add(new(new LogicConnector("comp2", "GT"), new LogicConnector("or3", "in[0]")));
+        wires.Add(new(new LogicConnector("comp2", "EQ"), new LogicConnector("or3", "in[1]")));
 
-        wires.Add(new(new LogicConnector("or_comp_a_eq_lt", "out"), new LogicConnector("and_range_comb", "in[0]")));
-        wires.Add(new(new LogicConnector("or_comp_b_gt_eq", "out"), new LogicConnector("and_range_comb", "in[1]")));
+        wires.Add(new(new LogicConnector("or2", "out"), new LogicConnector("and2", "in[0]")));
+        wires.Add(new(new LogicConnector("or3", "out"), new LogicConnector("and2", "in[1]")));
 
-        wires.Add(new(new LogicConnector("and_range_comb", "out"), new LogicConnector("or_range_final", "in[0]")));
-        wires.Add(new(new LogicConnector("dff", "Q"), new LogicConnector("or_range_final", "in[1]")));
-        wires.Add(new(new LogicConnector("or_range_final", "out"), new LogicConnector("RANGE", "in")));
+        for (int i = 0; i < bitCount; i++) {
+            wires.Add(new(new LogicConnector($"MAX{i}", "out"), new LogicConnector("comp3", $"A{i}")));
+            wires.Add(new(new LogicConnector("counter", $"D{i}"), new LogicConnector("comp3", $"B{i}")));
+            wires.Add(new(new LogicConnector("ZERO", "out"), new LogicConnector("comp4", $"A{i}")));
+            wires.Add(new(new LogicConnector("counter", $"D{i}"), new LogicConnector("comp4", $"B{i}")));
+        }
 
-        wires.Add(new(new LogicConnector("not_set", "out"), new LogicConnector("dff", "~Set~")));
-        wires.Add(new(new LogicConnector("LOW", "out"), new LogicConnector("dff", "~Clr~")));
-        wires.Add(new(new LogicConnector("ZERO", "out"), new LogicConnector("dff", "D")));
-        wires.Add(new(new LogicConnector("CLK", "out"), new LogicConnector("dff", "C")));
+        wires.Add(new(new LogicConnector("comp3", "EQ"), new LogicConnector("or4", "in[0]")));
+        wires.Add(new(new LogicConnector("comp3", "LT"), new LogicConnector("or4", "in[1]")));
+        wires.Add(new(new LogicConnector("or4", "out"), new LogicConnector("mux3", "D0_0")));
+        wires.Add(new(new LogicConnector("comp4", "EQ"), new LogicConnector("mux3", "D1_0")));
+        wires.Add(new(new LogicConnector("DIR", "out"), new LogicConnector("mux3", "S0")));
+
+        wires.Add(new(new LogicConnector("and2", "out"), new LogicConnector("RANGE", "in")));
+        wires.Add(new(new LogicConnector("dff", "Q"), new LogicConnector("and1", "in[1]")));
+
+        wires.Add(new(new LogicConnector("ZERO", "out"), new LogicConnector("dff", "Set")));
+        wires.Add(new(new LogicConnector("mux3", "Y0"), new LogicConnector("dff", "D")));
 
         return new(nodes, wires);
     }
@@ -722,7 +732,9 @@ public class BuiltInCircuit {
         { "ud_counter_2bit", UDCounter2Bit },
         { "ud_counter_4bit", UDCounter4Bit },
         { "ud_counter_8bit", UDCounter8Bit },
-        { "ud_counter_16bit", UDCounter16Bit }
+        { "ud_counter_16bit", UDCounter16Bit },
+        { "mux_2bit_1sel", CreateMultiplexer(2, 1) },
+        { "mux_16bit_1sel", CreateMultiplexer(16, 1) },
     };
 }
 
@@ -1580,7 +1592,7 @@ public class LogicSimulationTests {
     }
 
     private static void InitializeRangeCounter(LogicSimulation sim) {
-        sim.SetInput("LOW", 0, LogicSignal.Low);
+        sim.SetInput("LOW", 0, LogicSignal.High);
         sim.SetInput("ZERO", 0, LogicSignal.Low);
         sim.SetInput("CLK", 0, LogicSignal.Low);
         sim.SetInput("SET", 0, LogicSignal.Low);
