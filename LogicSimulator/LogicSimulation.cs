@@ -64,6 +64,79 @@ public record NAndLogic(int NumOfInputs) : ILogicElement;
 public record NOrLogic(int NumOfInputs) : ILogicElement;
 public record XOrLogic(int NumOfInputs) : ILogicElement;
 
+public record ConstValueLogic(int BitLength, ulong Value) : ILogicElement {
+    public static ConstValueLogic FromBool(bool v) {
+        return new ConstValueLogic(1, v ? 1UL : 0UL);
+    }
+
+    public static ConstValueLogic FromU8(int bitLength, byte v) {
+        ValidateUnsigned(bitLength, v);
+        return new ConstValueLogic(bitLength, v);
+    }
+
+    public static ConstValueLogic FromI8(int bitLength, sbyte v) {
+        ValidateSigned(bitLength, v);
+        ulong mask = bitLength == 64 ? ulong.MaxValue : (1UL << bitLength) - 1;
+        return new ConstValueLogic(bitLength, (ulong)v & mask);
+    }
+
+    public static ConstValueLogic FromU16(int bitLength, ushort v) {
+        ValidateUnsigned(bitLength, v);
+        return new ConstValueLogic(bitLength, v);
+    }
+
+    public static ConstValueLogic FromI16(int bitLength, short v) {
+        ValidateSigned(bitLength, v);
+        ulong mask = bitLength == 64 ? ulong.MaxValue : (1UL << bitLength) - 1;
+        return new ConstValueLogic(bitLength, (ulong)v & mask);
+    }
+
+    public static ConstValueLogic FromU32(int bitLength, uint v) {
+        ValidateUnsigned(bitLength, v);
+        return new ConstValueLogic(bitLength, v);
+    }
+
+    public static ConstValueLogic FromI32(int bitLength, int v) {
+        ValidateSigned(bitLength, v);
+        ulong mask = bitLength == 64 ? ulong.MaxValue : (1UL << bitLength) - 1;
+        return new ConstValueLogic(bitLength, (ulong)v & mask);
+    }
+
+    public static ConstValueLogic FromU64(int bitLength, ulong v) {
+        ValidateUnsigned(bitLength, v);
+        return new ConstValueLogic(bitLength, v);
+    }
+
+    public static ConstValueLogic FromI64(int bitLength, long v) {
+        ValidateSigned(bitLength, v);
+        ulong mask = bitLength == 64 ? ulong.MaxValue : (1UL << bitLength) - 1;
+        return new ConstValueLogic(bitLength, (ulong)v & mask);
+    }
+
+    static void ValidateUnsigned(int bitLength, ulong v) {
+        if (bitLength <= 0 || bitLength > 64) {
+            throw new ArgumentException($"bitLength must be between 1 and 64, but was {bitLength}.");
+        }
+        ulong mask = bitLength == 64 ? ulong.MaxValue : (1UL << bitLength) - 1;
+        if ((v & ~mask) != 0) {
+            throw new ArgumentException($"Value {v} does not fit in {bitLength} bits.");
+        }
+    }
+
+    static void ValidateSigned(int bitLength, long v) {
+        if (bitLength <= 0 || bitLength > 64) {
+            throw new ArgumentException($"bitLength must be between 1 and 64, but was {bitLength}.");
+        }
+        if (bitLength < 64) {
+            long min = -(1L << (bitLength - 1));
+            long max = (1L << (bitLength - 1)) - 1;
+            if (v < min || v > max) {
+                throw new ArgumentException($"Value {v} does not fit in {bitLength} signed bits.");
+            }
+        }
+    }
+}
+
 /// <summary>
 /// 回路一式をコンポートとして使い回しする時に外部と接続するための入力コネクタ
 /// </summary>
@@ -568,6 +641,32 @@ public class OutputConnectorExecutorFactory : ILogicExecutorFactory<OutputConnec
     }
 }
 
+public class ConstValueLogicExecutorFactory : ILogicExecutorFactory<ConstValueLogic> {
+    class ConstValueLogicExecutor(LogicNode<ConstValueLogic>[] nodes) : ILogicExecutor {
+        public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
+            for (int i = 0; i < nodes.Length; i++) {
+                var cv = nodes[i].LogicData;
+                for (int bit = 0; bit < cv.BitLength; bit++) {
+                    outputs.WriteBit(i, bit, ((cv.Value >> bit) & 1) != 0
+                        ? LogicSignal.High : LogicSignal.Low);
+                }
+            }
+        }
+    }
+
+    public IOConnectorDefinition GetConnectorDefinition(LogicNode<ConstValueLogic> node) {
+        var outPins = Enumerable.Range(0, node.LogicData.BitLength)
+            .Select(i => new PinDefinition($"out[{i}]", 1))
+            .ToArray();
+        return new IOConnectorDefinition(node.LogicID, [], outPins);
+    }
+
+    public ILogicExecutor CreateExecutor(LogicNode<ConstValueLogic>[] nodes, Action onInputChangedNotify) {
+        onInputChangedNotify();
+        return new ConstValueLogicExecutor(nodes);
+    }
+}
+
 public class LogicSimulation {
     ExecutorContext[] executorContexts;
 
@@ -672,6 +771,7 @@ public class LogicSimulation {
             { typeof(XOrLogic), new LogicExecutorFactory<XOrLogic>(new XOrLogicExecutorFactory()) },
             { typeof(InputConnector), new LogicExecutorFactory<InputConnector>(new InputConnectorExecutorFactory()) },
             { typeof(OutputConnector), new LogicExecutorFactory<OutputConnector>(new OutputConnectorExecutorFactory()) },
+            { typeof(ConstValueLogic), new LogicExecutorFactory<ConstValueLogic>(new ConstValueLogicExecutorFactory()) },
         }, circuitLibrary) {
     }
 
@@ -699,7 +799,8 @@ public class LogicSimulation {
             if (factories.TryGetValue(group.Key, out var factory)) {
                 var logicNodes = group.OrderBy(n => n.LogicID).ToArray();
 
-                var executor = factory.CreateExecutor(logicNodes, () => { });
+                bool needsInitialExecution = false;
+                var executor = factory.CreateExecutor(logicNodes, () => { needsInitialExecution = true; });
                 var definitions = logicNodes.Select(node => factory.GetConnectorDefinition(node)).ToArray();
 
                 var inputPinNumberToLogicNumber = new List<int>();
@@ -749,6 +850,9 @@ public class LogicSimulation {
                 );
                 executorList.Add(executorContext);
                 executorAndDefinitionsList.Add((executorContext, definitions));
+                if (needsInitialExecution) {
+                    inputValueChangedExecutorIndexes.Add(executorList.Count - 1);
+                }
             }
         }
 
@@ -978,7 +1082,7 @@ public class LogicSimulation {
                     var ctx = executorContexts[changedLogicNo];
                     ctx.ShouldExecute = false;
                     // 処理負荷軽減のため入力が変化していない場合は処理しない
-                    if (0 < ctx.ValueChangedInputPins.Count) {
+                    if (0 < ctx.ValueChangedInputPins.Count || ctx.Inputs.Pins.Length == 0) {
                         ctx.IsExecutedLogicNumbers.AsSpan().Clear();
                         ctx.Executor.Execute(
                             new LogicPinReader(ctx.Inputs, ctx.ValueChangedInputPins, ctx.IsExecutedLogicNumbers, 0),
