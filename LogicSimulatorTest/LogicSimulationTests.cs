@@ -1624,6 +1624,23 @@ public class LogicSimulationTests {
             Max: 65535,
             ExpectedRangeInitial: 1
         )).SetDescription("at_upper_bound"),
+
+        // グループ8: 16ビット幅の確認
+        new TestCaseData(new RangeCounter16BitTestCase(
+            A: 0,
+            B: 65535,
+            Initial: 0x5555,
+            Max: 65535,
+            ExpectedRangeInitial: 1
+        )).SetDescription("G8-01: 交互ビット（0x5555）が正しくロードされる"),
+
+        new TestCaseData(new RangeCounter16BitTestCase(
+            A: 0,
+            B: 65535,
+            Initial: 0xAAAA,
+            Max: 65535,
+            ExpectedRangeInitial: 1
+        )).SetDescription("G8-02: 交互ビット（0xAAAA）が正しくロードされる"),
     ];
 
     [TestCaseSource(nameof(RangeCounter16BitTestCases))]
@@ -1883,6 +1900,29 @@ public class LogicSimulationTests {
             B: null,
             ExpectedRangeAfter: null
         )).SetDescription("G4-07: ラップ後も継続してカウント（3CLK）"),
+
+        // グループ8: 16ビット幅の確認
+        new TestCaseData(new RangeCounter16BitCountTestCase(
+            Initial: 0x00FF,
+            Max: 65535,
+            Dir: 0,
+            ClockCount: 1,
+            ExpectedD: 0x0100,
+            A: null,
+            B: null,
+            ExpectedRangeAfter: null
+        )).SetDescription("G8-03: 繰り上がりを跨ぐカウント（0x00FF→0x0100）"),
+
+        new TestCaseData(new RangeCounter16BitCountTestCase(
+            Initial: 0xFF00,
+            Max: 65535,
+            Dir: 0,
+            ClockCount: 1,
+            ExpectedD: 0xFF01,
+            A: null,
+            B: null,
+            ExpectedRangeAfter: null
+        )).SetDescription("G8-04: 上位8ビット境界（0xFF00→0xFF01）"),
     ];
 
     public static IEnumerable<TestCaseData> RangeCounter16BitRangeTransitionTestCases => [
