@@ -65,11 +65,6 @@ public record NOrLogic(int NumOfInputs) : ILogicElement;
 public record XOrLogic(int NumOfInputs) : ILogicElement;
 
 /// <summary>
-/// プリセット・クリア端子付きのJK-FF論理素子
-/// </summary>
-public class JK_FF_PresetClear : ILogicElement;
-
-/// <summary>
 /// 回路一式をコンポートとして使い回しする時に外部と接続するための入力コネクタ
 /// </summary>
 public record InputConnector(int DataBits) : ILogicElement;
@@ -570,59 +565,6 @@ public class OutputConnectorExecutorFactory : ILogicExecutorFactory<OutputConnec
 
     public ILogicExecutor CreateExecutor(LogicNode<OutputConnector>[] nodes, Action onInputChangedNotify) {
         return new OutputConnectorExecutor();
-    }
-}
-
-public class JK_FF_PresetClearExecutor : ILogicExecutor {
-    readonly LogicNode<JK_FF_PresetClear>[] datas;
-
-    public IReadOnlyList<IOConnectorDefinition> GetPinDefinitions() {
-        return datas.Select(x =>
-            new IOConnectorDefinition(
-                x.LogicID,
-                [
-                    new PinDefinition("preN", 1),
-                    new PinDefinition("j", 1),
-                    new PinDefinition("k", 1),
-                    new PinDefinition("clk", 1),
-                    new PinDefinition("clrN", 1)
-                ],
-                [
-                    new PinDefinition("q", 1),
-                    new PinDefinition("qN", 1)
-                ]))
-            .ToArray();
-    }
-
-    public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
-        while (inputs.TryGetNextChangedLogicNumber(out var logicNo)) {
-            // bool preN = inputs.ReadBit(logicNo, 0);
-            // bool j = inputs.ReadBit(logicNo, 1);
-            // bool k = inputs.ReadBit(logicNo, 2);
-            // bool clk = inputs.ReadBit(logicNo, 3);
-            // bool clrN = inputs.ReadBit(logicNo, 4);
-
-            // bool prevQ = outputs.ReadBit(logicNo, 0);
-
-            // var newQ = !clrN && (
-            //     ((j && clk) ? 0b001 : 0) |
-            //     ((k && clk) ? 0b010 : 0) |
-            //     (prevQ ? 0b100 : 0)) switch {
-            //         0b000 => false,
-            //         0b001 => true,
-            //         0b010 => false,
-            //         0b011 => false,
-            //         0b100 => true,
-            //         0b101 => true,
-            //         0b110 => true,
-            //         0b111 => false,
-            //         _ => prevQ
-            //     };
-            // bool q = !preN || newQ;
-            // bool qN = !clrN || q;
-            // outputs.WriteBit(logicNo, 0, q);
-            // outputs.WriteBit(logicNo, 1, qN);
-        }
     }
 }
 
