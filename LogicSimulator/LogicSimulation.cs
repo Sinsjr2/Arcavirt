@@ -599,47 +599,6 @@ public class XOrLogicExecutorFactory : ILogicExecutorFactory<XOrLogic> {
     }
 }
 
-public class InputConnectorExecutorFactory : ILogicExecutorFactory<InputConnector> {
-    class InputConnectorExecutor : ILogicExecutor {
-
-        public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
-            // 入力コネクタは入力がないため、何も処理しない
-        }
-    }
-
-    public IOConnectorDefinition GetConnectorDefinition(LogicNode<InputConnector> node) {
-        return new IOConnectorDefinition(
-            node.LogicID,
-            [],
-            [ new PinDefinition("out", node.LogicData.DataBits) ]
-        );
-    }
-
-    public ILogicExecutor CreateExecutor(LogicNode<InputConnector>[] nodes, Action onInputChangedNotify) {
-        return new InputConnectorExecutor();
-    }
-}
-
-public class OutputConnectorExecutorFactory : ILogicExecutorFactory<OutputConnector> {
-    class OutputConnectorExecutor : ILogicExecutor {
-
-        public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) {
-            // 出力コネクタは自身の出力を持たないため、何も処理しない。入力が外部への出力となる。
-        }
-    }
-
-    public IOConnectorDefinition GetConnectorDefinition(LogicNode<OutputConnector> node) {
-        return new IOConnectorDefinition(
-            node.LogicID,
-            [ new PinDefinition("in", node.LogicData.DataBits) ],
-            []
-        );
-    }
-
-    public ILogicExecutor CreateExecutor(LogicNode<OutputConnector>[] nodes, Action onInputChangedNotify) {
-        return new OutputConnectorExecutor();
-    }
-}
 
 public class ConstValueLogicExecutorFactory : ILogicExecutorFactory<ConstValueLogic> {
     class ConstValueLogicExecutor(LogicNode<ConstValueLogic>[] nodes) : ILogicExecutor {
@@ -747,6 +706,10 @@ public class LogicSimulation {
         }
     }
 
+    class NoOpExecutor : ILogicExecutor {
+        public void Execute(LogicPinReader inputs, LogicPinsWriter outputs) { }
+    }
+
     class TargetConnection {
         public int LogicTypeNumber;
         public int[] PinNumbers;
@@ -769,8 +732,6 @@ public class LogicSimulation {
             { typeof(NAndLogic), new LogicExecutorFactory<NAndLogic>(new NAndLogicExecutorFactory()) },
             { typeof(NOrLogic), new LogicExecutorFactory<NOrLogic>(new NOrLogicExecutorFactory()) },
             { typeof(XOrLogic), new LogicExecutorFactory<XOrLogic>(new XOrLogicExecutorFactory()) },
-            { typeof(InputConnector), new LogicExecutorFactory<InputConnector>(new InputConnectorExecutorFactory()) },
-            { typeof(OutputConnector), new LogicExecutorFactory<OutputConnector>(new OutputConnectorExecutorFactory()) },
             { typeof(ConstValueLogic), new LogicExecutorFactory<ConstValueLogic>(new ConstValueLogicExecutorFactory()) },
         }, circuitLibrary) {
     }
@@ -808,8 +769,79 @@ public class LogicSimulation {
         Dictionary<Type, ILogicExecutorFactory> factories) {
         var executorList = new List<ExecutorContext>();
         var executorAndDefinitionsList = new List<(ExecutorContext ctx, IOConnectorDefinition[] defs)>();
+        var noOp = new NoOpExecutor();
 
-        foreach (var group in nodes.GroupBy(node => node.LogicData.GetType())) {
+        void AddConnectorGroup(LogicNode[] logicNodes, IOConnectorDefinition[] definitions) {
+            var inputPinNumberToLogicNumber = new List<int>();
+            var outputPinNumberToLogicNumber = new List<int>();
+            var inputNumOfPins = new List<(int arrayOffset, int length)>();
+            var outputNumOfPins = new List<(int arrayOffset, int length)>();
+
+            for (int i = 0; i < logicNodes.Length; i++) {
+                var def = definitions[i];
+
+                var inputLength = def.InputPins.Sum(p => p.BitSize);
+                var inputOffset = inputPinNumberToLogicNumber.Count;
+                inputNumOfPins.Add((inputOffset, inputLength));
+                inputPinNumberToLogicNumber.AddRange(Enumerable.Repeat(i, inputLength));
+
+                var outputLength = def.OutputPins.Sum(p => p.BitSize);
+                var outputOffset = outputPinNumberToLogicNumber.Count;
+                outputNumOfPins.Add((outputOffset, outputLength));
+                outputPinNumberToLogicNumber.AddRange(Enumerable.Repeat(i, outputLength));
+            }
+
+            var inputs = new LogicPins {
+                NumOfPins = inputNumOfPins.ToArray(),
+                Pins = [.. Enumerable.Repeat(LogicSignal.X, inputPinNumberToLogicNumber.Count)],
+                PinNumberToLogicNumber = inputPinNumberToLogicNumber.ToArray()
+            };
+            var outputs = new LogicPins {
+                NumOfPins = outputNumOfPins.ToArray(),
+                Pins = [.. Enumerable.Repeat(LogicSignal.X, outputPinNumberToLogicNumber.Count)],
+                PinNumberToLogicNumber = outputPinNumberToLogicNumber.ToArray()
+            };
+
+            var executorContext = new ExecutorContext(
+                noOp,
+                inputs,
+                outputs,
+                new bool[logicNodes.Length],
+                new List<int>(),
+                new List<int>(),
+                Enumerable.Range(0, outputPinNumberToLogicNumber.Count).Select(_ => new List<TargetConnection>()).ToArray(),
+                false,
+                false
+            );
+            executorList.Add(executorContext);
+            executorAndDefinitionsList.Add((executorContext, definitions));
+        }
+
+        var inputConnectorNodes = nodes
+            .Where(n => n.LogicData is InputConnector)
+            .OrderBy(n => n.LogicID)
+            .ToArray();
+        if (inputConnectorNodes.Length > 0) {
+            var inputConnectorDefs = inputConnectorNodes
+                .Select(n => new IOConnectorDefinition(n.LogicID, [], [new PinDefinition("out", ((InputConnector)n.LogicData).DataBits)]))
+                .ToArray();
+            AddConnectorGroup(inputConnectorNodes, inputConnectorDefs);
+        }
+
+        var outputConnectorNodes = nodes
+            .Where(n => n.LogicData is OutputConnector)
+            .OrderBy(n => n.LogicID)
+            .ToArray();
+        if (outputConnectorNodes.Length > 0) {
+            var outputConnectorDefs = outputConnectorNodes
+                .Select(n => new IOConnectorDefinition(n.LogicID, [new PinDefinition("in", ((OutputConnector)n.LogicData).DataBits)], []))
+                .ToArray();
+            AddConnectorGroup(outputConnectorNodes, outputConnectorDefs);
+        }
+
+        foreach (var group in nodes
+            .Where(n => n.LogicData is not InputConnector and not OutputConnector)
+            .GroupBy(node => node.LogicData.GetType())) {
             if (!factories.TryGetValue(group.Key, out var factory)) {
                 continue;
             }

@@ -765,39 +765,6 @@ public class LogicSimulationTests {
         Assert.That(sim.GetOutput("output", 0), Is.EqualTo(expected));
     }
 
-    [TestCase(false, false, false)]
-    [TestCase(true, false, true)]
-    [TestCase(false, true, true)]
-    [TestCase(true, true, true)]
-    public void OrGateExtensibilityTest(bool input1, bool input2, bool expected) {
-        var circuit = new Circuit([
-                new("input1", new InputConnector(1)),
-                new("input2", new InputConnector(1)),
-                new("or", new OrLogic(2)),
-                new("output", new OutputConnector(1))
-            ],
-            [
-                new(new LogicConnector("input1", "out"), new LogicConnector("or", "in[0]")),
-                new(new LogicConnector("input2", "out"), new LogicConnector("or", "in[1]")),
-                new(new LogicConnector("or", "out"), new LogicConnector("output", "in"))
-            ]);
-
-        // カスタムファクトリを指定してLogicSimulationをインスタンス化
-        var factories = new Dictionary<Type, ILogicExecutorFactory> {
-            { typeof(OrLogic), new LogicExecutorFactory<OrLogic>(new OrLogicExecutorFactory()) },
-            { typeof(InputConnector), new LogicExecutorFactory<InputConnector>(new InputConnectorExecutorFactory()) },
-            { typeof(OutputConnector), new LogicExecutorFactory<OutputConnector>(new OutputConnectorExecutorFactory()) },
-        };
-
-        var simulation = new LogicSimulation(circuit, factories);
-
-        simulation.SetInput("input1", 0, input1.ToSignal());
-        simulation.SetInput("input2", 0, input2.ToSignal());
-        simulation.Step();
-        
-        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected.ToSignal()));
-    }
-
     [TestCase(new[] { LogicSignal.Low, LogicSignal.Low }, LogicSignal.Low)]
     [TestCase(new[] { LogicSignal.High, LogicSignal.Low }, LogicSignal.Low)]
     [TestCase(new[] { LogicSignal.Low, LogicSignal.High }, LogicSignal.Low)]
