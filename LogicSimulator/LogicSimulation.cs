@@ -668,7 +668,7 @@ public class ConstValueLogicExecutorFactory : ILogicExecutorFactory<ConstValueLo
 }
 
 public class LogicSimulation {
-    ExecutorContext[] executorContexts;
+    ExecutorContext[] executorContexts = null!;
 
     /// <summary>
     /// 入力が変化したので実行する必要があるexecutorの配列のインデックス
@@ -775,135 +775,170 @@ public class LogicSimulation {
         }, circuitLibrary) {
     }
 
-    public LogicSimulation(Circuit circuit, Dictionary<Type, ILogicExecutorFactory> factories)
-        : this(circuit, factories, null) {
-    }
 
-    private LogicSimulation(Circuit circuit, Dictionary<Type, ILogicExecutorFactory> factories, IReadOnlyDictionary<string, Circuit>? circuitLibrary = null) {
+    public LogicSimulation(Circuit circuit, Dictionary<Type, ILogicExecutorFactory> factories, IReadOnlyDictionary<string, Circuit>? circuitLibrary = null) {
         IReadOnlyList<LogicNode> nodes = circuit.LogicNodes;
         IReadOnlyList<LogicConnection> connections = circuit.LogicConnections;
         if (circuitLibrary != null) {
-            var expanded = ExpandCustomCircuits(circuitLibrary ?? new Dictionary<string, Circuit>(), new Circuit(nodes, connections));
+            var expanded = ExpandCustomCircuits(circuitLibrary, new Circuit(nodes, connections));
             nodes = expanded.LogicNodes;
             connections = expanded.LogicConnections;
         }
 
-        var executorList = new List<ExecutorContext>();
-        var groupedNodes = nodes.GroupBy(node => node.LogicData.GetType());
+        var executorAndDefinitionsList = BuildExecutorContexts(nodes, factories);
+        logicIdAndPinNameToPinIndex = BuildPinIndex(executorAndDefinitionsList);
+        ResolveConnections(connections);
+    }
 
-        // ピン名から相対ピンインデックスを取得するヘルパーを構築
+    /// <summary>
+    /// ノードリストをファクトリでグループ化し、各グループの <see cref="ExecutorContext"/> を生成します。
+    /// <para>
+    /// 同じ型の素子は1つの <see cref="ExecutorContext"/> を共有します（logicNumberInExecutor で識別）。
+    /// GroupBy の列挙順は非決定的なため、LogicID でソートして logicNumberInExecutor を安定させます。
+    /// </para>
+    /// <para>
+    /// CreateExecutor のコールバック（onInputChangedNotify）が呼ばれた場合、
+    /// その素子は構築時点で出力値が確定しているため（例: ConstValueLogic）、
+    /// <see cref="inputValueChangedExecutorIndexes"/> に登録して初期実行を予約します。
+    /// </para>
+    /// </summary>
+    /// <returns>2パス目で logicIdAndPinNameToPinIndex を構築するために使用するリスト。</returns>
+    List<(ExecutorContext ctx, IOConnectorDefinition[] defs)> BuildExecutorContexts(
+        IReadOnlyList<LogicNode> nodes,
+        Dictionary<Type, ILogicExecutorFactory> factories) {
+        var executorList = new List<ExecutorContext>();
         var executorAndDefinitionsList = new List<(ExecutorContext ctx, IOConnectorDefinition[] defs)>();
 
-        // 各グループに対してExecutorContextを生成
-        foreach (var group in groupedNodes) {
-            if (factories.TryGetValue(group.Key, out var factory)) {
-                var logicNodes = group.OrderBy(n => n.LogicID).ToArray();
+        foreach (var group in nodes.GroupBy(node => node.LogicData.GetType())) {
+            if (!factories.TryGetValue(group.Key, out var factory)) {
+                continue;
+            }
 
-                bool needsInitialExecution = false;
-                var executor = factory.CreateExecutor(logicNodes, () => { needsInitialExecution = true; });
-                var definitions = logicNodes.Select(node => factory.GetConnectorDefinition(node)).ToArray();
+            // GroupBy の列挙順は非決定的なため、logicNumberInExecutor が実行ごとに変わらないよう LogicID でソートする
+            var logicNodes = group.OrderBy(n => n.LogicID).ToArray();
 
-                var inputPinNumberToLogicNumber = new List<int>();
-                var outputPinNumberToLogicNumber = new List<int>();
+            // CreateExecutor のコールバック（onInputChangedNotify）が呼ばれたかどうかで初期実行の要否を判定する
+            // ConstValueLogic など構築時点で出力値が確定している素子はコールバックを呼ぶ
+            bool needsInitialExecution = false;
+            var executor = factory.CreateExecutor(logicNodes, () => { needsInitialExecution = true; });
+            var definitions = logicNodes.Select(node => factory.GetConnectorDefinition(node)).ToArray();
 
-                var inputNumOfPins = new List<(int arrayOffset, int length)>();
-                var outputNumOfPins = new List<(int arrayOffset, int length)>();
+            var inputPinNumberToLogicNumber = new List<int>();
+            var outputPinNumberToLogicNumber = new List<int>();
+            var inputNumOfPins = new List<(int arrayOffset, int length)>();
+            var outputNumOfPins = new List<(int arrayOffset, int length)>();
 
-                for (int i = 0; i < logicNodes.Length; i++) {
-                    var node = logicNodes[i];
-                    var def = definitions[i];
+            for (int i = 0; i < logicNodes.Length; i++) {
+                var def = definitions[i];
 
-                    // 入力ピンのオフセットと長さ
-                    var inputLength = def.InputPins.Sum(p => p.BitSize);
-                    var inputOffset = inputPinNumberToLogicNumber.Count;
-                    inputNumOfPins.Add((inputOffset, inputLength));
-                    inputPinNumberToLogicNumber.AddRange(Enumerable.Repeat(i, inputLength));
+                var inputLength = def.InputPins.Sum(p => p.BitSize);
+                // このグループ内で累積された入力ピン数（= このノードの入力ピンが始まるオフセット）
+                var inputOffset = inputPinNumberToLogicNumber.Count;
+                inputNumOfPins.Add((inputOffset, inputLength));
+                inputPinNumberToLogicNumber.AddRange(Enumerable.Repeat(i, inputLength));
 
-                    // 出力ピンのオフセットと長さ
-                    var outputLength = def.OutputPins.Sum(p => p.BitSize);
-                    var outputOffset = outputPinNumberToLogicNumber.Count;
-                    outputNumOfPins.Add((outputOffset, outputLength));
-                    outputPinNumberToLogicNumber.AddRange(Enumerable.Repeat(i, outputLength));
-                }
-                var inputs = new LogicPins {
-                    NumOfPins = inputNumOfPins.ToArray(),
-                    Pins = [.. Enumerable.Repeat(LogicSignal.X, inputPinNumberToLogicNumber.Count)],
-                    PinNumberToLogicNumber = inputPinNumberToLogicNumber.ToArray()
-                };
+                var outputLength = def.OutputPins.Sum(p => p.BitSize);
+                // このグループ内で累積された出力ピン数（= このノードの出力ピンが始まるオフセット）
+                var outputOffset = outputPinNumberToLogicNumber.Count;
+                outputNumOfPins.Add((outputOffset, outputLength));
+                outputPinNumberToLogicNumber.AddRange(Enumerable.Repeat(i, outputLength));
+            }
 
-                var outputs = new LogicPins {
-                    NumOfPins = outputNumOfPins.ToArray(),
-                    Pins = [.. Enumerable.Repeat(LogicSignal.X, outputPinNumberToLogicNumber.Count)],
-                    PinNumberToLogicNumber = outputPinNumberToLogicNumber.ToArray()
-                };
+            var inputs = new LogicPins {
+                NumOfPins = inputNumOfPins.ToArray(),
+                Pins = [.. Enumerable.Repeat(LogicSignal.X, inputPinNumberToLogicNumber.Count)],
+                PinNumberToLogicNumber = inputPinNumberToLogicNumber.ToArray()
+            };
+            var outputs = new LogicPins {
+                NumOfPins = outputNumOfPins.ToArray(),
+                Pins = [.. Enumerable.Repeat(LogicSignal.X, outputPinNumberToLogicNumber.Count)],
+                PinNumberToLogicNumber = outputPinNumberToLogicNumber.ToArray()
+            };
 
-                var executorContext = new ExecutorContext(
-                    executor,
-                    inputs,
-                    outputs,
-                    new bool[logicNodes.Length],
-                    new List<int>(),
-                    new List<int>(),
-                    Enumerable.Range(0, outputPinNumberToLogicNumber.Count).Select(_ => new List<TargetConnection>()).ToArray(),
-                    false,
-                    false
-                );
-                executorList.Add(executorContext);
-                executorAndDefinitionsList.Add((executorContext, definitions));
-                if (needsInitialExecution) {
-                    inputValueChangedExecutorIndexes.Add(executorList.Count - 1);
-                }
+            var executorContext = new ExecutorContext(
+                executor,
+                inputs,
+                outputs,
+                new bool[logicNodes.Length],
+                new List<int>(),
+                new List<int>(),
+                Enumerable.Range(0, outputPinNumberToLogicNumber.Count).Select(_ => new List<TargetConnection>()).ToArray(),
+                false,
+                false
+            );
+            executorList.Add(executorContext);
+            executorAndDefinitionsList.Add((executorContext, definitions));
+            if (needsInitialExecution) {
+                inputValueChangedExecutorIndexes.Add(executorList.Count - 1);
             }
         }
 
+        // ExecutorContext の配列を確定してから BuildPinIndex で Array.IndexOf を使うため、ここで確定させる
         executorContexts = executorList.ToArray();
+        return executorAndDefinitionsList;
+    }
 
-        // LogicIDとPinNameからExecutorContext内のピンの全体インデックスへのマッピング
-        logicIdAndPinNameToPinIndex = new Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>>();
+    /// <summary>
+    /// 各素子の LogicID とピン名から ExecutorContext 内のピンインデックスへのマッピングを構築します。
+    /// <para>
+    /// <see cref="BuildExecutorContexts"/> で executorContexts が確定した後に呼び出す必要があります。
+    /// Array.IndexOf で executorContexts 内の位置を特定するため、2パスに分離しています。
+    /// </para>
+    /// </summary>
+    Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>> BuildPinIndex(
+        List<(ExecutorContext ctx, IOConnectorDefinition[] defs)> executorAndDefinitionsList) {
+        var pinIndex = new Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>>();
 
         foreach (var (ctx, definitions) in executorAndDefinitionsList) {
+            var execIdx = Array.IndexOf(executorContexts, ctx);
             for (int logicNumInExec = 0; logicNumInExec < definitions.Length; logicNumInExec++) {
                 var def = definitions[logicNumInExec];
-                var execIdx = Array.IndexOf(executorContexts, ctx);
-
-                logicIdAndPinNameToPinIndex[def.LogicID] = new Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>();
+                pinIndex[def.LogicID] = new Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>();
 
                 int currentInputPinOffset = 0;
                 foreach (var pin in def.InputPins) {
-                    logicIdAndPinNameToPinIndex[def.LogicID][pin.PinName] = (execIdx, logicNumInExec, ctx.Inputs.GetPinIndex(logicNumInExec, currentInputPinOffset));
+                    pinIndex[def.LogicID][pin.PinName] = (execIdx, logicNumInExec, ctx.Inputs.GetPinIndex(logicNumInExec, currentInputPinOffset));
                     currentInputPinOffset += pin.BitSize;
                 }
                 int currentOutputPinOffset = 0;
                 foreach (var pin in def.OutputPins) {
-                    var outputPinIndex = ctx.Outputs.GetPinIndex(logicNumInExec, currentOutputPinOffset);
-                    logicIdAndPinNameToPinIndex[def.LogicID][pin.PinName] = (execIdx, logicNumInExec, outputPinIndex);
+                    pinIndex[def.LogicID][pin.PinName] = (execIdx, logicNumInExec, ctx.Outputs.GetPinIndex(logicNumInExec, currentOutputPinOffset));
                     currentOutputPinOffset += pin.BitSize;
                 }
             }
         }
 
+        return pinIndex;
+    }
+
+    /// <summary>
+    /// 接続リストを解決し、各出力ピンから接続先入力ピンへの <see cref="ExecutorContext.OutputToInputPinConnections"/> を構築します。
+    /// 接続定義に不正な LogicID またはピン名が含まれる場合は例外をスローします。
+    /// </summary>
+    void ResolveConnections(IReadOnlyList<LogicConnection> connections) {
         foreach (var connection in connections) {
             var sourceLogicID = connection.Source.LogicID;
             var sourcePinName = connection.Source.PinName;
             var targetLogicID = connection.Target.LogicID;
             var targetPinName = connection.Target.PinName;
 
-            if (!logicIdAndPinNameToPinIndex.TryGetValue(sourceLogicID, out var sourcePinIndex) || !sourcePinIndex.ContainsKey(sourcePinName)) {
-                continue;
+            if (!logicIdAndPinNameToPinIndex.TryGetValue(sourceLogicID, out var sourcePins)) {
+                throw new ArgumentException($"Connection source '{sourceLogicID}' is not defined in the circuit.");
             }
-            if (!logicIdAndPinNameToPinIndex.TryGetValue(targetLogicID, out var targetPinIndex) || !targetPinIndex.ContainsKey(targetPinName)) {
-                continue;
+            if (!sourcePins.ContainsKey(sourcePinName)) {
+                throw new ArgumentException($"Connection source '{sourceLogicID}' does not have pin '{sourcePinName}'.");
+            }
+            if (!logicIdAndPinNameToPinIndex.TryGetValue(targetLogicID, out var targetPins)) {
+                throw new ArgumentException($"Connection target '{targetLogicID}' is not defined in the circuit.");
+            }
+            if (!targetPins.ContainsKey(targetPinName)) {
+                throw new ArgumentException($"Connection target '{targetLogicID}' does not have pin '{targetPinName}'.");
             }
 
-            var sourcePinInfo = logicIdAndPinNameToPinIndex[sourceLogicID][sourcePinName];
-            var targetPinInfo = logicIdAndPinNameToPinIndex[targetLogicID][targetPinName];
+            var sourcePinInfo = sourcePins[sourcePinName];
+            var targetPinInfo = targetPins[targetPinName];
 
-            // SourceのExecutorContextのOutputToInputPinConnectionsにTargetの情報を追加
-            var sourceExecutorContext = executorContexts[sourcePinInfo.executorIndex];
-            var sourceGlobalPinIndex = sourcePinInfo.pinIndex; // これはOutputs.Pinsのグローバルインデックス
-
-            // 複数接続に対応：既存の接続リストにTargetConnectionを追加
-            sourceExecutorContext.OutputToInputPinConnections[sourceGlobalPinIndex].Add(
+            executorContexts[sourcePinInfo.executorIndex].OutputToInputPinConnections[sourcePinInfo.pinIndex].Add(
                 new TargetConnection(targetPinInfo.executorIndex, new int[] { targetPinInfo.pinIndex })
             );
         }
