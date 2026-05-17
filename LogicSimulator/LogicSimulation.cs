@@ -140,12 +140,28 @@ public record ConstValueLogic(int BitLength, ulong Value) : ILogicElement {
 /// <summary>
 /// 回路一式をコンポートとして使い回しする時に外部と接続するための入力コネクタ
 /// </summary>
-public record InputConnector(int DataBits) : ILogicElement;
+public record InputConnector : ILogicElement {
+    public int? DataBits { get; }
+    public InputConnector(int? dataBits = null) {
+        if (dataBits.HasValue && dataBits.Value <= 0)
+            throw new ArgumentException(
+                $"InputConnector DataBits must be greater than 0, but was {dataBits.Value}.");
+        DataBits = dataBits;
+    }
+}
 
 /// <summary>
 /// 回路一式をコンポートとして使い回しする時に外部と接続するための出力コネクタ
 /// </summary>
-public record OutputConnector(int DataBits) : ILogicElement;
+public record OutputConnector : ILogicElement {
+    public int? DataBits { get; }
+    public OutputConnector(int? dataBits = null) {
+        if (dataBits.HasValue && dataBits.Value <= 0)
+            throw new ArgumentException(
+                $"OutputConnector DataBits must be greater than 0, but was {dataBits.Value}.");
+        DataBits = dataBits;
+    }
+}
 
 /// <summary>
 /// ユーザーが作成した回路を名前で呼び出します。
@@ -746,7 +762,8 @@ public class LogicSimulation {
             connections = expanded.LogicConnections;
         }
 
-        var executorAndDefinitionsList = BuildExecutorContexts(nodes, factories);
+        var resolvedBits = ResolveConnectorBits(nodes, connections, factories);
+        var executorAndDefinitionsList = BuildExecutorContexts(nodes, factories, resolvedBits);
         logicIdAndPinNameToPinIndex = BuildPinIndex(executorAndDefinitionsList);
         ResolveConnections(connections);
     }
@@ -766,7 +783,8 @@ public class LogicSimulation {
     /// <returns>2パス目で logicIdAndPinNameToPinIndex を構築するために使用するリスト。</returns>
     List<(ExecutorContext ctx, IOConnectorDefinition[] defs)> BuildExecutorContexts(
         IReadOnlyList<LogicNode> nodes,
-        Dictionary<Type, ILogicExecutorFactory> factories) {
+        Dictionary<Type, ILogicExecutorFactory> factories,
+        IReadOnlyDictionary<string, int> resolvedBits) {
         var executorList = new List<ExecutorContext>();
         var executorAndDefinitionsList = new List<(ExecutorContext ctx, IOConnectorDefinition[] defs)>();
         var noOp = new NoOpExecutor();
@@ -823,7 +841,7 @@ public class LogicSimulation {
             .ToArray();
         if (inputConnectorNodes.Length > 0) {
             var inputConnectorDefs = inputConnectorNodes
-                .Select(n => new IOConnectorDefinition(n.LogicID, [], [new PinDefinition("out", ((InputConnector)n.LogicData).DataBits)]))
+                .Select(n => new IOConnectorDefinition(n.LogicID, [], [new PinDefinition("out", resolvedBits[n.LogicID])]))
                 .ToArray();
             AddConnectorGroup(inputConnectorNodes, inputConnectorDefs);
         }
@@ -834,7 +852,7 @@ public class LogicSimulation {
             .ToArray();
         if (outputConnectorNodes.Length > 0) {
             var outputConnectorDefs = outputConnectorNodes
-                .Select(n => new IOConnectorDefinition(n.LogicID, [new PinDefinition("in", ((OutputConnector)n.LogicData).DataBits)], []))
+                .Select(n => new IOConnectorDefinition(n.LogicID, [new PinDefinition("in", resolvedBits[n.LogicID])], []))
                 .ToArray();
             AddConnectorGroup(outputConnectorNodes, outputConnectorDefs);
         }
@@ -974,6 +992,190 @@ public class LogicSimulation {
                 new TargetConnection(targetPinInfo.executorIndex, new int[] { targetPinInfo.pinIndex })
             );
         }
+    }
+
+    /// <summary>
+    /// InputConnector/OutputConnector のビット幅を接続グラフから推論し、確定します。
+    /// <para>
+    /// DataBits が明示されている場合は接続との整合性チェックを行います。
+    /// DataBits が null の場合は接続先/接続元のピン幅から推論します。
+    /// </para>
+    /// </summary>
+    IReadOnlyDictionary<string, int> ResolveConnectorBits(
+        IReadOnlyList<LogicNode> nodes,
+        IReadOnlyList<LogicConnection> connections,
+        Dictionary<Type, ILogicExecutorFactory> factories) {
+
+        var connectorNodes = nodes
+            .Where(n => n.LogicData is InputConnector or OutputConnector)
+            .ToDictionary(n => n.LogicID);
+
+        // OutputConnector への複数接続元チェック
+        var outputConnectorInboundCounts = new Dictionary<string, int>();
+        foreach (var conn in connections) {
+            var targetNode = connectorNodes.GetValueOrDefault(conn.Target.LogicID);
+            if (targetNode?.LogicData is OutputConnector) {
+                outputConnectorInboundCounts.TryGetValue(conn.Target.LogicID, out var cnt);
+                outputConnectorInboundCounts[conn.Target.LogicID] = cnt + 1;
+                if (cnt + 1 > 1) {
+                    throw new ArgumentException(
+                        $"OutputConnector '{conn.Target.LogicID}' has multiple source connections, which is not allowed.");
+                }
+            }
+        }
+
+        // 通常素子のピン幅マップを構築
+        var pinWidthMap = new Dictionary<string, Dictionary<string, int>>();
+        foreach (var node in nodes) {
+            if (node.LogicData is InputConnector or OutputConnector) {
+                continue;
+            }
+            if (!factories.TryGetValue(node.LogicData.GetType(), out var factory)) {
+                continue;
+            }
+            var def = factory.GetConnectorDefinition(node);
+            var pinWidths = new Dictionary<string, int>();
+            foreach (var pin in def.InputPins) {
+                pinWidths[pin.PinName] = pin.BitSize;
+            }
+            foreach (var pin in def.OutputPins) {
+                pinWidths[pin.PinName] = pin.BitSize;
+            }
+            pinWidthMap[node.LogicID] = pinWidths;
+        }
+
+        var resolved = new Dictionary<string, int>();
+
+        // 明示指定済みコネクタのビット幅を確定
+        foreach (var node in connectorNodes.Values) {
+            if (node.LogicData is InputConnector ic && ic.DataBits.HasValue) {
+                resolved[node.LogicID] = ic.DataBits.Value;
+            } else if (node.LogicData is OutputConnector oc && oc.DataBits.HasValue) {
+                resolved[node.LogicID] = oc.DataBits.Value;
+            }
+        }
+
+        // 接続グラフを走査してコネクタのビット幅を反復解決（null は推論、明示指定は整合性チェック）
+        var checkedExplicit = new HashSet<string>();
+        bool madeProgress = true;
+        while (madeProgress) {
+            madeProgress = false;
+            foreach (var node in connectorNodes.Values) {
+                var id = node.LogicID;
+                bool isExplicit = resolved.ContainsKey(id);
+                if (isExplicit && checkedExplicit.Contains(id)) {
+                    continue;
+                }
+                if (node.LogicData is InputConnector inputConnector) {
+                    // このコネクタを Source とする接続を調べる
+                    var outgoingConnections = connections
+                        .Where(c => c.Source.LogicID == id)
+                        .ToArray();
+                    if (outgoingConnections.Length == 0) {
+                        if (isExplicit) {
+                            checkedExplicit.Add(id);
+                        }
+                        continue;
+                    }
+                    var widths = new List<int>();
+                    bool allResolved = true;
+                    foreach (var conn in outgoingConnections) {
+                        var targetId = conn.Target.LogicID;
+                        var targetPin = conn.Target.PinName;
+                        if (connectorNodes.TryGetValue(targetId, out var targetNode)) {
+                            if (targetNode.LogicData is OutputConnector && resolved.TryGetValue(targetId, out var w)) {
+                                widths.Add(w);
+                            } else {
+                                allResolved = false;
+                            }
+                        } else if (pinWidthMap.TryGetValue(targetId, out var targetPinMap)
+                            && targetPinMap.TryGetValue(targetPin, out var pinWidth)) {
+                            widths.Add(pinWidth);
+                        } else {
+                            allResolved = false;
+                        }
+                    }
+                    if (!allResolved || widths.Count == 0) {
+                        continue;
+                    }
+                    if (widths.Distinct().Count() > 1) {
+                        throw new ArgumentException(
+                            $"InputConnector '{id}' has conflicting bit widths: {widths[0]} and {widths.First(w => w != widths[0])}.");
+                    }
+                    var inferredWidth = widths[0];
+                    if (inputConnector.DataBits.HasValue && inputConnector.DataBits.Value != inferredWidth) {
+                        throw new ArgumentException(
+                            $"InputConnector '{id}' DataBits={inputConnector.DataBits.Value} does not match connected pin bit width {inferredWidth}.");
+                    }
+                    if (!isExplicit) {
+                        resolved[id] = inferredWidth;
+                        madeProgress = true;
+                    } else {
+                        checkedExplicit.Add(id);
+                    }
+                } else if (node.LogicData is OutputConnector outputConnector) {
+                    // このコネクタを Target とする接続を調べる（最大1つ）
+                    var incomingConn = connections.FirstOrDefault(c => c.Target.LogicID == id);
+                    if (incomingConn == null) {
+                        if (isExplicit) {
+                            checkedExplicit.Add(id);
+                        }
+                        continue;
+                    }
+                    var sourceId = incomingConn.Source.LogicID;
+                    var sourcePin = incomingConn.Source.PinName;
+                    int? inferredWidth = null;
+                    if (connectorNodes.TryGetValue(sourceId, out var sourceNode)) {
+                        if (sourceNode.LogicData is InputConnector && resolved.TryGetValue(sourceId, out var w)) {
+                            inferredWidth = w;
+                        }
+                    } else if (pinWidthMap.TryGetValue(sourceId, out var sourcePinMap)
+                        && sourcePinMap.TryGetValue(sourcePin, out var pinWidth)) {
+                        inferredWidth = pinWidth;
+                    }
+                    if (!inferredWidth.HasValue) {
+                        continue;
+                    }
+                    if (outputConnector.DataBits.HasValue && outputConnector.DataBits.Value != inferredWidth.Value) {
+                        throw new ArgumentException(
+                            $"OutputConnector '{id}' DataBits={outputConnector.DataBits.Value} does not match connected pin bit width {inferredWidth.Value}.");
+                    }
+                    if (!isExplicit) {
+                        resolved[id] = inferredWidth.Value;
+                        madeProgress = true;
+                    } else {
+                        checkedExplicit.Add(id);
+                    }
+                }
+            }
+        }
+
+        // 解決できなかったコネクタのチェック
+        foreach (var node in connectorNodes.Values) {
+            if (resolved.ContainsKey(node.LogicID)) {
+                continue;
+            }
+            var id = node.LogicID;
+            if (node.LogicData is InputConnector) {
+                bool hasOutgoing = connections.Any(c => c.Source.LogicID == id);
+                if (!hasOutgoing) {
+                    throw new ArgumentException(
+                        $"InputConnector '{id}' has no connection. Cannot infer bit width.");
+                }
+                throw new ArgumentException(
+                    $"InputConnector '{id}' cannot resolve bit width: only connected to unresolved connectors.");
+            } else if (node.LogicData is OutputConnector) {
+                bool hasIncoming = connections.Any(c => c.Target.LogicID == id);
+                if (!hasIncoming) {
+                    throw new ArgumentException(
+                        $"OutputConnector '{id}' has no connection. Cannot infer bit width.");
+                }
+                throw new ArgumentException(
+                    $"OutputConnector '{id}' cannot resolve bit width: only connected to unresolved connectors.");
+            }
+        }
+
+        return resolved;
     }
 
     /// <summary>

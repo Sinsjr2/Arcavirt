@@ -42,11 +42,11 @@ public record SignalTestPattern(IReadOnlyList<SignalFrame> Frames);
 public class BuiltInCircuit {
 
     public static readonly Circuit JK_FFMasterSlavePresetClear = new([
-            new("~PRE~", new InputConnector(1)),
-            new("J", new InputConnector(1)),
-            new("K", new InputConnector(1)),
-            new("CLK", new InputConnector(1)),
-            new("~CLR~", new InputConnector(1)),
+            new("~PRE~", new InputConnector()),
+            new("J", new InputConnector()),
+            new("K", new InputConnector()),
+            new("CLK", new InputConnector()),
+            new("~CLR~", new InputConnector()),
             new("and1", new AndLogic(2)),
             new("and2", new AndLogic(2)),
             new("and3", new AndLogic(2)),
@@ -62,8 +62,8 @@ public class BuiltInCircuit {
             new("nand7", new NAndLogic(2)),
             new("nand8", new NAndLogic(2)),
             new("not1", new NotLogic()),
-            new("Q", new OutputConnector(1)),
-            new("~Q~", new OutputConnector(1))
+            new("Q", new OutputConnector()),
+            new("~Q~", new OutputConnector())
         ],
         [
             new(new LogicConnector("~PRE~", "out"), new LogicConnector("and3", "in[0]")),
@@ -120,18 +120,18 @@ public class BuiltInCircuit {
     /// </code>
     /// </summary>
     public static readonly Circuit D_FF = new([
-            new("Clr",     new InputConnector(1)),
-            new("C",       new InputConnector(1)),
-            new("D",       new InputConnector(1)),
-            new("Set",     new InputConnector(1)),
+            new("Clr",     new InputConnector()),
+            new("C",       new InputConnector()),
+            new("D",       new InputConnector()),
+            new("Set",     new InputConnector()),
             new("not_set", new NotLogic()),
             new("not_clr", new NotLogic()),
             new("not_d",   new NotLogic()),
             new("not_clk", new NotLogic()),
             new("or_clr",  new OrLogic(2)),
             new("jkff1",   new CustomCircuit("jk_ff_preset_clear")),
-            new("Q",       new OutputConnector(1)),
-            new("~Q~",     new OutputConnector(1))
+            new("Q",       new OutputConnector()),
+            new("~Q~",     new OutputConnector())
         ],
         [
             new(new LogicConnector("Set",     "out"), new LogicConnector("not_set", "in")),
@@ -161,13 +161,13 @@ public class BuiltInCircuit {
         if (bitCount == 1) {
             // 1ビットカウンタ: 直接配線(CustomCircuit を使わない)
             return new([
-                new("LOW", new InputConnector(1)),
-                new("SET", new InputConnector(1)),
-                new("CLK", new InputConnector(1)),
-                new("DIR", new InputConnector(1)),
-                new("INITIAL0", new InputConnector(1)),
-                new("HI", new OutputConnector(1)),
-                new("D0", new OutputConnector(1)),
+                new("LOW", new InputConnector()),
+                new("SET", new InputConnector()),
+                new("CLK", new InputConnector()),
+                new("DIR", new InputConnector()),
+                new("INITIAL0", new InputConnector()),
+                new("HI", new OutputConnector()),
+                new("D0", new OutputConnector()),
                 new("jkff1", new CustomCircuit("jk_ff_preset_clear")),
                 new("not1", new NotLogic()),
                 new("nand1", new NAndLogic(2)),
@@ -200,16 +200,16 @@ public class BuiltInCircuit {
             var nodes = new List<LogicNode>();
 
             // 入力・出力ピンの追加
-            nodes.Add(new("LOW", new InputConnector(1)));
-            nodes.Add(new("SET", new InputConnector(1)));
-            nodes.Add(new("CLK", new InputConnector(1)));
-            nodes.Add(new("DIR", new InputConnector(1)));
+            nodes.Add(new("LOW", new InputConnector()));
+            nodes.Add(new("SET", new InputConnector()));
+            nodes.Add(new("CLK", new InputConnector()));
+            nodes.Add(new("DIR", new InputConnector()));
             for (int i = 0; i < bitCount; i++) {
-                nodes.Add(new($"INITIAL{i}", new InputConnector(1)));
+                nodes.Add(new($"INITIAL{i}", new InputConnector()));
             }
-            nodes.Add(new("HI", new OutputConnector(1)));
+            nodes.Add(new("HI", new OutputConnector()));
             for (int i = 0; i < bitCount; i++) {
-                nodes.Add(new($"D{i}", new OutputConnector(1)));
+                nodes.Add(new($"D{i}", new OutputConnector()));
             }
 
             // ud_counter_1bit カスタム回路の追加
@@ -257,11 +257,11 @@ public class BuiltInCircuit {
         }
         if (bitCount == 1) {
             return new([
-                new("A0", new InputConnector(1)),
-                new("B0", new InputConnector(1)),
-                new("GT", new OutputConnector(1)),
-                new("EQ", new OutputConnector(1)),
-                new("LT", new OutputConnector(1)),
+                new("A0", new InputConnector()),
+                new("B0", new InputConnector()),
+                new("GT", new OutputConnector()),
+                new("EQ", new OutputConnector()),
+                new("LT", new OutputConnector()),
                 new("not1", new NotLogic()),
                 new("not2", new NotLogic()),
                 new("and1", new AndLogic(2)),
@@ -293,14 +293,14 @@ public class BuiltInCircuit {
         var wires = new List<LogicConnection>();
 
         for (int i = 0; i < bitCount; i++) {
-            nodes.Add(new($"A{i}", new InputConnector(1)));
+            nodes.Add(new($"A{i}", new InputConnector()));
         }
         for (int i = 0; i < bitCount; i++) {
-            nodes.Add(new($"B{i}", new InputConnector(1)));
+            nodes.Add(new($"B{i}", new InputConnector()));
         }
-        nodes.Add(new("GT", new OutputConnector(1)));
-        nodes.Add(new("EQ", new OutputConnector(1)));
-        nodes.Add(new("LT", new OutputConnector(1)));
+        nodes.Add(new("GT", new OutputConnector()));
+        nodes.Add(new("EQ", new OutputConnector()));
+        nodes.Add(new("LT", new OutputConnector()));
 
         for (int i = 0; i < bitCount; i++) {
             nodes.Add(new($"comp_{i}", new CustomCircuit("comparator_1bit")));
@@ -379,26 +379,26 @@ public class BuiltInCircuit {
 
         nodes.Add(new("LOW",  ConstValueLogic.FromBool(true)));
         nodes.Add(new("ZERO", ConstValueLogic.FromBool(false)));
-        nodes.Add(new("CLK", new InputConnector(1)));
-        nodes.Add(new("SET", new InputConnector(1)));
-        nodes.Add(new("DIR", new InputConnector(1)));
+        nodes.Add(new("CLK", new InputConnector()));
+        nodes.Add(new("SET", new InputConnector()));
+        nodes.Add(new("DIR", new InputConnector()));
 
         for (int i = 0; i < bitCount; i++) {
-            nodes.Add(new($"INITIAL{i}", new InputConnector(1)));
+            nodes.Add(new($"INITIAL{i}", new InputConnector()));
         }
         for (int i = 0; i < bitCount; i++) {
-            nodes.Add(new($"A{i}", new InputConnector(1)));
+            nodes.Add(new($"A{i}", new InputConnector()));
         }
         for (int i = 0; i < bitCount; i++) {
-            nodes.Add(new($"B{i}", new InputConnector(1)));
+            nodes.Add(new($"B{i}", new InputConnector()));
         }
         for (int i = 0; i < bitCount; i++) {
-            nodes.Add(new($"MAX{i}", new InputConnector(1)));
+            nodes.Add(new($"MAX{i}", new InputConnector()));
         }
 
-        nodes.Add(new("RANGE", new OutputConnector(1)));
+        nodes.Add(new("RANGE", new OutputConnector()));
         for (int i = 0; i < bitCount; i++) {
-            nodes.Add(new($"D{i}", new OutputConnector(1)));
+            nodes.Add(new($"D{i}", new OutputConnector()));
         }
 
         nodes.Add(new("not1", new NotLogic()));
@@ -517,19 +517,19 @@ public class BuiltInCircuit {
 
         // セレクタ入力 S0..S{M-1}
         for (int i = 0; i < numOfSelectorBit; i++) {
-            nodes.Add(new($"S{i}", new InputConnector(1)));
+            nodes.Add(new($"S{i}", new InputConnector()));
         }
 
         // データ入力 D{ch}_{b} (チャンネル順、ビット順)
         for (int ch = 0; ch < numOfChannel; ch++) {
             for (int b = 0; b < dataBit; b++) {
-                nodes.Add(new($"D{ch}_{b}", new InputConnector(1)));
+                nodes.Add(new($"D{ch}_{b}", new InputConnector()));
             }
         }
 
         // 出力 Y{b}
         for (int b = 0; b < dataBit; b++) {
-            nodes.Add(new($"Y{b}", new OutputConnector(1)));
+            nodes.Add(new($"Y{b}", new OutputConnector()));
         }
 
         // NOT ゲート not_s{i}
@@ -641,18 +641,18 @@ public class BuiltInCircuit {
 
         // セレクタ入力 S0..S{M-1}
         for (int i = 0; i < numOfSelectorBit; i++) {
-            nodes.Add(new($"S{i}", new InputConnector(1)));
+            nodes.Add(new($"S{i}", new InputConnector()));
         }
 
         // データ入力 D{b}
         for (int b = 0; b < dataBit; b++) {
-            nodes.Add(new($"D{b}", new InputConnector(1)));
+            nodes.Add(new($"D{b}", new InputConnector()));
         }
 
         // 出力 Y{ch}_{b}
         for (int ch = 0; ch < numOfChannel; ch++) {
             for (int b = 0; b < dataBit; b++) {
-                nodes.Add(new($"Y{ch}_{b}", new OutputConnector(1)));
+                nodes.Add(new($"Y{ch}_{b}", new OutputConnector()));
             }
         }
 
@@ -747,9 +747,9 @@ public class LogicSimulationTests {
     static void TestLogicGate(ILogicElement gate, LogicSignal[] inputs, LogicSignal expected) {
         int n = inputs.Length;
         var nodes = Enumerable.Range(0, n)
-            .Select(i => new LogicNode($"input{i}", new InputConnector(1)))
+            .Select(i => new LogicNode($"input{i}", new InputConnector()))
             .Append(new LogicNode("gate", gate))
-            .Append(new LogicNode("output", new OutputConnector(1)))
+            .Append(new LogicNode("output", new OutputConnector()))
             .ToArray();
 
         var connections = Enumerable.Range(0, n)
@@ -808,9 +808,9 @@ public class LogicSimulationTests {
     [TestCase(LogicSignal.X, LogicSignal.X)]
     public void NotLogicTest(LogicSignal input, LogicSignal expected) {
         var circuit = new Circuit([
-                new("input", new InputConnector(1)),
+                new("input", new InputConnector()),
                 new("not1", new NotLogic()),
-                new("output", new OutputConnector(1))
+                new("output", new OutputConnector())
             ],
             [
                 new(new LogicConnector("input", "out"), new LogicConnector("not1", "in")),
@@ -917,14 +917,14 @@ public class LogicSimulationTests {
     [TestCaseSource(nameof(NandSrFFLatchSimulationTest_Data))]
     public void NandSrFFLatchSimulationTest(SignalTestPattern pattern) {
         var circuit = new Circuit([
-                new("S", new InputConnector(1)),
-                new("R", new InputConnector(1)),
+                new("S", new InputConnector()),
+                new("R", new InputConnector()),
                 new("not1", new NotLogic()),
                 new("not2", new NotLogic()),
                 new("nand1", new NAndLogic(2)),
                 new("nand2", new NAndLogic(2)),
-                new("Q", new OutputConnector(1)),
-                new("~Q", new OutputConnector(1))
+                new("Q", new OutputConnector()),
+                new("~Q", new OutputConnector())
             ],
             [
                 new(new LogicConnector("S", "out"), new LogicConnector("not1", "in")),
@@ -1074,10 +1074,10 @@ public class LogicSimulationTests {
     [TestCase(LogicSignal.High, LogicSignal.Low, LogicSignal.Low)]
     public void CustomCircuitExpandTest(LogicSignal input1, LogicSignal input2, LogicSignal expected) {
         var andCircuit = new Circuit([
-                new("a", new InputConnector(1)),
-                new("b", new InputConnector(1)),
+                new("a", new InputConnector()),
+                new("b", new InputConnector()),
                 new("and1", new AndLogic(2)),
-                new("y", new OutputConnector(1))
+                new("y", new OutputConnector())
             ],
             [
                 new(new("a", "out"), new("and1", "in[0]")),
@@ -1090,10 +1090,10 @@ public class LogicSimulationTests {
         };
 
         var testCircuit = new Circuit([
-                new("x1", new InputConnector(1)),
-                new("x2", new InputConnector(1)),
+                new("x1", new InputConnector()),
+                new("x2", new InputConnector()),
                 new("and100", new CustomCircuit("andCircuit")),
-                new("result", new OutputConnector(1))
+                new("result", new OutputConnector())
             ],
             [
                 new(new("x1", "out"), new("and100", "a")),
@@ -1116,14 +1116,14 @@ public class LogicSimulationTests {
     public void MultipleConnectionCopyTest() {
         // 1つのOR素子の出力を3つの異なる素子の入力に接続する複数接続テスト
         var circuit = new Circuit(new LogicNode[] {
-                new("input", new InputConnector(1)),
+                new("input", new InputConnector()),
                 new("or1", new OrLogic(1)),
                 new("and1", new AndLogic(2)),
                 new("and2", new AndLogic(2)),
                 new("and3", new AndLogic(2)),
-                new("outputA", new OutputConnector(1)),
-                new("outputB", new OutputConnector(1)),
-                new("outputC", new OutputConnector(1))
+                new("outputA", new OutputConnector()),
+                new("outputB", new OutputConnector()),
+                new("outputC", new OutputConnector())
             },
             new LogicConnection[] {
                 // 入力 → OR[0]
@@ -2272,7 +2272,7 @@ public class ConstValueLogicTests {
     public void FromBool_OutputsCorrectSignal(bool v, LogicSignal expected) {
         var circuit = new Circuit([
                 new("cv", ConstValueLogic.FromBool(v)),
-                new("out0", new OutputConnector(1))
+                new("out0", new OutputConnector())
             ],
             [
                 new(new LogicConnector("cv", "out[0]"), new LogicConnector("out0", "in"))
@@ -2286,10 +2286,10 @@ public class ConstValueLogicTests {
     public void FromU8_4bit_OutputsCorrectBits() {
         var circuit = new Circuit([
                 new("cv", ConstValueLogic.FromU8(4, 0b1010)),
-                new("out0", new OutputConnector(1)),
-                new("out1", new OutputConnector(1)),
-                new("out2", new OutputConnector(1)),
-                new("out3", new OutputConnector(1))
+                new("out0", new OutputConnector()),
+                new("out1", new OutputConnector()),
+                new("out2", new OutputConnector()),
+                new("out3", new OutputConnector())
             ],
             [
                 new(new LogicConnector("cv", "out[0]"), new LogicConnector("out0", "in")),
@@ -2309,10 +2309,10 @@ public class ConstValueLogicTests {
     public void FromI8_Negative1_4bit_OutputsAllHigh() {
         var circuit = new Circuit([
                 new("cv", ConstValueLogic.FromI8(4, -1)),
-                new("out0", new OutputConnector(1)),
-                new("out1", new OutputConnector(1)),
-                new("out2", new OutputConnector(1)),
-                new("out3", new OutputConnector(1))
+                new("out0", new OutputConnector()),
+                new("out1", new OutputConnector()),
+                new("out2", new OutputConnector()),
+                new("out3", new OutputConnector())
             ],
             [
                 new(new LogicConnector("cv", "out[0]"), new LogicConnector("out0", "in")),
@@ -2332,9 +2332,9 @@ public class ConstValueLogicTests {
     public void ConstValueLogic_PropagatesTo_AndLogic() {
         var circuit = new Circuit([
                 new("cv", ConstValueLogic.FromBool(true)),
-                new("input", new InputConnector(1)),
+                new("input", new InputConnector()),
                 new("and1", new AndLogic(2)),
-                new("result", new OutputConnector(1))
+                new("result", new OutputConnector())
             ],
             [
                 new(new LogicConnector("cv", "out[0]"), new LogicConnector("and1", "in[0]")),
@@ -2378,5 +2378,103 @@ public class ConstValueLogicTests {
     public void FromI64_BitLength64_MinValue_Succeeds() {
         var cv = ConstValueLogic.FromI64(64, long.MinValue);
         Assert.That(cv.Value, Is.EqualTo(unchecked((ulong)long.MinValue)));
+    }
+}
+
+[TestFixture]
+public class ConnectorBitsInferenceTests {
+    [TestCase(true, true, true)]
+    [TestCase(true, false, false)]
+    [TestCase(false, true, false)]
+    [TestCase(false, false, false)]
+    public void InputOutputConnector_AutoInfer_WorksWithAndGate(bool a, bool b, bool expected) {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("B", new InputConnector()),
+                new("and", new AndLogic(2)),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("and", "in[0]")),
+                new(new LogicConnector("B", "out"), new LogicConnector("and", "in[1]")),
+                new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
+            ]);
+        var sim = new LogicSimulation(circuit);
+        sim.SetInput("A", 0, a.ToSignal());
+        sim.SetInput("B", 0, b.ToSignal());
+        sim.Step();
+        Assert.That(sim.GetOutput("out", 0), Is.EqualTo(expected.ToSignal()));
+    }
+
+    [Test]
+    public void InputOutputConnector_ExplicitDataBits_WorksWithAndGate() {
+        var circuit = new Circuit([
+                new("A", new InputConnector(1)),
+                new("and", new AndLogic(1)),
+                new("out", new OutputConnector(1))
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("and", "in[0]")),
+                new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
+            ]);
+        var sim = new LogicSimulation(circuit);
+        sim.SetInput("A", 0, LogicSignal.High);
+        sim.Step();
+        Assert.That(sim.GetOutput("out", 0), Is.EqualTo(LogicSignal.High));
+    }
+
+    [Test]
+    public void InputConnector_NoConnection_Throws() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("and", new AndLogic(1)),
+                new("out", new OutputConnector())
+            ],
+            [
+                // A は接続されていない
+                new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
+            ]);
+        Assert.Throws<ArgumentException>(() => new LogicSimulation(circuit));
+    }
+
+    [Test]
+    public void OutputConnector_MultipleSourceConnections_Throws() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("B", new InputConnector()),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("out", "in")),
+                new(new LogicConnector("B", "out"), new LogicConnector("out", "in"))
+            ]);
+        Assert.Throws<ArgumentException>(() => new LogicSimulation(circuit));
+    }
+
+    [Test]
+    public void InputConnector_ExplicitDataBits_MismatchWithConnectedPin_Throws() {
+        // AndLogic(2) の in[0] は 1bit。InputConnector(2) と不一致 → 例外
+        var circuit = new Circuit([
+                new("A", new InputConnector(2)),
+                new("and", new AndLogic(2)),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("and", "in[0]")),
+                new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
+            ]);
+        Assert.Throws<ArgumentException>(() => new LogicSimulation(circuit));
+    }
+
+    [TestCase(0)]
+    [TestCase(-1)]
+    public void InputConnector_InvalidDataBits_Throws(int dataBits) {
+        Assert.Throws<ArgumentException>(() => new InputConnector(dataBits));
+    }
+
+    [TestCase(0)]
+    [TestCase(-1)]
+    public void OutputConnector_InvalidDataBits_Throws(int dataBits) {
+        Assert.Throws<ArgumentException>(() => new OutputConnector(dataBits));
     }
 }
