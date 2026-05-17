@@ -909,14 +909,29 @@ public class LogicSimulation {
         }
     }
 
+    /// <summary>
+    /// CustomCircuit を含む回路をフラット化・コネクタ透過・ノード整理して展開します。
+    /// </summary>
     Circuit ExpandCustomCircuits(
         IReadOnlyDictionary<string, Circuit> circuitLibrary,
         Circuit originalCircuit) {
+        var (expandedNodes, expandedConnections) = FlattenCircuit(circuitLibrary, originalCircuit);
+        var resultConnections = SolveConnectors(expandedNodes, expandedConnections);
+        var resultNodes = CleanupNodes(expandedNodes);
+        return new Circuit(resultNodes, resultConnections);
+    }
+
+    /// <summary>
+    /// 全ノード・接続を prefix 付きでフラット化します。CustomCircuit を再帰的に展開します。
+    /// isTop フラグはトップレベル回路（level == 0）のノード・接続であることを示します。
+    /// </summary>
+    (Dictionary<string, (bool isTop, LogicNode node)> nodes,
+     List<(bool isTop, LogicConnection connection)> connections)
+    FlattenCircuit(IReadOnlyDictionary<string, Circuit> circuitLibrary, Circuit originalCircuit) {
         var expandedNodes = new Dictionary<string, (bool isTop, LogicNode node)>();
         var expandedConnections = new List<(bool isTop, LogicConnection connection)>();
 
-        // CustomCircuitで展開される回路の名前にプレフィックスをつけてユニークにする
-        void ExpandCircuit(string prefix, Circuit circuit, int level = 0) {
+        void Flatten(string prefix, Circuit circuit, int level) {
             // 接続する名前も展開する回路の名前をつけてユニークにする
             foreach (var connection in circuit.LogicConnections) {
                 var source = connection.Source;
@@ -937,13 +952,22 @@ public class LogicSimulation {
                     }
                     // ネストを示すプリフィックス
                     var idPrefix = $"{prefix}{node.LogicID}.";
-                    ExpandCircuit(idPrefix, circuitDef, level + 1);
+                    Flatten(idPrefix, circuitDef, level + 1);
                 }
             }
         }
 
-        ExpandCircuit("", originalCircuit);
+        Flatten("", originalCircuit, 0);
+        return (expandedNodes, expandedConnections);
+    }
 
+    /// <summary>
+    /// コネクタ（InputConnector/OutputConnector）を透過して、実際の接続（通常素子 ↔ トップレベルコネクタ）に変換します。
+    /// 接続のソースは1つしか接続されないことを前提としています（このメソッドが呼ばれるよりも先にエラー検知で弾いていること）。
+    /// </summary>
+    List<LogicConnection> SolveConnectors(
+        Dictionary<string, (bool isTop, LogicNode node)> expandedNodes,
+        List<(bool isTop, LogicConnection connection)> expandedConnections) {
         // 計算量を減らすために辞書にして接続先を高速で検索できるようにする
         var groupedSourceConnections = expandedConnections
             .GroupBy(x =>
@@ -952,61 +976,11 @@ public class LogicSimulation {
                 : $"{x.connection.Source.LogicID}.{x.connection.Source.PinName}")
             .ToDictionary(x => x.Key, x => x.ToArray());
 
-        // 接続のソースは1つしか接続されない
-        // このメソッドが呼ばれるよりも先にエラー検知で弾いていることを前提としている
-        // 指定された OutputConnectorから接続されている接続されている接続をリストに追加します。
-        void FindTargetConnections(HashSet<string> skipSourceConnectorNames, LogicConnector outputConnector, List<LogicConnector> resultConnections) {
-            if (!expandedNodes.TryGetValue(outputConnector.LogicID, out var sourceNode)) {
-                throw new ArgumentException($"logic ID not found: '{outputConnector}'");
-            }
-            if (sourceNode.node.LogicData is not OutputConnector and not InputConnector and not CustomCircuit) {
-                resultConnections.Add(outputConnector);
-                return;
-            }
-            // すでに処理済みのノードはスキップ
-            // CustomCircuit は "CC:" プレフィックスと PinName を加えてスキップキーとする。
-            // こうすることで同じ CustomCircuit の異なるピン（J と K など）を独立して処理でき、
-            // かつ内部の InputConnector のスキップキー（"LogicID" 形式）と競合しない。
-            var skipKey = sourceNode.node.LogicData is CustomCircuit
-                ? $"CC:{outputConnector.LogicID}:{outputConnector.PinName}"
-                : outputConnector.LogicID;
-            if (!skipSourceConnectorNames.Add(skipKey)) {
-                return;
-            }
-            if (!expandedNodes.TryGetValue(outputConnector.LogicID, out var targetNode)) {
-                throw new ArgumentException($"logic ID not found: '{outputConnector}'");
-            }
-            // 一番その側の回路の場合は、出力用のコネクタを残す
-            if (targetNode.isTop) {
-                if (targetNode.node.LogicData is OutputConnector) {
-                    resultConnections.Add(outputConnector);
-                    return;
-                }
-            }
-            if (targetNode.node.LogicData is OutputConnector or InputConnector) {
-                if (groupedSourceConnections.TryGetValue(outputConnector.LogicID, out var targetConnections)) {
-                    foreach (var targetConnection in targetConnections) {
-                        FindTargetConnections(
-                            skipSourceConnectorNames,
-                            targetConnection.connection.Target,
-                            resultConnections);
-                    }
-                }
-            } else if (targetNode.node.LogicData is CustomCircuit) {
-                    FindTargetConnections(
-                        skipSourceConnectorNames,
-                        new LogicConnector($"{outputConnector.LogicID}.{outputConnector.PinName}", ""),
-                        resultConnections);
-                } else {
-                    resultConnections.Add(outputConnector);
-                }
-        }
-
         var alreadyConnectedSourceConnectorNames = new HashSet<string>();
         var resultTargetConnectors = new List<LogicConnector>();
         var resultConnections = new List<LogicConnection>();
 
-        // トップレベルのInputConnectorとOutputConnectorは残す
+        // トップレベルの InputConnector と OutputConnector は残す
         foreach (var connection in expandedConnections) {
             if (!expandedNodes.TryGetValue(connection.connection.Source.LogicID, out var sourceNode)) {
                 throw new ArgumentException($"logic ID not found: '{connection.connection.Source.LogicID}'");
@@ -1017,22 +991,83 @@ public class LogicSimulation {
             }
             resultTargetConnectors.Clear();
             alreadyConnectedSourceConnectorNames.Clear();
-            FindTargetConnections(alreadyConnectedSourceConnectorNames, connection.connection.Target, resultTargetConnectors);
+            FindTargetConnections(expandedNodes, groupedSourceConnections, alreadyConnectedSourceConnectorNames, connection.connection.Target, resultTargetConnectors);
             foreach (var targetConnector in resultTargetConnectors) {
                 resultConnections.Add(new LogicConnection(connection.connection.Source, targetConnector));
             }
         }
+        return resultConnections;
+    }
 
-        // 不要なノードを削除する
-        // トップレベルの InputConnector と OutputConnector は残すtrue
-        var resultNodes = expandedNodes
+    /// <summary>
+    /// 指定された接続ターゲットから、コネクタを再帰的に辿って実際の接続先をリストに追加します。
+    /// </summary>
+    void FindTargetConnections(
+        Dictionary<string, (bool isTop, LogicNode node)> expandedNodes,
+        Dictionary<string, (bool isTop, LogicConnection connection)[]> groupedSourceConnections,
+        HashSet<string> skipSourceConnectorNames,
+        LogicConnector outputConnector,
+        List<LogicConnector> resultConnections) {
+        if (!expandedNodes.TryGetValue(outputConnector.LogicID, out var sourceNode)) {
+            throw new ArgumentException($"logic ID not found: '{outputConnector}'");
+        }
+        if (sourceNode.node.LogicData is not OutputConnector and not InputConnector and not CustomCircuit) {
+            resultConnections.Add(outputConnector);
+            return;
+        }
+        // すでに処理済みのノードはスキップ
+        // CustomCircuit は "CC:" プレフィックスと PinName を加えてスキップキーとする。
+        // こうすることで同じ CustomCircuit の異なるピン（J と K など）を独立して処理でき、
+        // かつ内部の InputConnector のスキップキー（"LogicID" 形式）と競合しない。
+        var skipKey = sourceNode.node.LogicData is CustomCircuit
+            ? $"CC:{outputConnector.LogicID}:{outputConnector.PinName}"
+            : outputConnector.LogicID;
+        if (!skipSourceConnectorNames.Add(skipKey)) {
+            return;
+        }
+        if (!expandedNodes.TryGetValue(outputConnector.LogicID, out var targetNode)) {
+            throw new ArgumentException($"logic ID not found: '{outputConnector}'");
+        }
+        // 一番外側の回路の場合は、出力用のコネクタを残す
+        if (targetNode.isTop) {
+            if (targetNode.node.LogicData is OutputConnector) {
+                resultConnections.Add(outputConnector);
+                return;
+            }
+        }
+        if (targetNode.node.LogicData is OutputConnector or InputConnector) {
+            if (groupedSourceConnections.TryGetValue(outputConnector.LogicID, out var targetConnections)) {
+                foreach (var targetConnection in targetConnections) {
+                    FindTargetConnections(
+                        expandedNodes,
+                        groupedSourceConnections,
+                        skipSourceConnectorNames,
+                        targetConnection.connection.Target,
+                        resultConnections);
+                }
+            }
+        } else if (targetNode.node.LogicData is CustomCircuit) {
+            FindTargetConnections(
+                expandedNodes,
+                groupedSourceConnections,
+                skipSourceConnectorNames,
+                new LogicConnector($"{outputConnector.LogicID}.{outputConnector.PinName}", ""),
+                resultConnections);
+        } else {
+            resultConnections.Add(outputConnector);
+        }
+    }
+
+    /// <summary>
+    /// CustomCircuit ノードと、トップレベル以外の InputConnector/OutputConnector ノードを削除します。
+    /// </summary>
+    LogicNode[] CleanupNodes(Dictionary<string, (bool isTop, LogicNode node)> expandedNodes) {
+        return expandedNodes
             .Where(x =>
                 x.Value.node.LogicData is not CustomCircuit &&
                 (x.Value.isTop || x.Value.node.LogicData is not InputConnector and not OutputConnector))
             .Select(x => x.Value.node)
             .ToArray();
-
-        return new Circuit(resultNodes, resultConnections);
     }
 
     public void Step() {
