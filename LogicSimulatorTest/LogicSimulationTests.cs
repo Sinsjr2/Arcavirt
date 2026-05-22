@@ -409,11 +409,9 @@ public class BuiltInCircuit {
         nodes.Add(new("comp4", new CustomCircuit("comparator_16bit")));
         nodes.Add(new("dff", new CustomCircuit("d_ff")));
 
-        for (int i = 0; i < bitCount; i++) {
-            nodes.Add(new($"mux1_{i}", new CustomCircuit("mux_16bit_1sel")));
-            nodes.Add(new($"mux2_{i}", new CustomCircuit("mux_16bit_1sel")));
-        }
-        nodes.Add(new("mux3", new CustomCircuit("mux_2bit_1sel")));
+        nodes.Add(new($"mux1", new CustomCircuit("mux_16bit_1sel")));
+        nodes.Add(new($"mux2", new CustomCircuit("mux_16bit_1sel")));
+        nodes.Add(new("mux3", new CustomCircuit("mux_1bit_1sel")));
 
         nodes.Add(new("and1", new AndLogic(2)));
         nodes.Add(new("and2", new AndLogic(2)));
@@ -437,14 +435,14 @@ public class BuiltInCircuit {
         wires.Add(new(new LogicConnector("or1", "out"), new LogicConnector("counter", "SET")));
 
         for (int i = 0; i < bitCount; i++) {
-            wires.Add(new(new LogicConnector("ZERO", "out[0]"), new LogicConnector($"mux1_{i}", $"D0_{i}")));
-            wires.Add(new(new LogicConnector($"MAX{i}", "out"), new LogicConnector($"mux1_{i}", $"D1_{i}")));
-            wires.Add(new(new LogicConnector($"mux1_{i}", $"Y{i}"), new LogicConnector($"mux2_{i}", $"D0_{i}")));
-            wires.Add(new(new LogicConnector("DIR", "out"), new LogicConnector($"mux1_{i}", "S0")));
-            wires.Add(new(new LogicConnector($"INITIAL{i}", "out"), new LogicConnector($"mux2_{i}", $"D1_{i}")));
-            wires.Add(new(new LogicConnector($"mux2_{i}", $"Y{i}"), new LogicConnector("counter", $"INITIAL{i}")));
-            wires.Add(new(new LogicConnector("SET", "out"), new LogicConnector($"mux2_{i}", "S0")));
+            wires.Add(new(new LogicConnector("ZERO", "out[0]"), new LogicConnector("mux1", $"D0_{i}")));
+            wires.Add(new(new LogicConnector($"MAX{i}", "out"), new LogicConnector("mux1", $"D1_{i}")));
+            wires.Add(new(new LogicConnector("mux1", $"Y{i}"), new LogicConnector($"mux2", $"D0_{i}")));
+            wires.Add(new(new LogicConnector($"INITIAL{i}", "out"), new LogicConnector("mux2", $"D1_{i}")));
+            wires.Add(new(new LogicConnector("mux2", $"Y{i}"), new LogicConnector("counter", $"INITIAL{i}")));
         }
+        wires.Add(new(new LogicConnector("DIR", "out"), new LogicConnector($"mux1", "S0")));
+        wires.Add(new(new LogicConnector("SET", "out"), new LogicConnector("mux2", "S0")));
 
         for (int i = 0; i < bitCount; i++) {
             wires.Add(new(new LogicConnector($"A{i}", "out"), new LogicConnector("comp1", $"A{i}")));
@@ -735,6 +733,7 @@ public class BuiltInCircuit {
         { "ud_counter_4bit", UDCounter4Bit },
         { "ud_counter_8bit", UDCounter8Bit },
         { "ud_counter_16bit", UDCounter16Bit },
+        { "mux_1bit_1sel", CreateMultiplexer(1, 1) },
         { "mux_2bit_1sel", CreateMultiplexer(2, 1) },
         { "mux_16bit_1sel", CreateMultiplexer(16, 1) },
     };
@@ -2612,6 +2611,53 @@ public class InputConnectionValidationTests {
         Assert.That(sim, Is.Null);
         Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
             e.NodeId == "and" && e.PinName == "in[0]" && e.Kind == CircuitErrorKind.MultipleSourceConnections));
+    }
+
+    [Test]
+    public void TryBuild_UnconnectedGateInput_ReportsUnconnectedInput() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("and", new AndLogic(2)),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("and", "in[0]")),
+                new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
+                // and.in[1] は未接続
+            ]);
+        Assert.That(LogicSimulation.TryBuild(circuit, out _, out var errors), Is.False);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "and" && e.PinName == "in[1]" && e.Kind == CircuitErrorKind.UnconnectedInput));
+    }
+
+    [Test]
+    public void TryBuild_BothGateInputsUnconnected_ReportsBothPins() {
+        var circuit = new Circuit([
+                new("and", new AndLogic(2)),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
+                // and.in[0], and.in[1] 両方とも未接続
+            ]);
+        Assert.That(LogicSimulation.TryBuild(circuit, out _, out var errors), Is.False);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "and" && e.PinName == "in[0]" && e.Kind == CircuitErrorKind.UnconnectedInput));
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "and" && e.PinName == "in[1]" && e.Kind == CircuitErrorKind.UnconnectedInput));
+    }
+
+    [Test]
+    public void TryBuild_InputConnectorWithNoOutgoing_NotReportedAsUnconnectedInput() {
+        // InputConnector は入力ピンを持たない（ソース素子）なので UnconnectedInput にならない
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("out", new OutputConnector())
+            ],
+            []);
+        Assert.That(LogicSimulation.TryBuild(circuit, out _, out var errors), Is.False);
+        Assert.That(errors, Has.None.Matches<CircuitError>(e =>
+            e.NodeId == "A" && e.Kind == CircuitErrorKind.UnconnectedInput));
     }
 
     [Test]

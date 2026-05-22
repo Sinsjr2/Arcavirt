@@ -794,7 +794,8 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
 
         var pinWidthMap = BuildPinWidthMap(nodes, factories);
         var (resolvedBits, resolveErrors) = ResolveConnectorBits(nodes, connections, pinWidthMap);
-        var validateErrors = ValidateInputConnections(nodes, connections, factories);
+        var executorAndDefinitionsList = BuildExecutorContexts(nodes, factories, resolvedBits);
+        var validateErrors = ValidateInputConnections(executorAndDefinitionsList, connections);
 
         var allErrors = new List<CircuitError>(resolveErrors.Count + validateErrors.Count);
         allErrors.AddRange(resolveErrors);
@@ -803,7 +804,6 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
             return (null, allErrors.ToArray());
         }
 
-        var executorAndDefinitionsList = BuildExecutorContexts(nodes, factories, resolvedBits);
         logicIdAndPinNameToPinIndex = BuildPinIndex(executorAndDefinitionsList);
         ResolveConnections(connections);
         return (this, []);
@@ -882,7 +882,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
             .ToArray();
         if (inputConnectorNodes.Length > 0) {
             var inputConnectorDefs = inputConnectorNodes
-                .Select(n => new IOConnectorDefinition(n.LogicID, [], [new PinDefinition("out", resolvedBits[n.LogicID])]))
+                .Select(n => new IOConnectorDefinition(n.LogicID, [], [new PinDefinition("out", resolvedBits.GetValueOrDefault(n.LogicID, 1))]))
                 .ToArray();
             AddConnectorGroup(inputConnectorNodes, inputConnectorDefs);
         }
@@ -893,7 +893,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
             .ToArray();
         if (outputConnectorNodes.Length > 0) {
             var outputConnectorDefs = outputConnectorNodes
-                .Select(n => new IOConnectorDefinition(n.LogicID, [new PinDefinition("in", resolvedBits[n.LogicID])], []))
+                .Select(n => new IOConnectorDefinition(n.LogicID, [new PinDefinition("in", resolvedBits.GetValueOrDefault(n.LogicID, 1))], []))
                 .ToArray();
             AddConnectorGroup(outputConnectorNodes, outputConnectorDefs);
         }
@@ -1223,12 +1223,11 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     }
 
     /// <summary>
-    /// 全素子の入力ピン複数ソース接続チェック、および OutputConnector の未接続チェックを行います。
+    /// 全素子の入力ピン未接続チェックおよび複数ソース接続チェックを行います。
     /// </summary>
     static IReadOnlyList<CircuitError> ValidateInputConnections(
-        IReadOnlyList<LogicNode> nodes,
-        IReadOnlyList<LogicConnection> connections,
-        Dictionary<Type, ILogicExecutorFactory> factories) {
+        IReadOnlyList<(ExecutorContext ctx, IOConnectorDefinition[] defs)> executorAndDefinitionsList,
+        IReadOnlyList<LogicConnection> connections) {
 
         var errors = new List<CircuitError>();
 
@@ -1239,35 +1238,20 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
             inputPinSourceCount[key] = cnt + 1;
         }
 
-        foreach (var node in nodes) {
-            var id = node.LogicID;
-
-            if (node.LogicData is InputConnector) {
-                continue;
-            }
-
-            if (node.LogicData is OutputConnector) {
-                var key = (id, "in");
-                if (!inputPinSourceCount.TryGetValue(key, out var cnt) || cnt == 0) {
-                    errors.Add(new CircuitError(id, "in", CircuitErrorKind.UnconnectedInput,
-                        $"OutputConnector '{id}' input pin 'in' has no source connection."));
-                } else if (cnt > 1) {
-                    errors.Add(new CircuitError(id, "in", CircuitErrorKind.MultipleSourceConnections,
-                        $"OutputConnector '{id}' input pin 'in' has {cnt} source connections, but only 1 is allowed."));
-                }
-                continue;
-            }
-
-            if (!factories.TryGetValue(node.LogicData.GetType(), out var factory)) {
-                continue;
-            }
-
-            var def = factory.GetConnectorDefinition(node);
-            foreach (var pin in def.InputPins) {
-                var key = (id, pin.PinName);
-                if (inputPinSourceCount.TryGetValue(key, out var cnt) && cnt > 1) {
-                    errors.Add(new CircuitError(id, pin.PinName, CircuitErrorKind.MultipleSourceConnections,
-                        $"Node '{id}' input pin '{pin.PinName}' has {cnt} source connections, but only 1 is allowed."));
+        foreach (var (_, defs) in executorAndDefinitionsList) {
+            foreach (var def in defs) {
+                foreach (var pin in def.InputPins) {
+                    var key = (def.LogicID, pin.PinName);
+                    inputPinSourceCount.TryGetValue(key, out var cnt);
+                    if (cnt == 0) {
+                        errors.Add(new CircuitError(def.LogicID, pin.PinName,
+                            CircuitErrorKind.UnconnectedInput,
+                            $"Input pin '{pin.PinName}' of '{def.LogicID}' has no source connection."));
+                    } else if (cnt > 1) {
+                        errors.Add(new CircuitError(def.LogicID, pin.PinName,
+                            CircuitErrorKind.MultipleSourceConnections,
+                            $"Input pin '{pin.PinName}' of '{def.LogicID}' has {cnt} source connections, but only 1 is allowed."));
+                    }
                 }
             }
         }
