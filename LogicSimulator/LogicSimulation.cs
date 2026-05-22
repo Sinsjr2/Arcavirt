@@ -3,6 +3,22 @@ using System.Runtime.CompilerServices;
 
 namespace LogicSimulator;
 
+public enum CircuitErrorKind {
+    UnconnectedInput,
+    MultipleSourceConnections,
+    BitWidthMismatch,
+    UnresolvableConnector,
+    InvalidNodeReference,
+    JunctionBitSumMismatch,
+}
+
+public record CircuitError(
+    string NodeId,
+    string? PinName,
+    CircuitErrorKind Kind,
+    string Message
+);
+
 /// <summary>
 /// 
 /// </summary>
@@ -657,7 +673,7 @@ public class LogicSimulation {
     /// </summary>
     readonly List<int> outputValueChangedExecutorIndexes = [];
 
-    readonly Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>> logicIdAndPinNameToPinIndex;
+    Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>> logicIdAndPinNameToPinIndex = null!;
 
     class ExecutorContext {
         public ILogicExecutor Executor;
@@ -736,12 +752,23 @@ public class LogicSimulation {
         }
     }
 
-    public LogicSimulation(Circuit circuit)
-        : this(circuit, new Dictionary<string, Circuit>()) {
+    LogicSimulation() { }
+
+public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimulation? simulation, out CircuitError[] errors, IReadOnlyDictionary<string, Circuit>? circuitLibrary = null) {
+        var instance = new LogicSimulation();
+        var (result, errorList) = instance.BuildCore(circuit, CreateDefaultFactories(), circuitLibrary);
+        if (errorList.Length > 0) {
+            simulation = null;
+            errors = errorList;
+            return false;
+        }
+        simulation = result!;
+        errors = errorList;
+        return true;
     }
 
-    public LogicSimulation(Circuit circuit, IReadOnlyDictionary<string, Circuit> circuitLibrary)
-        : this(circuit, new Dictionary<Type, ILogicExecutorFactory> {
+    static Dictionary<Type, ILogicExecutorFactory> CreateDefaultFactories() {
+        return new Dictionary<Type, ILogicExecutorFactory> {
             { typeof(AndLogic), new LogicExecutorFactory<AndLogic>(new AndLogicExecutorFactory()) },
             { typeof(OrLogic), new LogicExecutorFactory<OrLogic>(new OrLogicExecutorFactory()) },
             { typeof(NotLogic), new LogicExecutorFactory<NotLogic>(new NotLogicExecutorFactory()) },
@@ -749,11 +776,14 @@ public class LogicSimulation {
             { typeof(NOrLogic), new LogicExecutorFactory<NOrLogic>(new NOrLogicExecutorFactory()) },
             { typeof(XOrLogic), new LogicExecutorFactory<XOrLogic>(new XOrLogicExecutorFactory()) },
             { typeof(ConstValueLogic), new LogicExecutorFactory<ConstValueLogic>(new ConstValueLogicExecutorFactory()) },
-        }, circuitLibrary) {
+        };
     }
 
+    (LogicSimulation? simulation, CircuitError[] errors) BuildCore(
+        Circuit circuit,
+        Dictionary<Type, ILogicExecutorFactory> factories,
+        IReadOnlyDictionary<string, Circuit>? circuitLibrary) {
 
-    public LogicSimulation(Circuit circuit, Dictionary<Type, ILogicExecutorFactory> factories, IReadOnlyDictionary<string, Circuit>? circuitLibrary = null) {
         IReadOnlyList<LogicNode> nodes = circuit.LogicNodes;
         IReadOnlyList<LogicConnection> connections = circuit.LogicConnections;
         if (circuitLibrary != null) {
@@ -762,10 +792,21 @@ public class LogicSimulation {
             connections = expanded.LogicConnections;
         }
 
-        var resolvedBits = ResolveConnectorBits(nodes, connections, factories);
+        var pinWidthMap = BuildPinWidthMap(nodes, factories);
+        var (resolvedBits, resolveErrors) = ResolveConnectorBits(nodes, connections, pinWidthMap);
         var executorAndDefinitionsList = BuildExecutorContexts(nodes, factories, resolvedBits);
+        var validateErrors = ValidateInputConnections(executorAndDefinitionsList, connections);
+
+        var allErrors = new List<CircuitError>(resolveErrors.Count + validateErrors.Count);
+        allErrors.AddRange(resolveErrors);
+        allErrors.AddRange(validateErrors);
+        if (allErrors.Count > 0) {
+            return (null, allErrors.ToArray());
+        }
+
         logicIdAndPinNameToPinIndex = BuildPinIndex(executorAndDefinitionsList);
         ResolveConnections(connections);
+        return (this, []);
     }
 
     /// <summary>
@@ -841,7 +882,7 @@ public class LogicSimulation {
             .ToArray();
         if (inputConnectorNodes.Length > 0) {
             var inputConnectorDefs = inputConnectorNodes
-                .Select(n => new IOConnectorDefinition(n.LogicID, [], [new PinDefinition("out", resolvedBits[n.LogicID])]))
+                .Select(n => new IOConnectorDefinition(n.LogicID, [], [new PinDefinition("out", resolvedBits.GetValueOrDefault(n.LogicID, 1))]))
                 .ToArray();
             AddConnectorGroup(inputConnectorNodes, inputConnectorDefs);
         }
@@ -852,7 +893,7 @@ public class LogicSimulation {
             .ToArray();
         if (outputConnectorNodes.Length > 0) {
             var outputConnectorDefs = outputConnectorNodes
-                .Select(n => new IOConnectorDefinition(n.LogicID, [new PinDefinition("in", resolvedBits[n.LogicID])], []))
+                .Select(n => new IOConnectorDefinition(n.LogicID, [new PinDefinition("in", resolvedBits.GetValueOrDefault(n.LogicID, 1))], []))
                 .ToArray();
             AddConnectorGroup(outputConnectorNodes, outputConnectorDefs);
         }
@@ -995,36 +1036,12 @@ public class LogicSimulation {
     }
 
     /// <summary>
-    /// InputConnector/OutputConnector のビット幅を接続グラフから推論し、確定します。
-    /// <para>
-    /// DataBits が明示されている場合は接続との整合性チェックを行います。
-    /// DataBits が null の場合は接続先/接続元のピン幅から推論します。
-    /// </para>
+    /// 通常素子（InputConnector/OutputConnector 以外）のピン幅マップを構築します。
     /// </summary>
-    IReadOnlyDictionary<string, int> ResolveConnectorBits(
+    static Dictionary<string, Dictionary<string, int>> BuildPinWidthMap(
         IReadOnlyList<LogicNode> nodes,
-        IReadOnlyList<LogicConnection> connections,
         Dictionary<Type, ILogicExecutorFactory> factories) {
 
-        var connectorNodes = nodes
-            .Where(n => n.LogicData is InputConnector or OutputConnector)
-            .ToDictionary(n => n.LogicID);
-
-        // OutputConnector への複数接続元チェック
-        var outputConnectorInboundCounts = new Dictionary<string, int>();
-        foreach (var conn in connections) {
-            var targetNode = connectorNodes.GetValueOrDefault(conn.Target.LogicID);
-            if (targetNode?.LogicData is OutputConnector) {
-                outputConnectorInboundCounts.TryGetValue(conn.Target.LogicID, out var cnt);
-                outputConnectorInboundCounts[conn.Target.LogicID] = cnt + 1;
-                if (cnt + 1 > 1) {
-                    throw new ArgumentException(
-                        $"OutputConnector '{conn.Target.LogicID}' has multiple source connections, which is not allowed.");
-                }
-            }
-        }
-
-        // 通常素子のピン幅マップを構築
         var pinWidthMap = new Dictionary<string, Dictionary<string, int>>();
         foreach (var node in nodes) {
             if (node.LogicData is InputConnector or OutputConnector) {
@@ -1043,6 +1060,24 @@ public class LogicSimulation {
             }
             pinWidthMap[node.LogicID] = pinWidths;
         }
+        return pinWidthMap;
+    }
+
+    /// <summary>
+    /// InputConnector/OutputConnector のビット幅を接続グラフから推論し、確定します。
+    /// <para>
+    /// DataBits が明示されている場合は接続との整合性チェックを行います。
+    /// DataBits が null の場合は接続先/接続元のピン幅から推論します。
+    /// </para>
+    /// </summary>
+    static (IReadOnlyDictionary<string, int> resolvedBits, IReadOnlyList<CircuitError> errors) ResolveConnectorBits(
+        IReadOnlyList<LogicNode> nodes,
+        IReadOnlyList<LogicConnection> connections,
+        IReadOnlyDictionary<string, Dictionary<string, int>> pinWidthMap) {
+
+        var connectorNodes = nodes
+            .Where(n => n.LogicData is InputConnector or OutputConnector)
+            .ToDictionary(n => n.LogicID);
 
         var resolved = new Dictionary<string, int>();
 
@@ -1055,6 +1090,7 @@ public class LogicSimulation {
             }
         }
 
+        var errors = new List<CircuitError>();
         // 接続グラフを走査してコネクタのビット幅を反復解決（null は推論、明示指定は整合性チェック）
         var checkedExplicit = new HashSet<string>();
         bool madeProgress = true;
@@ -1067,7 +1103,6 @@ public class LogicSimulation {
                     continue;
                 }
                 if (node.LogicData is InputConnector inputConnector) {
-                    // このコネクタを Source とする接続を調べる
                     var outgoingConnections = connections
                         .Where(c => c.Source.LogicID == id)
                         .ToArray();
@@ -1099,13 +1134,17 @@ public class LogicSimulation {
                         continue;
                     }
                     if (widths.Distinct().Count() > 1) {
-                        throw new ArgumentException(
-                            $"InputConnector '{id}' has conflicting bit widths: {widths[0]} and {widths.First(w => w != widths[0])}.");
+                        errors.Add(new CircuitError(id, null, CircuitErrorKind.BitWidthMismatch,
+                            $"InputConnector '{id}' has conflicting bit widths: {widths[0]} and {widths.First(w => w != widths[0])}."));
+                        checkedExplicit.Add(id);
+                        continue;
                     }
                     var inferredWidth = widths[0];
                     if (inputConnector.DataBits.HasValue && inputConnector.DataBits.Value != inferredWidth) {
-                        throw new ArgumentException(
-                            $"InputConnector '{id}' DataBits={inputConnector.DataBits.Value} does not match connected pin bit width {inferredWidth}.");
+                        errors.Add(new CircuitError(id, null, CircuitErrorKind.BitWidthMismatch,
+                            $"InputConnector '{id}' DataBits={inputConnector.DataBits.Value} does not match connected pin bit width {inferredWidth}."));
+                        checkedExplicit.Add(id);
+                        continue;
                     }
                     if (!isExplicit) {
                         resolved[id] = inferredWidth;
@@ -1114,14 +1153,15 @@ public class LogicSimulation {
                         checkedExplicit.Add(id);
                     }
                 } else if (node.LogicData is OutputConnector outputConnector) {
-                    // このコネクタを Target とする接続を調べる（最大1つ）
-                    var incomingConn = connections.FirstOrDefault(c => c.Target.LogicID == id);
-                    if (incomingConn == null) {
+                    var incomingConns = connections.Where(c => c.Target.LogicID == id).ToArray();
+                    if (incomingConns.Length == 0) {
                         if (isExplicit) {
                             checkedExplicit.Add(id);
                         }
                         continue;
                     }
+                    // 複数ソースがある場合はどれか1つを選ぶ（エラーは ValidateInputConnections で報告）
+                    var incomingConn = incomingConns[0];
                     var sourceId = incomingConn.Source.LogicID;
                     var sourcePin = incomingConn.Source.PinName;
                     int? inferredWidth = null;
@@ -1137,8 +1177,10 @@ public class LogicSimulation {
                         continue;
                     }
                     if (outputConnector.DataBits.HasValue && outputConnector.DataBits.Value != inferredWidth.Value) {
-                        throw new ArgumentException(
-                            $"OutputConnector '{id}' DataBits={outputConnector.DataBits.Value} does not match connected pin bit width {inferredWidth.Value}.");
+                        errors.Add(new CircuitError(id, null, CircuitErrorKind.BitWidthMismatch,
+                            $"OutputConnector '{id}' DataBits={outputConnector.DataBits.Value} does not match connected pin bit width {inferredWidth.Value}."));
+                        checkedExplicit.Add(id);
+                        continue;
                     }
                     if (!isExplicit) {
                         resolved[id] = inferredWidth.Value;
@@ -1150,7 +1192,7 @@ public class LogicSimulation {
             }
         }
 
-        // 解決できなかったコネクタのチェック
+        // 解決できなかったコネクタをエラーとして収集
         foreach (var node in connectorNodes.Values) {
             if (resolved.ContainsKey(node.LogicID)) {
                 continue;
@@ -1159,23 +1201,62 @@ public class LogicSimulation {
             if (node.LogicData is InputConnector) {
                 bool hasOutgoing = connections.Any(c => c.Source.LogicID == id);
                 if (!hasOutgoing) {
-                    throw new ArgumentException(
-                        $"InputConnector '{id}' has no connection. Cannot infer bit width.");
+                    errors.Add(new CircuitError(id, null, CircuitErrorKind.UnresolvableConnector,
+                        $"InputConnector '{id}' has no connection. Cannot infer bit width."));
+                } else {
+                    errors.Add(new CircuitError(id, null, CircuitErrorKind.UnresolvableConnector,
+                        $"InputConnector '{id}' cannot resolve bit width: only connected to unresolved connectors."));
                 }
-                throw new ArgumentException(
-                    $"InputConnector '{id}' cannot resolve bit width: only connected to unresolved connectors.");
             } else if (node.LogicData is OutputConnector) {
                 bool hasIncoming = connections.Any(c => c.Target.LogicID == id);
                 if (!hasIncoming) {
-                    throw new ArgumentException(
-                        $"OutputConnector '{id}' has no connection. Cannot infer bit width.");
+                    errors.Add(new CircuitError(id, null, CircuitErrorKind.UnresolvableConnector,
+                        $"OutputConnector '{id}' has no connection. Cannot infer bit width."));
+                } else {
+                    errors.Add(new CircuitError(id, null, CircuitErrorKind.UnresolvableConnector,
+                        $"OutputConnector '{id}' cannot resolve bit width: only connected to unresolved connectors."));
                 }
-                throw new ArgumentException(
-                    $"OutputConnector '{id}' cannot resolve bit width: only connected to unresolved connectors.");
             }
         }
 
-        return resolved;
+        return (resolved, errors);
+    }
+
+    /// <summary>
+    /// 全素子の入力ピン未接続チェックおよび複数ソース接続チェックを行います。
+    /// </summary>
+    static IReadOnlyList<CircuitError> ValidateInputConnections(
+        IReadOnlyList<(ExecutorContext ctx, IOConnectorDefinition[] defs)> executorAndDefinitionsList,
+        IReadOnlyList<LogicConnection> connections) {
+
+        var errors = new List<CircuitError>();
+
+        var inputPinSourceCount = new Dictionary<(string nodeId, string pinName), int>();
+        foreach (var conn in connections) {
+            var key = (conn.Target.LogicID, conn.Target.PinName);
+            inputPinSourceCount.TryGetValue(key, out var cnt);
+            inputPinSourceCount[key] = cnt + 1;
+        }
+
+        foreach (var (_, defs) in executorAndDefinitionsList) {
+            foreach (var def in defs) {
+                foreach (var pin in def.InputPins) {
+                    var key = (def.LogicID, pin.PinName);
+                    inputPinSourceCount.TryGetValue(key, out var cnt);
+                    if (cnt == 0) {
+                        errors.Add(new CircuitError(def.LogicID, pin.PinName,
+                            CircuitErrorKind.UnconnectedInput,
+                            $"Input pin '{pin.PinName}' of '{def.LogicID}' has no source connection."));
+                    } else if (cnt > 1) {
+                        errors.Add(new CircuitError(def.LogicID, pin.PinName,
+                            CircuitErrorKind.MultipleSourceConnections,
+                            $"Input pin '{pin.PinName}' of '{def.LogicID}' has {cnt} source connections, but only 1 is allowed."));
+                    }
+                }
+            }
+        }
+
+        return errors;
     }
 
     /// <summary>

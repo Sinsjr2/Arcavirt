@@ -409,11 +409,9 @@ public class BuiltInCircuit {
         nodes.Add(new("comp4", new CustomCircuit("comparator_16bit")));
         nodes.Add(new("dff", new CustomCircuit("d_ff")));
 
-        for (int i = 0; i < bitCount; i++) {
-            nodes.Add(new($"mux1_{i}", new CustomCircuit("mux_16bit_1sel")));
-            nodes.Add(new($"mux2_{i}", new CustomCircuit("mux_16bit_1sel")));
-        }
-        nodes.Add(new("mux3", new CustomCircuit("mux_2bit_1sel")));
+        nodes.Add(new($"mux1", new CustomCircuit("mux_16bit_1sel")));
+        nodes.Add(new($"mux2", new CustomCircuit("mux_16bit_1sel")));
+        nodes.Add(new("mux3", new CustomCircuit("mux_1bit_1sel")));
 
         nodes.Add(new("and1", new AndLogic(2)));
         nodes.Add(new("and2", new AndLogic(2)));
@@ -431,21 +429,20 @@ public class BuiltInCircuit {
         wires.Add(new(new LogicConnector("DIR", "out"), new LogicConnector("counter", "DIR")));
         wires.Add(new(new LogicConnector("SET", "out"), new LogicConnector("or1", "in[1]")));
         wires.Add(new(new LogicConnector("SET", "out"), new LogicConnector("dff", "Clr")));
-        wires.Add(new(new LogicConnector("LOW", "out[0]"), new LogicConnector("counter", "LOW")));
 
         wires.Add(new(new LogicConnector("not1", "out"), new LogicConnector("and1", "in[0]")));
         wires.Add(new(new LogicConnector("and1", "out"), new LogicConnector("or1", "in[0]")));
         wires.Add(new(new LogicConnector("or1", "out"), new LogicConnector("counter", "SET")));
 
         for (int i = 0; i < bitCount; i++) {
-            wires.Add(new(new LogicConnector("ZERO", "out[0]"), new LogicConnector($"mux1_{i}", $"D0_{i}")));
-            wires.Add(new(new LogicConnector($"MAX{i}", "out"), new LogicConnector($"mux1_{i}", $"D1_{i}")));
-            wires.Add(new(new LogicConnector($"mux1_{i}", $"Y{i}"), new LogicConnector($"mux2_{i}", $"D0_{i}")));
-            wires.Add(new(new LogicConnector("DIR", "out"), new LogicConnector($"mux1_{i}", "S0")));
-            wires.Add(new(new LogicConnector($"INITIAL{i}", "out"), new LogicConnector($"mux2_{i}", $"D1_{i}")));
-            wires.Add(new(new LogicConnector($"mux2_{i}", $"Y{i}"), new LogicConnector("counter", $"INITIAL{i}")));
-            wires.Add(new(new LogicConnector("SET", "out"), new LogicConnector($"mux2_{i}", "S0")));
+            wires.Add(new(new LogicConnector("ZERO", "out[0]"), new LogicConnector("mux1", $"D0_{i}")));
+            wires.Add(new(new LogicConnector($"MAX{i}", "out"), new LogicConnector("mux1", $"D1_{i}")));
+            wires.Add(new(new LogicConnector("mux1", $"Y{i}"), new LogicConnector($"mux2", $"D0_{i}")));
+            wires.Add(new(new LogicConnector($"INITIAL{i}", "out"), new LogicConnector("mux2", $"D1_{i}")));
+            wires.Add(new(new LogicConnector("mux2", $"Y{i}"), new LogicConnector("counter", $"INITIAL{i}")));
         }
+        wires.Add(new(new LogicConnector("DIR", "out"), new LogicConnector($"mux1", "S0")));
+        wires.Add(new(new LogicConnector("SET", "out"), new LogicConnector("mux2", "S0")));
 
         for (int i = 0; i < bitCount; i++) {
             wires.Add(new(new LogicConnector($"A{i}", "out"), new LogicConnector("comp1", $"A{i}")));
@@ -736,6 +733,7 @@ public class BuiltInCircuit {
         { "ud_counter_4bit", UDCounter4Bit },
         { "ud_counter_8bit", UDCounter8Bit },
         { "ud_counter_16bit", UDCounter16Bit },
+        { "mux_1bit_1sel", CreateMultiplexer(1, 1) },
         { "mux_2bit_1sel", CreateMultiplexer(2, 1) },
         { "mux_16bit_1sel", CreateMultiplexer(16, 1) },
     };
@@ -743,6 +741,12 @@ public class BuiltInCircuit {
 
 [TestFixture]
 public class LogicSimulationTests {
+
+    static LogicSimulation Build(Circuit c, IReadOnlyDictionary<string, Circuit>? lib = null) {
+        Assert.That(LogicSimulation.TryBuild(c, out var s, out var e, lib), Is.True,
+            () => string.Join(", ", e.Select(x => x.Message)));
+        return s!;
+    }
 
     static void TestLogicGate(ILogicElement gate, LogicSignal[] inputs, LogicSignal expected) {
         int n = inputs.Length;
@@ -757,7 +761,7 @@ public class LogicSimulationTests {
             .Append(new LogicConnection(new("gate", "out"), new("output", "in")))
             .ToArray();
 
-        var sim = new LogicSimulation(new Circuit(nodes, connections));
+        var sim = Build(new Circuit(nodes, connections));
         for (int i = 0; i < n; i++) {
             sim.SetInput($"input{i}", 0, inputs[i]);
         }
@@ -817,7 +821,7 @@ public class LogicSimulationTests {
                 new(new LogicConnector("not1", "out"), new LogicConnector("output", "in"))
             ]);
 
-        var simulation = new LogicSimulation(circuit);
+        var simulation = Build(circuit);
         
         simulation.SetInput("input", 0, input);
         simulation.Step();
@@ -937,7 +941,7 @@ public class LogicSimulationTests {
                 new(new LogicConnector("nand2", "out"), new LogicConnector("~Q", "in"))
             ]);
 
-        var simulation = new LogicSimulation(circuit);
+        var simulation = Build(circuit);
         simulation.SetInput("S", 0, LogicSignal.Low);
         simulation.SetInput("R", 0, LogicSignal.Low);
 
@@ -1022,7 +1026,7 @@ public class LogicSimulationTests {
     public void JKFFMasterSlavePresetClear(SignalTestPattern testPattern) {
         var circuit = BuiltInCircuit.JK_FFMasterSlavePresetClear;
 
-        var simulation = new LogicSimulation(circuit);
+        var simulation = Build(circuit);
 
         simulation.SetInput("CLK", 0, LogicSignal.Low);
         simulation.SetInput("J", 0, LogicSignal.Low);
@@ -1049,7 +1053,7 @@ public class LogicSimulationTests {
         int maxVal = (1 << bitCount) - 1;
         for (int a = 0; a <= maxVal; a++) {
             for (int b = 0; b <= maxVal; b++) {
-                var simulation = new LogicSimulation(
+                var simulation = Build(
                     BuiltInCircuit.CreateComparator(bitCount), BuiltInCircuit.Circuits);
                 for (int i = 0; i < bitCount; i++) {
                     simulation.SetInput($"A{i}", 0, ((a >> i & 1) != 0).ToSignal());
@@ -1101,7 +1105,7 @@ public class LogicSimulationTests {
                 new(new("and100", "y"), new("result", "in")),
             ]);
         
-        var simulation = new LogicSimulation(testCircuit, library);
+        var simulation = Build(testCircuit, library);
         simulation.SetInput("x1", 0, input1);
         simulation.SetInput("x2", 0, input2);
         simulation.Step();
@@ -1145,7 +1149,7 @@ public class LogicSimulationTests {
                 new(new LogicConnector("and3", "out"), new LogicConnector("outputC", "in"))
             });
 
-        var simulation = new LogicSimulation(circuit);
+        var simulation = Build(circuit);
 
         // ステップ1: 入力=FALSE で初期化
         simulation.SetInput("input", 0, LogicSignal.Low);
@@ -1228,7 +1232,7 @@ public class LogicSimulationTests {
 
         // Phase 0: 初期化
         var circuit    = BuiltInCircuit.CreateUDCounter(bitCount);
-        var simulation = new LogicSimulation(circuit, BuiltInCircuit.Circuits);
+        var simulation = Build(circuit, BuiltInCircuit.Circuits);
         simulation.SetInput("CLK", 0, LogicSignal.Low);
         simulation.SetInput("DIR", 0, LogicSignal.Low);
         simulation.SetInput("LOW", 0, LogicSignal.Low);
@@ -1403,7 +1407,7 @@ public class LogicSimulationTests {
     [CancelAfter(1000)]
     [TestCaseSource(nameof(DFF_Data))]
     public void DFF_SignalTest(SignalTestPattern testPattern) {
-        var simulation = new LogicSimulation(BuiltInCircuit.D_FF, BuiltInCircuit.Circuits);
+        var simulation = Build(BuiltInCircuit.D_FF, BuiltInCircuit.Circuits);
         simulation.SetInput("Clr", 0, LogicSignal.Low);
         simulation.SetInput("Set", 0, LogicSignal.Low);
         simulation.SetInput("C",   0, LogicSignal.Low);
@@ -1436,7 +1440,7 @@ public class LogicSimulationTests {
         // テスト: 全セレクタ値 × 全データ値
         for (int sel = 0; sel < numOfChannel; sel++) {
             for (int dataVal = 0; dataVal < (1 << dataBit); dataVal++) {
-                var sim = new LogicSimulation(
+                var sim = Build(
                     BuiltInCircuit.CreateMultiplexer(dataBit, numOfSelectorBit),
                     BuiltInCircuit.Circuits);
 
@@ -1486,7 +1490,7 @@ public class LogicSimulationTests {
         // テスト: 全セレクタ値 × 全データ値
         for (int sel = 0; sel < numOfChannel; sel++) {
             for (int dataVal = 0; dataVal < (1 << dataBit); dataVal++) {
-                var sim = new LogicSimulation(
+                var sim = Build(
                     BuiltInCircuit.CreateDemultiplexer(dataBit, numOfSelectorBit),
                     BuiltInCircuit.Circuits);
 
@@ -1613,7 +1617,7 @@ public class LogicSimulationTests {
     [TestCaseSource(nameof(RangeCounter16BitTestCases))]
     [CancelAfter(10000)]
     public void RangeCounter16Bit_DataDriven(RangeCounter16BitTestCase testCase) {
-        var sim = new LogicSimulation(
+        var sim = Build(
             BuiltInCircuit.RangeCounter16Bit,
             BuiltInCircuit.Circuits);
 
@@ -1969,7 +1973,7 @@ public class LogicSimulationTests {
     [TestCaseSource(nameof(RangeCounter16BitCountTestCases))]
     [CancelAfter(10000)]
     public void RangeCounter16Bit_Count_DataDriven(RangeCounter16BitCountTestCase testCase) {
-        var sim = new LogicSimulation(
+        var sim = Build(
             BuiltInCircuit.RangeCounter16Bit,
             BuiltInCircuit.Circuits);
 
@@ -1997,7 +2001,7 @@ public class LogicSimulationTests {
     [TestCaseSource(nameof(RangeCounter16BitRangeTransitionTestCases))]
     [CancelAfter(10000)]
     public void RangeCounter16Bit_RangeTransition_DataDriven(RangeCounter16BitRangeTransitionTestCase testCase) {
-        var sim = new LogicSimulation(
+        var sim = Build(
             BuiltInCircuit.RangeCounter16Bit,
             BuiltInCircuit.Circuits);
 
@@ -2267,6 +2271,13 @@ public class LogicPinsWriterTests {
 [TestFixture]
 public class ConstValueLogicTests {
 
+    static LogicSimulation Build(Circuit c, IReadOnlyDictionary<string, Circuit>? lib = null) {
+        Assert.That(LogicSimulation.TryBuild(c, out var s, out var e, lib), Is.True,
+            () => string.Join(", ", e.Select(x => x.Message)));
+        return s!;
+    }
+
+
     [TestCase(true, LogicSignal.High)]
     [TestCase(false, LogicSignal.Low)]
     public void FromBool_OutputsCorrectSignal(bool v, LogicSignal expected) {
@@ -2277,7 +2288,7 @@ public class ConstValueLogicTests {
             [
                 new(new LogicConnector("cv", "out[0]"), new LogicConnector("out0", "in"))
             ]);
-        var sim = new LogicSimulation(circuit);
+        var sim = Build(circuit);
         sim.Step();
         Assert.That(sim.GetOutput("out0", 0), Is.EqualTo(expected));
     }
@@ -2297,7 +2308,7 @@ public class ConstValueLogicTests {
                 new(new LogicConnector("cv", "out[2]"), new LogicConnector("out2", "in")),
                 new(new LogicConnector("cv", "out[3]"), new LogicConnector("out3", "in"))
             ]);
-        var sim = new LogicSimulation(circuit);
+        var sim = Build(circuit);
         sim.Step();
         Assert.That(sim.GetOutput("out0", 0), Is.EqualTo(LogicSignal.Low));
         Assert.That(sim.GetOutput("out1", 0), Is.EqualTo(LogicSignal.High));
@@ -2320,7 +2331,7 @@ public class ConstValueLogicTests {
                 new(new LogicConnector("cv", "out[2]"), new LogicConnector("out2", "in")),
                 new(new LogicConnector("cv", "out[3]"), new LogicConnector("out3", "in"))
             ]);
-        var sim = new LogicSimulation(circuit);
+        var sim = Build(circuit);
         sim.Step();
         Assert.That(sim.GetOutput("out0", 0), Is.EqualTo(LogicSignal.High));
         Assert.That(sim.GetOutput("out1", 0), Is.EqualTo(LogicSignal.High));
@@ -2341,7 +2352,7 @@ public class ConstValueLogicTests {
                 new(new LogicConnector("input", "out"), new LogicConnector("and1", "in[1]")),
                 new(new LogicConnector("and1", "out"), new LogicConnector("result", "in"))
             ]);
-        var sim = new LogicSimulation(circuit);
+        var sim = Build(circuit);
         sim.SetInput("input", 0, LogicSignal.High);
         sim.Step();
         Assert.That(sim.GetOutput("result", 0), Is.EqualTo(LogicSignal.High));
@@ -2383,6 +2394,13 @@ public class ConstValueLogicTests {
 
 [TestFixture]
 public class ConnectorBitsInferenceTests {
+
+    static LogicSimulation Build(Circuit c, IReadOnlyDictionary<string, Circuit>? lib = null) {
+        Assert.That(LogicSimulation.TryBuild(c, out var s, out var e, lib), Is.True,
+            () => string.Join(", ", e.Select(x => x.Message)));
+        return s!;
+    }
+
     [TestCase(true, true, true)]
     [TestCase(true, false, false)]
     [TestCase(false, true, false)]
@@ -2399,7 +2417,7 @@ public class ConnectorBitsInferenceTests {
                 new(new LogicConnector("B", "out"), new LogicConnector("and", "in[1]")),
                 new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
             ]);
-        var sim = new LogicSimulation(circuit);
+        var sim = Build(circuit);
         sim.SetInput("A", 0, a.ToSignal());
         sim.SetInput("B", 0, b.ToSignal());
         sim.Step();
@@ -2417,14 +2435,14 @@ public class ConnectorBitsInferenceTests {
                 new(new LogicConnector("A", "out"), new LogicConnector("and", "in[0]")),
                 new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
             ]);
-        var sim = new LogicSimulation(circuit);
+        var sim = Build(circuit);
         sim.SetInput("A", 0, LogicSignal.High);
         sim.Step();
         Assert.That(sim.GetOutput("out", 0), Is.EqualTo(LogicSignal.High));
     }
 
     [Test]
-    public void InputConnector_NoConnection_Throws() {
+    public void InputConnector_NoConnection_ReturnsFalseWithUnresolvableError() {
         var circuit = new Circuit([
                 new("A", new InputConnector()),
                 new("and", new AndLogic(1)),
@@ -2434,11 +2452,15 @@ public class ConnectorBitsInferenceTests {
                 // A は接続されていない
                 new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
             ]);
-        Assert.Throws<ArgumentException>(() => new LogicSimulation(circuit));
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        Assert.That(result, Is.False);
+        Assert.That(sim, Is.Null);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "A" && e.Kind == CircuitErrorKind.UnresolvableConnector));
     }
 
     [Test]
-    public void OutputConnector_MultipleSourceConnections_Throws() {
+    public void OutputConnector_MultipleSourceConnections_ReturnsFalseWithMultipleSourceError() {
         var circuit = new Circuit([
                 new("A", new InputConnector()),
                 new("B", new InputConnector()),
@@ -2448,12 +2470,16 @@ public class ConnectorBitsInferenceTests {
                 new(new LogicConnector("A", "out"), new LogicConnector("out", "in")),
                 new(new LogicConnector("B", "out"), new LogicConnector("out", "in"))
             ]);
-        Assert.Throws<ArgumentException>(() => new LogicSimulation(circuit));
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        Assert.That(result, Is.False);
+        Assert.That(sim, Is.Null);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "out" && e.Kind == CircuitErrorKind.MultipleSourceConnections));
     }
 
     [Test]
-    public void InputConnector_ExplicitDataBits_MismatchWithConnectedPin_Throws() {
-        // AndLogic(2) の in[0] は 1bit。InputConnector(2) と不一致 → 例外
+    public void InputConnector_ExplicitDataBits_MismatchWithConnectedPin_ReturnsFalseWithBitWidthMismatch() {
+        // AndLogic(2) の in[0] は 1bit。InputConnector(2) と不一致 → エラー
         var circuit = new Circuit([
                 new("A", new InputConnector(2)),
                 new("and", new AndLogic(2)),
@@ -2463,7 +2489,11 @@ public class ConnectorBitsInferenceTests {
                 new(new LogicConnector("A", "out"), new LogicConnector("and", "in[0]")),
                 new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
             ]);
-        Assert.Throws<ArgumentException>(() => new LogicSimulation(circuit));
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        Assert.That(result, Is.False);
+        Assert.That(sim, Is.Null);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "A" && e.Kind == CircuitErrorKind.BitWidthMismatch));
     }
 
     [TestCase(0)]
@@ -2476,5 +2506,253 @@ public class ConnectorBitsInferenceTests {
     [TestCase(-1)]
     public void OutputConnector_InvalidDataBits_Throws(int dataBits) {
         Assert.Throws<ArgumentException>(() => new OutputConnector(dataBits));
+    }
+}
+
+[TestFixture]
+public class InputConnectionValidationTests {
+    static Circuit SimpleAndCircuit() {
+        return new Circuit([
+                new("A", new InputConnector()),
+                new("B", new InputConnector()),
+                new("and", new AndLogic(2)),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("and", "in[0]")),
+                new(new LogicConnector("B", "out"), new LogicConnector("and", "in[1]")),
+                new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
+            ]);
+    }
+
+    [Test]
+    public void TryBuild_ValidCircuit_ReturnsTrue() {
+        var result = LogicSimulation.TryBuild(SimpleAndCircuit(), out var sim, out var errors);
+        Assert.That(result, Is.True);
+        Assert.That(sim, Is.Not.Null);
+        Assert.That(errors, Is.Empty);
+    }
+
+    [Test]
+    public void TryBuild_ValidCircuit_SimulationWorksCorrectly() {
+        LogicSimulation.TryBuild(SimpleAndCircuit(), out var sim, out _);
+        sim!.SetInput("A", 0, LogicSignal.High);
+        sim.SetInput("B", 0, LogicSignal.High);
+        sim.Step();
+        Assert.That(sim.GetOutput("out", 0), Is.EqualTo(LogicSignal.High));
+    }
+
+    [Test]
+    public void TryBuild_UnconnectedOutputConnector_ReturnsFalseWithUnconnectedInputError() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("and", new AndLogic(2)),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("and", "in[0]"))
+                // out の "in" ピンへの接続がない
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        Assert.That(result, Is.False);
+        Assert.That(sim, Is.Null);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "out" && e.Kind == CircuitErrorKind.UnconnectedInput));
+    }
+
+    [Test]
+    public void TryBuild_MultipleSourcesOnOutputConnector_ReturnsFalseWithMultipleSourceError() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("B", new InputConnector()),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("out", "in")),
+                new(new LogicConnector("B", "out"), new LogicConnector("out", "in"))
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        Assert.That(result, Is.False);
+        Assert.That(sim, Is.Null);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "out" && e.PinName == "in" && e.Kind == CircuitErrorKind.MultipleSourceConnections));
+    }
+
+    [Test]
+    public void TryBuild_UnresolvableInputConnector_ReturnsFalseWithUnresolvableError() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("out", new OutputConnector())
+            ],
+            []);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        Assert.That(result, Is.False);
+        Assert.That(sim, Is.Null);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "A" && e.Kind == CircuitErrorKind.UnresolvableConnector));
+    }
+
+    [Test]
+    public void TryBuild_MultipleSourcesOnGateInput_ReturnsFalseWithMultipleSourceError() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("B", new InputConnector()),
+                new("and", new AndLogic(2)),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("and", "in[0]")),
+                new(new LogicConnector("B", "out"), new LogicConnector("and", "in[0]")),
+                new(new LogicConnector("A", "out"), new LogicConnector("and", "in[1]")),
+                new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        Assert.That(result, Is.False);
+        Assert.That(sim, Is.Null);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "and" && e.PinName == "in[0]" && e.Kind == CircuitErrorKind.MultipleSourceConnections));
+    }
+
+    [Test]
+    public void TryBuild_UnconnectedGateInput_ReportsUnconnectedInput() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("and", new AndLogic(2)),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("and", "in[0]")),
+                new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
+                // and.in[1] は未接続
+            ]);
+        Assert.That(LogicSimulation.TryBuild(circuit, out _, out var errors), Is.False);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "and" && e.PinName == "in[1]" && e.Kind == CircuitErrorKind.UnconnectedInput));
+    }
+
+    [Test]
+    public void TryBuild_BothGateInputsUnconnected_ReportsBothPins() {
+        var circuit = new Circuit([
+                new("and", new AndLogic(2)),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
+                // and.in[0], and.in[1] 両方とも未接続
+            ]);
+        Assert.That(LogicSimulation.TryBuild(circuit, out _, out var errors), Is.False);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "and" && e.PinName == "in[0]" && e.Kind == CircuitErrorKind.UnconnectedInput));
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "and" && e.PinName == "in[1]" && e.Kind == CircuitErrorKind.UnconnectedInput));
+    }
+
+    [Test]
+    public void TryBuild_InputConnectorWithNoOutgoing_NotReportedAsUnconnectedInput() {
+        // InputConnector は入力ピンを持たない（ソース素子）なので UnconnectedInput にならない
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("out", new OutputConnector())
+            ],
+            []);
+        Assert.That(LogicSimulation.TryBuild(circuit, out _, out var errors), Is.False);
+        Assert.That(errors, Has.None.Matches<CircuitError>(e =>
+            e.NodeId == "A" && e.Kind == CircuitErrorKind.UnconnectedInput));
+    }
+
+    [Test]
+    public void TryBuild_MultipleErrors_AllReported() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("B", new InputConnector()),
+                new("out1", new OutputConnector()),
+                new("out2", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("out1", "in")),
+                new(new LogicConnector("B", "out"), new LogicConnector("out1", "in"))
+                // out2 は未接続、out1 は複数ソース
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out _, out var errors);
+        Assert.That(result, Is.False);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "out1" && e.Kind == CircuitErrorKind.MultipleSourceConnections));
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "out2" && e.Kind == CircuitErrorKind.UnconnectedInput));
+    }
+
+    [Test]
+    public void TryBuild_WithCircuitLibrary_ValidCircuit_ReturnsTrue() {
+        var lib = new Dictionary<string, Circuit> {
+            { "and_gate", SimpleAndCircuit() }
+        };
+        var circuit = new Circuit([
+                new("X", new InputConnector()),
+                new("Y", new InputConnector()),
+                new("sub", new CustomCircuit("and_gate")),
+                new("result", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("X", "out"), new LogicConnector("sub", "A")),
+                new(new LogicConnector("Y", "out"), new LogicConnector("sub", "B")),
+                new(new LogicConnector("sub", "out"), new LogicConnector("result", "in"))
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors, lib);
+        Assert.That(result, Is.True);
+        Assert.That(sim, Is.Not.Null);
+        Assert.That(errors, Is.Empty);
+    }
+
+    [Test]
+    public void TryBuild_WithCircuitLibrary_InvalidCircuit_ReturnsFalseWithErrors() {
+        var lib = new Dictionary<string, Circuit> {
+            { "and_gate", SimpleAndCircuit() }
+        };
+        var circuit = new Circuit([
+                new("X", new InputConnector()),
+                new("sub", new CustomCircuit("and_gate")),
+                new("result", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("X", "out"), new LogicConnector("sub", "A")),
+                // sub.B 未接続、result も未接続
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors, lib);
+        Assert.That(result, Is.False);
+        Assert.That(sim, Is.Null);
+        Assert.That(errors, Is.Not.Empty);
+    }
+
+    [Test]
+    public void TryBuild_MultipleSourcesOnNotGateInput_ReturnsFalseWithMultipleSourceError() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("B", new InputConnector()),
+                new("not", new NotLogic()),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("not", "in")),
+                new(new LogicConnector("B", "out"), new LogicConnector("not", "in")),
+                new(new LogicConnector("not", "out"), new LogicConnector("out", "in"))
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        Assert.That(result, Is.False);
+        Assert.That(sim, Is.Null);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "not" && e.Kind == CircuitErrorKind.MultipleSourceConnections));
+    }
+
+    [Test]
+    public void TryBuild_UnconnectedOutputConnector_ReturnsErrorWithNodeId() {
+        var circuit = new Circuit([
+                new("myOut", new OutputConnector())
+            ],
+            []);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        Assert.That(result, Is.False);
+        Assert.That(sim, Is.Null);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "myOut" && e.Kind == CircuitErrorKind.UnconnectedInput));
     }
 }
