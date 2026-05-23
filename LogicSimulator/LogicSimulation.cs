@@ -3,13 +3,38 @@ using System.Runtime.CompilerServices;
 
 namespace LogicSimulator;
 
+/// <summary>回路構築時のエラー種別を表します。</summary>
 public enum CircuitErrorKind {
+    /// <summary>入力ピンが未接続のままです。</summary>
     UnconnectedInput,
+
+    /// <summary>1つの入力ピンに対して複数の出力ピンが接続されています。</summary>
     MultipleSourceConnections,
+
+    /// <summary>接続されているピン同士のビット幅が一致しません。</summary>
     BitWidthMismatch,
+
+    /// <summary>
+    /// InputConnector または OutputConnector のビット幅を接続から推論できませんでした。
+    /// </summary>
     UnresolvableConnector,
+
+    /// <summary>
+    /// 接続定義に存在しない LogicID・ピン名が参照されているか、
+    /// または回路ライブラリに存在しない CustomCircuit 名が指定されています。
+    /// </summary>
     InvalidNodeReference,
+
+    /// <summary>JunctionConnector のビット幅の合計が一致しません（将来実装予定）。</summary>
     JunctionBitSumMismatch,
+
+    /// <summary>回路内で同じ LogicID を持つノードが複数登録されています。</summary>
+    DuplicateNodeId,
+
+    /// <summary>
+    /// 回路に含まれる ILogicElement の実装が、登録済みのファクトリに存在しません。
+    /// </summary>
+    UnregisteredLogicElement,
 }
 
 public record CircuitError(
@@ -772,6 +797,56 @@ public class LogicSimulation {
 
     LogicSimulation() { }
 
+/// <summary>
+/// 回路定義からシミュレーションを構築します。
+/// 構築に成功した場合は <see langword="true"/> を返し <paramref name="simulation"/> に値を設定します。
+/// 失敗した場合は <see langword="false"/> を返し <paramref name="errors"/> にエラーの一覧を設定します。
+/// </summary>
+/// <param name="circuit">構築する回路の定義。</param>
+/// <param name="simulation">構築に成功した場合のシミュレーションインスタンス。失敗時は <see langword="null"/>。</param>
+/// <param name="errors">検出されたエラーの配列。成功時は空配列。</param>
+/// <param name="circuitLibrary">CustomCircuit の展開に使用する回路ライブラリ。</param>
+/// <remarks>
+/// <para>このメソッドが返す <see cref="CircuitError"/> の <see cref="CircuitErrorKind"/> は以下の通りです。</para>
+/// <list type="table">
+///   <listheader>
+///     <term>ErrorKind</term>
+///     <description>発生条件</description>
+///   </listheader>
+///   <item>
+///     <term><see cref="CircuitErrorKind.DuplicateNodeId"/></term>
+///     <description>同じ LogicID を持つノードが複数登録されている。</description>
+///   </item>
+///   <item>
+///     <term><see cref="CircuitErrorKind.InvalidNodeReference"/></term>
+///     <description>接続定義に存在しない LogicID・ピン名が含まれているか、回路ライブラリに未登録の CustomCircuit 名が指定されている。</description>
+///   </item>
+///   <item>
+///     <term><see cref="CircuitErrorKind.UnregisteredLogicElement"/></term>
+///     <description>回路に含まれる素子の型が、登録済みのファクトリに存在しない。</description>
+///   </item>
+///   <item>
+///     <term><see cref="CircuitErrorKind.BitWidthMismatch"/></term>
+///     <description>接続されているピン同士のビット幅が一致しない。</description>
+///   </item>
+///   <item>
+///     <term><see cref="CircuitErrorKind.UnresolvableConnector"/></term>
+///     <description>InputConnector/OutputConnector のビット幅を接続から推論できない。</description>
+///   </item>
+///   <item>
+///     <term><see cref="CircuitErrorKind.UnconnectedInput"/></term>
+///     <description>入力ピンが未接続のままになっている。</description>
+///   </item>
+///   <item>
+///     <term><see cref="CircuitErrorKind.MultipleSourceConnections"/></term>
+///     <description>1つの入力ピンに複数の出力ピンが接続されている。</description>
+///   </item>
+///   <item>
+///     <term><see cref="CircuitErrorKind.JunctionBitSumMismatch"/></term>
+///     <description>JunctionConnector のビット幅の合計が一致しない（将来実装予定）。</description>
+///   </item>
+/// </list>
+/// </remarks>
 public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimulation? simulation, out CircuitError[] errors, IReadOnlyDictionary<string, Circuit>? circuitLibrary = null) {
         var instance = new LogicSimulation();
         var (result, errorList) = instance.BuildCore(circuit, CreateDefaultFactories(), circuitLibrary);
@@ -802,29 +877,58 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
         Dictionary<Type, ILogicExecutorFactory> factories,
         IReadOnlyDictionary<string, Circuit>? circuitLibrary) {
 
+        var dupErrors = ValidateDuplicateNodeIds(circuit);
+
         IReadOnlyList<LogicNode> nodes = circuit.LogicNodes;
         IReadOnlyList<LogicConnection> connections = circuit.LogicConnections;
+        IReadOnlyList<CircuitError> expandErrors = [];
         if (circuitLibrary != null) {
-            var expanded = ExpandCustomCircuits(circuitLibrary, new Circuit(nodes, connections));
-            nodes = expanded.LogicNodes;
-            connections = expanded.LogicConnections;
+            var (expandedCircuit, expandErrs) = ExpandCustomCircuits(circuitLibrary, new Circuit(nodes, connections));
+            expandErrors = expandErrs;
+            if (expandErrors.Count == 0) {
+                nodes = expandedCircuit.LogicNodes;
+                connections = expandedCircuit.LogicConnections;
+            }
+        }
+
+        if (dupErrors.Count + expandErrors.Count > 0) {
+            var earlyErrors = new List<CircuitError>(dupErrors.Count + expandErrors.Count);
+            earlyErrors.AddRange(dupErrors);
+            earlyErrors.AddRange(expandErrors);
+            return (null, earlyErrors.ToArray());
         }
 
         var pinWidthMap = BuildPinWidthMap(nodes, factories);
         var (resolvedBits, resolveErrors) = ResolveConnectorBits(nodes, connections, pinWidthMap);
-        var executorAndDefinitionsList = BuildExecutorContexts(nodes, factories, resolvedBits);
+        var (executorAndDefinitionsList, unregsErrors) = BuildExecutorContexts(nodes, factories, resolvedBits);
         var validateErrors = ValidateInputConnections(executorAndDefinitionsList, connections);
 
-        var allErrors = new List<CircuitError>(resolveErrors.Count + validateErrors.Count);
+        var allErrors = new List<CircuitError>(resolveErrors.Count + unregsErrors.Count + validateErrors.Count);
         allErrors.AddRange(resolveErrors);
+        allErrors.AddRange(unregsErrors);
         allErrors.AddRange(validateErrors);
         if (allErrors.Count > 0) {
             return (null, allErrors.ToArray());
         }
 
         logicIdAndPinNameToPinIndex = BuildPinIndex(executorAndDefinitionsList);
-        ResolveConnections(connections);
+        var connErrors = ResolveConnections(connections);
+        if (connErrors.Count > 0) {
+            return (null, connErrors.ToArray());
+        }
         return (this, []);
+    }
+
+    static IReadOnlyList<CircuitError> ValidateDuplicateNodeIds(Circuit circuit) {
+        var seen = new HashSet<string>();
+        var errors = new List<CircuitError>();
+        foreach (var node in circuit.LogicNodes) {
+            if (!seen.Add(node.LogicID)) {
+                errors.Add(new CircuitError(node.LogicID, null, CircuitErrorKind.DuplicateNodeId,
+                    $"Node '{node.LogicID}' is defined more than once in the circuit."));
+            }
+        }
+        return errors;
     }
 
     /// <summary>
@@ -839,13 +943,14 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     /// <see cref="inputValueChangedExecutorIndexes"/> に登録して初期実行を予約します。
     /// </para>
     /// </summary>
-    /// <returns>2パス目で logicIdAndPinNameToPinIndex を構築するために使用するリスト。</returns>
-    List<(ExecutorContext ctx, IOConnectorDefinition[] defs)> BuildExecutorContexts(
+    /// <returns>2パス目で logicIdAndPinNameToPinIndex を構築するために使用するリストと、検出されたエラー。</returns>
+    (List<(ExecutorContext ctx, IOConnectorDefinition[] defs)> results, IReadOnlyList<CircuitError> errors) BuildExecutorContexts(
         IReadOnlyList<LogicNode> nodes,
         Dictionary<Type, ILogicExecutorFactory> factories,
         IReadOnlyDictionary<string, int> resolvedBits) {
         var executorList = new List<ExecutorContext>();
         var executorAndDefinitionsList = new List<(ExecutorContext ctx, IOConnectorDefinition[] defs)>();
+        var buildErrors = new List<CircuitError>();
         var noOp = new NoOpExecutor();
 
         void AddConnectorGroup(LogicNode[] logicNodes, IOConnectorDefinition[] definitions) {
@@ -920,6 +1025,10 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
             .Where(n => n.LogicData is not InputConnector and not OutputConnector)
             .GroupBy(node => node.LogicData.GetType())) {
             if (!factories.TryGetValue(group.Key, out var factory)) {
+                foreach (var node in group.OrderBy(n => n.LogicID)) {
+                    buildErrors.Add(new CircuitError(node.LogicID, null, CircuitErrorKind.UnregisteredLogicElement,
+                        $"No factory registered for '{group.Key.Name}'."));
+                }
                 continue;
             }
 
@@ -984,7 +1093,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
 
         // ExecutorContext の配列を確定してから BuildPinIndex で Array.IndexOf を使うため、ここで確定させる
         executorContexts = executorList.ToArray();
-        return executorAndDefinitionsList;
+        return (executorAndDefinitionsList, buildErrors);
     }
 
     /// <summary>
@@ -1022,9 +1131,10 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
 
     /// <summary>
     /// 接続リストを解決し、各出力ピンから接続先入力ピンへの <see cref="ExecutorContext.OutputToInputPinConnections"/> を構築します。
-    /// 接続定義に不正な LogicID またはピン名が含まれる場合は例外をスローします。
+    /// 接続定義に不正な LogicID またはピン名が含まれる場合は <see cref="CircuitErrorKind.InvalidNodeReference"/> エラーを返します。
     /// </summary>
-    void ResolveConnections(IReadOnlyList<LogicConnection> connections) {
+    IReadOnlyList<CircuitError> ResolveConnections(IReadOnlyList<LogicConnection> connections) {
+        var errors = new List<CircuitError>();
         foreach (var connection in connections) {
             var sourceLogicID = connection.Source.LogicID;
             var sourcePinName = connection.Source.PinName;
@@ -1032,16 +1142,24 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
             var targetPinName = connection.Target.PinName;
 
             if (!logicIdAndPinNameToPinIndex.TryGetValue(sourceLogicID, out var sourcePins)) {
-                throw new ArgumentException($"Connection source '{sourceLogicID}' is not defined in the circuit.");
+                errors.Add(new CircuitError(sourceLogicID, null, CircuitErrorKind.InvalidNodeReference,
+                    $"Connection source '{sourceLogicID}' is not defined in the circuit."));
+                continue;
             }
             if (!sourcePins.ContainsKey(sourcePinName)) {
-                throw new ArgumentException($"Connection source '{sourceLogicID}' does not have pin '{sourcePinName}'.");
+                errors.Add(new CircuitError(sourceLogicID, sourcePinName, CircuitErrorKind.InvalidNodeReference,
+                    $"Connection source '{sourceLogicID}' does not have pin '{sourcePinName}'."));
+                continue;
             }
             if (!logicIdAndPinNameToPinIndex.TryGetValue(targetLogicID, out var targetPins)) {
-                throw new ArgumentException($"Connection target '{targetLogicID}' is not defined in the circuit.");
+                errors.Add(new CircuitError(targetLogicID, null, CircuitErrorKind.InvalidNodeReference,
+                    $"Connection target '{targetLogicID}' is not defined in the circuit."));
+                continue;
             }
             if (!targetPins.ContainsKey(targetPinName)) {
-                throw new ArgumentException($"Connection target '{targetLogicID}' does not have pin '{targetPinName}'.");
+                errors.Add(new CircuitError(targetLogicID, targetPinName, CircuitErrorKind.InvalidNodeReference,
+                    $"Connection target '{targetLogicID}' does not have pin '{targetPinName}'."));
+                continue;
             }
 
             var sourcePinInfo = sourcePins[sourcePinName];
@@ -1051,6 +1169,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
                 new TargetConnection(targetPinInfo.executorIndex, new int[] { targetPinInfo.pinIndex })
             );
         }
+        return errors;
     }
 
     /// <summary>
@@ -1280,13 +1399,19 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     /// <summary>
     /// CustomCircuit を含む回路をフラット化・コネクタ透過・ノード整理して展開します。
     /// </summary>
-    Circuit ExpandCustomCircuits(
+    (Circuit circuit, IReadOnlyList<CircuitError> errors) ExpandCustomCircuits(
         IReadOnlyDictionary<string, Circuit> circuitLibrary,
         Circuit originalCircuit) {
-        var (expandedNodes, expandedConnections) = FlattenCircuit(circuitLibrary, originalCircuit);
-        var resultConnections = SolveConnectors(expandedNodes, expandedConnections);
+        var (expandedNodes, expandedConnections, flattenErrors) = FlattenCircuit(circuitLibrary, originalCircuit);
+        if (flattenErrors.Count > 0) {
+            return (originalCircuit, flattenErrors);
+        }
+        var (resultConnections, solveErrors) = SolveConnectors(expandedNodes, expandedConnections);
+        if (solveErrors.Count > 0) {
+            return (originalCircuit, solveErrors);
+        }
         var resultNodes = CleanupNodes(expandedNodes);
-        return new Circuit(resultNodes, resultConnections);
+        return (new Circuit(resultNodes, resultConnections), []);
     }
 
     /// <summary>
@@ -1294,10 +1419,12 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     /// isTop フラグはトップレベル回路（level == 0）のノード・接続であることを示します。
     /// </summary>
     (Dictionary<string, (bool isTop, LogicNode node)> nodes,
-     List<(bool isTop, LogicConnection connection)> connections)
+     List<(bool isTop, LogicConnection connection)> connections,
+     IReadOnlyList<CircuitError> errors)
     FlattenCircuit(IReadOnlyDictionary<string, Circuit> circuitLibrary, Circuit originalCircuit) {
         var expandedNodes = new Dictionary<string, (bool isTop, LogicNode node)>();
         var expandedConnections = new List<(bool isTop, LogicConnection connection)>();
+        var flattenErrors = new List<CircuitError>();
 
         void Flatten(string prefix, Circuit circuit, int level) {
             // 接続する名前も展開する回路の名前をつけてユニークにする
@@ -1316,7 +1443,9 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
                     // CustomCircuitノードの場合、内部回路を展開
                     var targetCircuitName = customCircuit.TargetCircuitName;
                     if (!circuitLibrary.TryGetValue(targetCircuitName, out var circuitDef)) {
-                        throw new ArgumentException($"Circuit '{targetCircuitName}' not found in library");
+                        flattenErrors.Add(new CircuitError(newLogicID, null, CircuitErrorKind.InvalidNodeReference,
+                            $"Circuit '{targetCircuitName}' not found in library."));
+                        continue;
                     }
                     // ネストを示すプリフィックス
                     var idPrefix = $"{prefix}{node.LogicID}.";
@@ -1326,18 +1455,34 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
         }
 
         Flatten("", originalCircuit, 0);
-        return (expandedNodes, expandedConnections);
+        return (expandedNodes, expandedConnections, flattenErrors);
     }
 
     /// <summary>
     /// コネクタ（InputConnector/OutputConnector）を透過して、実際の接続（通常素子 ↔ トップレベルコネクタ）に変換します。
     /// 接続のソースは1つしか接続されないことを前提としています（このメソッドが呼ばれるよりも先にエラー検知で弾いていること）。
     /// </summary>
-    List<LogicConnection> SolveConnectors(
+    (List<LogicConnection> result, IReadOnlyList<CircuitError> errors) SolveConnectors(
         Dictionary<string, (bool isTop, LogicNode node)> expandedNodes,
         List<(bool isTop, LogicConnection connection)> expandedConnections) {
+        var solveErrors = new List<CircuitError>();
+
+        // トップレベル接続のソース LogicID が存在するか事前検証
+        foreach (var conn in expandedConnections) {
+            if (conn.isTop && !expandedNodes.ContainsKey(conn.connection.Source.LogicID)) {
+                solveErrors.Add(new CircuitError(conn.connection.Source.LogicID, null,
+                    CircuitErrorKind.InvalidNodeReference,
+                    $"Connection source '{conn.connection.Source.LogicID}' is not defined in the circuit."));
+            }
+        }
+        if (solveErrors.Count > 0) {
+            return ([], solveErrors);
+        }
+
         // 計算量を減らすために辞書にして接続先を高速で検索できるようにする
+        // 無効なソースを除外して KeyNotFoundException を防止
         var groupedSourceConnections = expandedConnections
+            .Where(x => expandedNodes.ContainsKey(x.connection.Source.LogicID))
             .GroupBy(x =>
                 expandedNodes[x.connection.Source.LogicID].node.LogicData is OutputConnector or InputConnector
                 ? x.connection.Source.LogicID
@@ -1351,7 +1496,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
         // トップレベルの InputConnector と OutputConnector は残す
         foreach (var connection in expandedConnections) {
             if (!expandedNodes.TryGetValue(connection.connection.Source.LogicID, out var sourceNode)) {
-                throw new ArgumentException($"logic ID not found: '{connection.connection.Source.LogicID}'");
+                continue;
             }
             if (sourceNode.node.LogicData is CustomCircuit ||
                 (!connection.isTop && sourceNode.node.LogicData is InputConnector or OutputConnector)) {
@@ -1359,12 +1504,12 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
             }
             resultTargetConnectors.Clear();
             alreadyConnectedSourceConnectorNames.Clear();
-            FindTargetConnections(expandedNodes, groupedSourceConnections, alreadyConnectedSourceConnectorNames, connection.connection.Target, resultTargetConnectors);
+            FindTargetConnections(expandedNodes, groupedSourceConnections, alreadyConnectedSourceConnectorNames, connection.connection.Target, resultTargetConnectors, solveErrors);
             foreach (var targetConnector in resultTargetConnectors) {
                 resultConnections.Add(new LogicConnection(connection.connection.Source, targetConnector));
             }
         }
-        return resultConnections;
+        return (resultConnections, solveErrors);
     }
 
     /// <summary>
@@ -1375,9 +1520,13 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
         Dictionary<string, (bool isTop, LogicConnection connection)[]> groupedSourceConnections,
         HashSet<string> skipSourceConnectorNames,
         LogicConnector outputConnector,
-        List<LogicConnector> resultConnections) {
+        List<LogicConnector> resultConnections,
+        List<CircuitError> errors) {
         if (!expandedNodes.TryGetValue(outputConnector.LogicID, out var sourceNode)) {
-            throw new ArgumentException($"logic ID not found: '{outputConnector}'");
+            errors.Add(new CircuitError(outputConnector.LogicID, null,
+                CircuitErrorKind.InvalidNodeReference,
+                $"Connection target '{outputConnector.LogicID}' is not defined in the circuit."));
+            return;
         }
         if (sourceNode.node.LogicData is not OutputConnector and not InputConnector and not CustomCircuit) {
             resultConnections.Add(outputConnector);
@@ -1394,7 +1543,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
             return;
         }
         if (!expandedNodes.TryGetValue(outputConnector.LogicID, out var targetNode)) {
-            throw new ArgumentException($"logic ID not found: '{outputConnector}'");
+            return;
         }
         // 一番外側の回路の場合は、出力用のコネクタを残す
         if (targetNode.isTop) {
@@ -1411,7 +1560,8 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
                         groupedSourceConnections,
                         skipSourceConnectorNames,
                         targetConnection.connection.Target,
-                        resultConnections);
+                        resultConnections,
+                        errors);
                 }
             }
         } else if (targetNode.node.LogicData is CustomCircuit) {
@@ -1420,7 +1570,8 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
                 groupedSourceConnections,
                 skipSourceConnectorNames,
                 new LogicConnector($"{outputConnector.LogicID}.{outputConnector.PinName}", ""),
-                resultConnections);
+                resultConnections,
+                errors);
         } else {
             resultConnections.Add(outputConnector);
         }

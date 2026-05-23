@@ -2756,3 +2756,141 @@ public class InputConnectionValidationTests {
             e.NodeId == "myOut" && e.Kind == CircuitErrorKind.UnconnectedInput));
     }
 }
+
+[TestFixture]
+public class ErrorKindTests {
+
+    [Test]
+    public void TryBuild_DuplicateNodeId_ReturnsError() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("A", new InputConnector()),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("out", "in"))
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        Assert.That(result, Is.False);
+        Assert.That(sim, Is.Null);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "A" && e.Kind == CircuitErrorKind.DuplicateNodeId));
+    }
+
+    record UnknownLogic : ILogicElement;
+
+    [Test]
+    public void TryBuild_UnregisteredLogicElement_ReturnsError() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("custom", new UnknownLogic()),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("out", "in"))
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        Assert.That(result, Is.False);
+        Assert.That(sim, Is.Null);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "custom" && e.Kind == CircuitErrorKind.UnregisteredLogicElement));
+    }
+
+    [Test]
+    public void TryBuild_InvalidSourceLogicId_ReturnsInvalidNodeReferenceError() {
+        // コネクタのビット幅解決が成功するよう valid な経路を確保しつつ、
+        // NONEXISTENT → not2.in という無効な接続を追加する
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("not1", new NotLogic()),
+                new("not2", new NotLogic()),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("not1", "in")),
+                new(new LogicConnector("not1", "out"), new LogicConnector("out", "in")),
+                new(new LogicConnector("NONEXISTENT", "out"), new LogicConnector("not2", "in"))
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        Assert.That(result, Is.False);
+        Assert.That(sim, Is.Null);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "NONEXISTENT" && e.Kind == CircuitErrorKind.InvalidNodeReference));
+    }
+
+    [Test]
+    public void TryBuild_InvalidSourcePinName_ReturnsInvalidNodeReferenceError() {
+        // コネクタのビット幅解決が成功するよう valid な経路を確保しつつ、
+        // not1.INVALID_PIN → not2.in という無効なピン参照を追加する
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("not1", new NotLogic()),
+                new("not2", new NotLogic()),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("not1", "in")),
+                new(new LogicConnector("not1", "out"), new LogicConnector("out", "in")),
+                new(new LogicConnector("not1", "INVALID_PIN"), new LogicConnector("not2", "in"))
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        Assert.That(result, Is.False);
+        Assert.That(sim, Is.Null);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "not1" && e.PinName == "INVALID_PIN" && e.Kind == CircuitErrorKind.InvalidNodeReference));
+    }
+
+    [Test]
+    public void TryBuild_UnknownCustomCircuitName_ReturnsInvalidNodeReferenceError() {
+        var lib = new Dictionary<string, Circuit>();
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("sub", new CustomCircuit("no_such_circuit")),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("sub", "in")),
+                new(new LogicConnector("sub", "out"), new LogicConnector("out", "in"))
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors, lib);
+        Assert.That(result, Is.False);
+        Assert.That(sim, Is.Null);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "sub" && e.Kind == CircuitErrorKind.InvalidNodeReference));
+    }
+
+    static Circuit SimpleAndCircuit() {
+        return new Circuit([
+                new("A", new InputConnector()),
+                new("B", new InputConnector()),
+                new("and", new AndLogic(2)),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("and", "in[0]")),
+                new(new LogicConnector("B", "out"), new LogicConnector("and", "in[1]")),
+                new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
+            ]);
+    }
+
+    [Test]
+    public void TryBuild_WithLibrary_InvalidSourceLogicId_ReturnsErrorNotThrow() {
+        var lib = new Dictionary<string, Circuit> { { "and_gate", SimpleAndCircuit() } };
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("B", new InputConnector()),
+                new("sub", new CustomCircuit("and_gate")),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("sub", "A")),
+                new(new LogicConnector("B", "out"), new LogicConnector("sub", "B")),
+                new(new LogicConnector("sub", "out"), new LogicConnector("out", "in")),
+                new(new LogicConnector("NONEXISTENT", "out"), new LogicConnector("out", "in"))
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors, lib);
+        Assert.That(result, Is.False);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "NONEXISTENT" && e.Kind == CircuitErrorKind.InvalidNodeReference));
+    }
+}
