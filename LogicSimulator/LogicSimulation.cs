@@ -25,9 +25,6 @@ public enum CircuitErrorKind {
     /// </summary>
     InvalidNodeReference,
 
-    /// <summary>JunctionConnector のビット幅の合計が一致しません（将来実装予定）。</summary>
-    JunctionBitSumMismatch,
-
     /// <summary>回路内で同じ LogicID を持つノードが複数登録されています。</summary>
     DuplicateNodeId,
 
@@ -840,10 +837,6 @@ public class LogicSimulation {
 ///   <item>
 ///     <term><see cref="CircuitErrorKind.MultipleSourceConnections"/></term>
 ///     <description>1つの入力ピンに複数の出力ピンが接続されている。</description>
-///   </item>
-///   <item>
-///     <term><see cref="CircuitErrorKind.JunctionBitSumMismatch"/></term>
-///     <description>JunctionConnector のビット幅の合計が一致しない（将来実装予定）。</description>
 ///   </item>
 /// </list>
 /// </remarks>
