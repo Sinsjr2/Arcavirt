@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 
 namespace LogicSimulator;
 
@@ -32,6 +33,12 @@ public enum CircuitErrorKind {
     /// 回路に含まれる ILogicElement の実装が、登録済みのファクトリに存在しません。
     /// </summary>
     UnregisteredLogicElement,
+
+    /// <summary>
+    /// スカラーピン（IsIndexed=false）に対してインデックス記法でアクセスしたか、
+    /// バスピン（IsIndexed=true）に対して有効範囲外インデックスでアクセスした。
+    /// </summary>
+    InvalidPinAccess,
 }
 
 public record CircuitError(
@@ -57,7 +64,41 @@ public record LogicNode<T>(string LogicID, T LogicData);
 /// </summary>
 public record Circuit(IReadOnlyList<LogicNode> LogicNodes, IReadOnlyList<LogicConnection> LogicConnections);
 
-public record PinDefinition(string PinName, int BitSize);
+public record PinDefinition {
+    public string PinName { get; }
+    public int BitSize { get; }
+    public bool IsIndexed { get; }
+
+    public PinDefinition(string pinName) {
+        if (Regex.IsMatch(pinName, @"^.+\[\d+\]$"))
+            throw new ArgumentException($"Pin name must not contain index notation: '{pinName}'");
+        PinName = pinName;
+        BitSize = 1;
+        IsIndexed = false;
+    }
+
+    public PinDefinition(string pinName, int bitCount) {
+        if (Regex.IsMatch(pinName, @"^.+\[\d+\]$"))
+            throw new ArgumentException($"Pin name must not contain index notation: '{pinName}'");
+        if (bitCount < 1)
+            throw new ArgumentException($"bitCount must be >= 1: {bitCount}");
+        PinName = pinName;
+        BitSize = bitCount;
+        IsIndexed = true;
+    }
+
+    public PinDefinition(string baseName, int arrayIndex, int bitCount) {
+        if (Regex.IsMatch(baseName, @"^.+\[\d+\]$"))
+            throw new ArgumentException($"Base name must not contain index notation: '{baseName}'");
+        if (arrayIndex < 0)
+            throw new ArgumentException($"arrayIndex must be >= 0: {arrayIndex}");
+        if (bitCount < 1)
+            throw new ArgumentException($"bitCount must be >= 1: {bitCount}");
+        PinName = $"{baseName}[{arrayIndex}]";
+        BitSize = bitCount;
+        IsIndexed = true;
+    }
+}
 
 public record IOConnectorDefinition(
     string LogicID,
@@ -435,8 +476,8 @@ public class AndLogicExecutorFactory : ILogicExecutorFactory<AndLogic> {
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<AndLogic> node) {
         return new IOConnectorDefinition(
             node.LogicID,
-            Enumerable.Range(0, node.LogicData.NumOfInputs).Select(i => new PinDefinition($"in[{i}]", 1)).ToArray(),
-            [new PinDefinition("out", 1)]
+            [new PinDefinition("in", node.LogicData.NumOfInputs)],
+            [new PinDefinition("out")]
         );
     }
 
@@ -483,8 +524,8 @@ public class OrLogicExecutorFactory : ILogicExecutorFactory<OrLogic> {
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<OrLogic> node) {
         return new IOConnectorDefinition(
             node.LogicID,
-            [.. Enumerable.Range(0, node.LogicData.NumOfInputs).Select(i => new PinDefinition($"in[{i}]", 1))],
-            [new PinDefinition("out", 1)]
+            [new PinDefinition("in", node.LogicData.NumOfInputs)],
+            [new PinDefinition("out")]
         );
     }
 
@@ -515,8 +556,8 @@ public class NotLogicExecutorFactory : ILogicExecutorFactory<NotLogic> {
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<NotLogic> node) {
         return new IOConnectorDefinition(
             node.LogicID,
-            [new PinDefinition("in", 1)],
-            [new PinDefinition("out", 1)]
+            [new PinDefinition("in")],
+            [new PinDefinition("out")]
         );
     }
 
@@ -563,8 +604,8 @@ public class NAndLogicExecutorFactory : ILogicExecutorFactory<NAndLogic> {
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<NAndLogic> node) {
         return new IOConnectorDefinition(
             node.LogicID,
-            Enumerable.Range(0, node.LogicData.NumOfInputs).Select(i => new PinDefinition($"in[{i}]", 1)).ToArray(),
-            [new PinDefinition("out", 1)]
+            [new PinDefinition("in", node.LogicData.NumOfInputs)],
+            [new PinDefinition("out")]
         );
     }
 
@@ -611,8 +652,8 @@ public class NOrLogicExecutorFactory : ILogicExecutorFactory<NOrLogic> {
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<NOrLogic> node) {
         return new IOConnectorDefinition(
             node.LogicID,
-            Enumerable.Range(0, node.LogicData.NumOfInputs).Select(i => new PinDefinition($"in[{i}]", 1)).ToArray(),
-            [new PinDefinition("out", 1)]
+            [new PinDefinition("in", node.LogicData.NumOfInputs)],
+            [new PinDefinition("out")]
         );
     }
 
@@ -661,8 +702,8 @@ public class XOrLogicExecutorFactory : ILogicExecutorFactory<XOrLogic> {
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<XOrLogic> node) {
         return new IOConnectorDefinition(
             node.LogicID,
-            Enumerable.Range(0, node.LogicData.NumOfInputs).Select(i => new PinDefinition($"in[{i}]", 1)).ToArray(),
-            [new PinDefinition("out", 1)]
+            [new PinDefinition("in", node.LogicData.NumOfInputs)],
+            [new PinDefinition("out")]
         );
     }
 
@@ -686,10 +727,7 @@ public class ConstValueLogicExecutorFactory : ILogicExecutorFactory<ConstValueLo
     }
 
     public IOConnectorDefinition GetConnectorDefinition(LogicNode<ConstValueLogic> node) {
-        var outPins = Enumerable.Range(0, node.LogicData.BitLength)
-            .Select(i => new PinDefinition($"out[{i}]", 1))
-            .ToArray();
-        return new IOConnectorDefinition(node.LogicID, [], outPins);
+        return new IOConnectorDefinition(node.LogicID, [], [new PinDefinition("out", node.LogicData.BitLength)]);
     }
 
     public ILogicExecutor CreateExecutor(LogicNode<ConstValueLogic>[] nodes, Action onInputChangedNotify) {
@@ -893,11 +931,14 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
 
         var pinWidthMap = BuildPinWidthMap(nodes, factories);
         var (resolvedBits, resolveErrors) = ResolveConnectorBits(nodes, connections, pinWidthMap);
+        var (expandedConnections, busErrors) = ExpandBusConnections(connections, pinWidthMap, resolvedBits);
+        connections = expandedConnections;
         var (executorAndDefinitionsList, unregsErrors) = BuildExecutorContexts(nodes, factories, resolvedBits);
-        var validateErrors = ValidateInputConnections(executorAndDefinitionsList, connections);
+        var validateErrors = ValidateInputConnections(executorAndDefinitionsList, connections, pinWidthMap);
 
-        var allErrors = new List<CircuitError>(resolveErrors.Count + unregsErrors.Count + validateErrors.Count);
+        var allErrors = new List<CircuitError>(resolveErrors.Count + busErrors.Count + unregsErrors.Count + validateErrors.Count);
         allErrors.AddRange(resolveErrors);
+        allErrors.AddRange(busErrors);
         allErrors.AddRange(unregsErrors);
         allErrors.AddRange(validateErrors);
         if (allErrors.Count > 0) {
@@ -1109,11 +1150,21 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
                 int currentInputPinOffset = 0;
                 foreach (var pin in def.InputPins) {
                     pinIndex[def.LogicID][pin.PinName] = (execIdx, logicNumInExec, ctx.Inputs.GetPinIndex(logicNumInExec, currentInputPinOffset));
+                    if (pin.IsIndexed) {
+                        for (int k = 0; k < pin.BitSize; k++) {
+                            pinIndex[def.LogicID][$"{pin.PinName}[{k}]"] = (execIdx, logicNumInExec, ctx.Inputs.GetPinIndex(logicNumInExec, currentInputPinOffset + k));
+                        }
+                    }
                     currentInputPinOffset += pin.BitSize;
                 }
                 int currentOutputPinOffset = 0;
                 foreach (var pin in def.OutputPins) {
                     pinIndex[def.LogicID][pin.PinName] = (execIdx, logicNumInExec, ctx.Outputs.GetPinIndex(logicNumInExec, currentOutputPinOffset));
+                    if (pin.IsIndexed) {
+                        for (int k = 0; k < pin.BitSize; k++) {
+                            pinIndex[def.LogicID][$"{pin.PinName}[{k}]"] = (execIdx, logicNumInExec, ctx.Outputs.GetPinIndex(logicNumInExec, currentOutputPinOffset + k));
+                        }
+                    }
                     currentOutputPinOffset += pin.BitSize;
                 }
             }
@@ -1168,11 +1219,11 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     /// <summary>
     /// 通常素子（InputConnector/OutputConnector 以外）のピン幅マップを構築します。
     /// </summary>
-    static Dictionary<string, Dictionary<string, int>> BuildPinWidthMap(
+    static Dictionary<string, Dictionary<string, PinDefinition>> BuildPinWidthMap(
         IReadOnlyList<LogicNode> nodes,
         Dictionary<Type, ILogicExecutorFactory> factories) {
 
-        var pinWidthMap = new Dictionary<string, Dictionary<string, int>>();
+        var pinWidthMap = new Dictionary<string, Dictionary<string, PinDefinition>>();
         foreach (var node in nodes) {
             if (node.LogicData is InputConnector or OutputConnector) {
                 continue;
@@ -1181,16 +1232,36 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
                 continue;
             }
             var def = factory.GetConnectorDefinition(node);
-            var pinWidths = new Dictionary<string, int>();
+            var pinDefs = new Dictionary<string, PinDefinition>();
             foreach (var pin in def.InputPins) {
-                pinWidths[pin.PinName] = pin.BitSize;
+                pinDefs[pin.PinName] = pin;
             }
             foreach (var pin in def.OutputPins) {
-                pinWidths[pin.PinName] = pin.BitSize;
+                pinDefs[pin.PinName] = pin;
             }
-            pinWidthMap[node.LogicID] = pinWidths;
+            pinWidthMap[node.LogicID] = pinDefs;
         }
         return pinWidthMap;
+    }
+
+    /// <summary>
+    /// ピン名からピン幅を取得します。
+    /// <c>"name[k]"</c> 形式の場合はベース名 <c>"name"</c> でルックアップし、IsIndexed=true なら 1 を返します。
+    /// </summary>
+    static int? GetPinWidthFromMap(Dictionary<string, PinDefinition> pinMap, string pinName) {
+        if (pinMap.TryGetValue(pinName, out var def)) {
+            return def.BitSize;
+        }
+        var m = Regex.Match(pinName, @"^(.+)\[(\d+)\]$");
+        if (!m.Success) {
+            return null;
+        }
+        var baseName = m.Groups[1].Value;
+        var k = int.Parse(m.Groups[2].Value);
+        if (pinMap.TryGetValue(baseName, out var baseDef) && baseDef.IsIndexed && k < baseDef.BitSize) {
+            return 1;
+        }
+        return null;
     }
 
     /// <summary>
@@ -1203,7 +1274,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     static (IReadOnlyDictionary<string, int> resolvedBits, IReadOnlyList<CircuitError> errors) ResolveConnectorBits(
         IReadOnlyList<LogicNode> nodes,
         IReadOnlyList<LogicConnection> connections,
-        IReadOnlyDictionary<string, Dictionary<string, int>> pinWidthMap) {
+        IReadOnlyDictionary<string, Dictionary<string, PinDefinition>> pinWidthMap) {
 
         var connectorNodes = nodes
             .Where(n => n.LogicData is InputConnector or OutputConnector)
@@ -1253,9 +1324,13 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
                             } else {
                                 allResolved = false;
                             }
-                        } else if (pinWidthMap.TryGetValue(targetId, out var targetPinMap)
-                            && targetPinMap.TryGetValue(targetPin, out var pinWidth)) {
-                            widths.Add(pinWidth);
+                        } else if (pinWidthMap.TryGetValue(targetId, out var targetPinMap)) {
+                            int? targetWidth = GetPinWidthFromMap(targetPinMap, targetPin);
+                            if (targetWidth.HasValue) {
+                                widths.Add(targetWidth.Value);
+                            } else {
+                                allResolved = false;
+                            }
                         } else {
                             allResolved = false;
                         }
@@ -1299,9 +1374,8 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
                         if (sourceNode.LogicData is InputConnector && resolved.TryGetValue(sourceId, out var w)) {
                             inferredWidth = w;
                         }
-                    } else if (pinWidthMap.TryGetValue(sourceId, out var sourcePinMap)
-                        && sourcePinMap.TryGetValue(sourcePin, out var pinWidth)) {
-                        inferredWidth = pinWidth;
+                    } else if (pinWidthMap.TryGetValue(sourceId, out var sourcePinMap)) {
+                        inferredWidth = GetPinWidthFromMap(sourcePinMap, sourcePin);
                     }
                     if (!inferredWidth.HasValue) {
                         continue;
@@ -1353,34 +1427,234 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     }
 
     /// <summary>
+    /// ピンのビット幅を取得します（バスピン・個別ビット・コネクタを含む）。
+    /// </summary>
+    static int? GetPinWidth(
+        LogicConnector connector,
+        IReadOnlyDictionary<string, Dictionary<string, PinDefinition>> pinWidthMap,
+        IReadOnlyDictionary<string, int> resolvedBits) {
+
+        if (resolvedBits.TryGetValue(connector.LogicID, out var bits)) {
+            var m = Regex.Match(connector.PinName, @"^(.+)\[(\d+)\]$");
+            if (!m.Success) {
+                return bits;
+            }
+            var k = int.Parse(m.Groups[2].Value);
+            return k < bits ? 1 : null;
+        }
+        if (pinWidthMap.TryGetValue(connector.LogicID, out var pinMap)) {
+            return GetPinWidthFromMap(pinMap, connector.PinName);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// ピン名にビットインデックスを付加します。
+    /// <c>"out"</c> → <c>"out[0]"</c>、<c>"in[2]"</c> → <c>"in[2][0]"</c>
+    /// </summary>
+    static string ExpandBitPinName(string pinName, int bit) {
+        return $"{pinName}[{bit}]";
+    }
+
+    /// <summary>
+    /// ピンへのアクセスが InvalidPinAccess かを判別します。
+    /// スカラーピンへのインデックスアクセス、またはバスピンの範囲外インデックスアクセスを検出します。
+    /// </summary>
+    static CircuitErrorKind? CheckPinAccessError(
+        string logicId, string pinName,
+        IReadOnlyDictionary<string, Dictionary<string, PinDefinition>> pinWidthMap) {
+
+        var match = Regex.Match(pinName, @"^(.+)\[(\d+)\]$");
+        if (!match.Success) {
+            return null;
+        }
+        var baseName = match.Groups[1].Value;
+        var k = int.Parse(match.Groups[2].Value);
+        if (!pinWidthMap.TryGetValue(logicId, out var pinMap)) {
+            return null;
+        }
+        if (!pinMap.TryGetValue(baseName, out var pinDef)) {
+            return null;
+        }
+        if (!pinDef.IsIndexed) {
+            return CircuitErrorKind.InvalidPinAccess;
+        }
+        if (k >= pinDef.BitSize) {
+            return CircuitErrorKind.InvalidPinAccess;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// バス接続（N ビット同士）を個別ビット接続に展開します。
+    /// ビット幅不一致・InvalidPinAccess・InvalidNodeReference はエラーとして返します。
+    /// </summary>
+    static (IReadOnlyList<LogicConnection> connections, IReadOnlyList<CircuitError> errors)
+    ExpandBusConnections(
+        IReadOnlyList<LogicConnection> connections,
+        IReadOnlyDictionary<string, Dictionary<string, PinDefinition>> pinWidthMap,
+        IReadOnlyDictionary<string, int> resolvedBits) {
+
+        var expandedConnections = new List<LogicConnection>();
+        var errors = new List<CircuitError>();
+
+        foreach (var conn in connections) {
+            var srcAccessError = pinWidthMap.ContainsKey(conn.Source.LogicID)
+                ? CheckPinAccessError(conn.Source.LogicID, conn.Source.PinName, pinWidthMap)
+                : null;
+            var tgtAccessError = pinWidthMap.ContainsKey(conn.Target.LogicID)
+                ? CheckPinAccessError(conn.Target.LogicID, conn.Target.PinName, pinWidthMap)
+                : null;
+            if (srcAccessError != null) {
+                errors.Add(new CircuitError(conn.Source.LogicID, conn.Source.PinName, srcAccessError.Value,
+                    $"Connection source '{conn.Source.LogicID}'.'{conn.Source.PinName}' is an invalid pin access."));
+                continue;
+            }
+            if (tgtAccessError != null) {
+                errors.Add(new CircuitError(conn.Target.LogicID, conn.Target.PinName, tgtAccessError.Value,
+                    $"Connection target '{conn.Target.LogicID}'.'{conn.Target.PinName}' is an invalid pin access."));
+                continue;
+            }
+
+            var srcWidth = GetPinWidth(conn.Source, pinWidthMap, resolvedBits);
+            var tgtWidth = GetPinWidth(conn.Target, pinWidthMap, resolvedBits);
+
+            if (srcWidth is null) {
+                bool srcKnown = pinWidthMap.ContainsKey(conn.Source.LogicID) || resolvedBits.ContainsKey(conn.Source.LogicID);
+                if (srcKnown) {
+                    errors.Add(new CircuitError(conn.Source.LogicID, conn.Source.PinName, CircuitErrorKind.InvalidNodeReference,
+                        $"Connection source '{conn.Source.LogicID}'.'{conn.Source.PinName}' could not be resolved."));
+                    continue;
+                }
+                expandedConnections.Add(conn);
+                continue;
+            }
+            if (tgtWidth is null) {
+                bool tgtKnown = pinWidthMap.ContainsKey(conn.Target.LogicID) || resolvedBits.ContainsKey(conn.Target.LogicID);
+                if (tgtKnown) {
+                    errors.Add(new CircuitError(conn.Target.LogicID, conn.Target.PinName, CircuitErrorKind.InvalidNodeReference,
+                        $"Connection target '{conn.Target.LogicID}'.'{conn.Target.PinName}' could not be resolved."));
+                    continue;
+                }
+                expandedConnections.Add(conn);
+                continue;
+            }
+
+            if (srcWidth == 1 && tgtWidth == 1) {
+                expandedConnections.Add(conn);
+                continue;
+            }
+
+            if (srcWidth != tgtWidth) {
+                errors.Add(new CircuitError(conn.Source.LogicID, conn.Source.PinName, CircuitErrorKind.BitWidthMismatch,
+                    $"Bit width mismatch: '{conn.Source.LogicID}'.'{conn.Source.PinName}' ({srcWidth} bits) " +
+                    $"-> '{conn.Target.LogicID}'.'{conn.Target.PinName}' ({tgtWidth} bits)."));
+                continue;
+            }
+
+            for (int bit = 0; bit < srcWidth; bit++) {
+                expandedConnections.Add(new LogicConnection(
+                    conn.Source with { PinName = ExpandBitPinName(conn.Source.PinName, bit) },
+                    conn.Target with { PinName = ExpandBitPinName(conn.Target.PinName, bit) }
+                ));
+            }
+        }
+
+        return (expandedConnections, errors);
+    }
+
+    /// <summary>
     /// 全素子の入力ピン未接続チェックおよび複数ソース接続チェックを行います。
     /// </summary>
     static IReadOnlyList<CircuitError> ValidateInputConnections(
         IReadOnlyList<(ExecutorContext ctx, IOConnectorDefinition[] defs)> executorAndDefinitionsList,
-        IReadOnlyList<LogicConnection> connections) {
+        IReadOnlyList<LogicConnection> connections,
+        IReadOnlyDictionary<string, Dictionary<string, PinDefinition>> pinWidthMap) {
 
         var errors = new List<CircuitError>();
 
-        var inputPinSourceCount = new Dictionary<(string nodeId, string pinName), int>();
+        var allPinDefs = new Dictionary<string, Dictionary<string, PinDefinition>>();
+        foreach (var (_, defs) in executorAndDefinitionsList) {
+            foreach (var def in defs) {
+                var pinMap = new Dictionary<string, PinDefinition>();
+                foreach (var pin in def.InputPins.Concat(def.OutputPins))
+                    pinMap[pin.PinName] = pin;
+                allPinDefs[def.LogicID] = pinMap;
+            }
+        }
+
+        var sourceCounts = new Dictionary<(string nodeId, string pinName), int>();
         foreach (var conn in connections) {
-            var key = (conn.Target.LogicID, conn.Target.PinName);
-            inputPinSourceCount.TryGetValue(key, out var cnt);
-            inputPinSourceCount[key] = cnt + 1;
+            var targetId = conn.Target.LogicID;
+            var targetPin = conn.Target.PinName;
+            var normalizedPin = targetPin;
+            var m = Regex.Match(targetPin, @"^(.+)\[(\d+)\]$");
+            if (m.Success) {
+                var baseName = m.Groups[1].Value;
+                var k = int.Parse(m.Groups[2].Value);
+                if (k == 0
+                    && allPinDefs.TryGetValue(targetId, out var pm)
+                    && pm.TryGetValue(baseName, out var pd)
+                    && pd.IsIndexed && pd.BitSize == 1) {
+                    normalizedPin = baseName;
+                }
+            }
+            var key = (targetId, normalizedPin);
+            sourceCounts.TryGetValue(key, out var cnt);
+            sourceCounts[key] = cnt + 1;
         }
 
         foreach (var (_, defs) in executorAndDefinitionsList) {
             foreach (var def in defs) {
                 foreach (var pin in def.InputPins) {
-                    var key = (def.LogicID, pin.PinName);
-                    inputPinSourceCount.TryGetValue(key, out var cnt);
-                    if (cnt == 0) {
-                        errors.Add(new CircuitError(def.LogicID, pin.PinName,
-                            CircuitErrorKind.UnconnectedInput,
-                            $"Input pin '{pin.PinName}' of '{def.LogicID}' has no source connection."));
-                    } else if (cnt > 1) {
-                        errors.Add(new CircuitError(def.LogicID, pin.PinName,
-                            CircuitErrorKind.MultipleSourceConnections,
-                            $"Input pin '{pin.PinName}' of '{def.LogicID}' has {cnt} source connections, but only 1 is allowed."));
+                    var logicId = def.LogicID;
+                    if (!pin.IsIndexed) {
+                        sourceCounts.TryGetValue((logicId, pin.PinName), out var cnt);
+                        if (cnt == 0) {
+                            errors.Add(new CircuitError(logicId, pin.PinName,
+                                CircuitErrorKind.UnconnectedInput,
+                                $"Input pin '{pin.PinName}' of '{logicId}' has no source connection."));
+                        } else if (cnt > 1) {
+                            errors.Add(new CircuitError(logicId, pin.PinName,
+                                CircuitErrorKind.MultipleSourceConnections,
+                                $"Input pin '{pin.PinName}' of '{logicId}' has {cnt} source connections, but only 1 is allowed."));
+                        }
+                    } else {
+                        sourceCounts.TryGetValue((logicId, pin.PinName), out var busCount);
+                        int[] bitCounts;
+                        if (pin.BitSize == 1) {
+                            bitCounts = [0];
+                        } else {
+                            bitCounts = new int[pin.BitSize];
+                            for (int k = 0; k < pin.BitSize; k++) {
+                                sourceCounts.TryGetValue((logicId, $"{pin.PinName}[{k}]"), out bitCounts[k]);
+                            }
+                        }
+                        bool hasBitConnections = Array.Exists(bitCounts, c => c > 0);
+                        if (busCount > 0 && hasBitConnections) {
+                            errors.Add(new CircuitError(logicId, pin.PinName,
+                                CircuitErrorKind.MultipleSourceConnections,
+                                $"Input pin '{pin.PinName}' of '{logicId}' has mixed bus and bit-level connections."));
+                            continue;
+                        }
+                        if (busCount > 1) {
+                            errors.Add(new CircuitError(logicId, pin.PinName,
+                                CircuitErrorKind.MultipleSourceConnections,
+                                $"Input pin '{pin.PinName}' of '{logicId}' has {busCount} source connections, but only 1 is allowed."));
+                        } else if (busCount == 0) {
+                            for (int k = 0; k < pin.BitSize; k++) {
+                                var bitPinName = $"{pin.PinName}[{k}]";
+                                if (bitCounts[k] == 0) {
+                                    errors.Add(new CircuitError(logicId, bitPinName,
+                                        CircuitErrorKind.UnconnectedInput,
+                                        $"Input pin '{bitPinName}' of '{logicId}' has no source connection."));
+                                } else if (bitCounts[k] > 1) {
+                                    errors.Add(new CircuitError(logicId, bitPinName,
+                                        CircuitErrorKind.MultipleSourceConnections,
+                                        $"Input pin '{bitPinName}' of '{logicId}' has {bitCounts[k]} source connections, but only 1 is allowed."));
+                                }
+                            }
+                        }
                     }
                 }
             }

@@ -2755,6 +2755,78 @@ public class InputConnectionValidationTests {
         Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
             e.NodeId == "myOut" && e.Kind == CircuitErrorKind.UnconnectedInput));
     }
+
+    [Test]
+    public void TryBuild_ScalarPinAccessedWithIndex_ReturnsInvalidPinAccess() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("not", new NotLogic()),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("not", "in")),
+                new(new LogicConnector("not", "out[0]"), new LogicConnector("out", "in"))
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        Assert.That(result, Is.False);
+        Assert.That(errors.Count(e => e.Kind == CircuitErrorKind.InvalidPinAccess), Is.EqualTo(1));
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "not" && e.PinName == "out[0]" && e.Kind == CircuitErrorKind.InvalidPinAccess));
+    }
+
+    [Test]
+    public void TryBuild_BusPinAccessedWithOutOfRangeIndex_ReturnsInvalidPinAccess() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("B", new InputConnector()),
+                new("and", new AndLogic(2)),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("and", "in[0]")),
+                new(new LogicConnector("B", "out"), new LogicConnector("and", "in[2]")),
+                new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        Assert.That(result, Is.False);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "and" && e.PinName == "in[2]" && e.Kind == CircuitErrorKind.InvalidPinAccess));
+    }
+
+    [Test]
+    public void TryBuild_OneBitBusPinAccessedWithIndex0_IsValid() {
+        var circuit = new Circuit([
+                new("A", new InputConnector(1)),
+                new("not", new NotLogic()),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out[0]"), new LogicConnector("not", "in")),
+                new(new LogicConnector("not", "out"), new LogicConnector("out", "in"))
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        Assert.That(result, Is.True);
+        Assert.That(errors, Is.Empty);
+    }
+
+    [Test]
+    public void TryBuild_BusAndBitConnectionsMixed_ReturnsMultipleSourceConnections() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("B", new InputConnector()),
+                new("and", new AndLogic(1)),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("and", "in")),
+                new(new LogicConnector("B", "out"), new LogicConnector("and", "in[0]")),
+                new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        Assert.That(result, Is.False);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "and" && e.PinName == "in" && e.Kind == CircuitErrorKind.MultipleSourceConnections));
+    }
 }
 
 [TestFixture]
