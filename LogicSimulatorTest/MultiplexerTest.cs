@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using LogicSimulator;
+using LogicSimulator.Gates;
 
 namespace LogicSimulatorTest;
 
