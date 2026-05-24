@@ -268,6 +268,10 @@ public class LogicSimulation {
         };
     }
 
+    /// <summary>
+    /// 回路内に同じ LogicID を持つノードが複数登録されていないかを検証します。
+    /// <para>重複が検出された場合は DuplicateNodeId エラーを返します。</para>
+    /// </summary>
     static IReadOnlyList<CircuitError> ValidateDuplicateNodeIds(Circuit circuit) {
         var seen = new HashSet<string>();
         var errors = new List<CircuitError>();
@@ -663,6 +667,10 @@ public class LogicSimulation {
         return (resolved, errors);
     }
 
+    /// <summary>
+    /// 接続グラフを走査しても解決できなかったコネクタを検出し、エラーとして返します。
+    /// <para>接続が存在しない場合と、接続先が未解決の場合を区別してエラーメッセージを生成します。</para>
+    /// </summary>
     static IReadOnlyList<CircuitError> ValidateConnectorResolution(
         Dictionary<string, LogicNode> connectorNodes,
         IReadOnlyList<LogicConnection> connections,
@@ -985,6 +993,10 @@ public class LogicSimulation {
         return (expandedNodes, expandedConnections);
     }
 
+    /// <summary>
+    /// トップレベル回路の接続のうち、接続元 LogicID がフラット化後のノードに存在しないものを検出し、エラーとして返します。
+    /// <para>FlattenCircuit で展開した後、SolveConnectors を呼ぶ前に実行します。</para>
+    /// </summary>
     static IReadOnlyList<CircuitError> ValidateTopLevelSourceIds(
         Dictionary<string, (bool isTop, LogicNode node)> expandedNodes,
         List<(bool isTop, LogicConnection connection)> expandedConnections) {
@@ -1002,7 +1014,8 @@ public class LogicSimulation {
 
     /// <summary>
     /// コネクタ（InputConnector/OutputConnector）を透過して、実際の接続（通常素子 ↔ トップレベルコネクタ）に変換します。
-    /// 接続のソースは1つしか接続されないことを前提としています（このメソッドが呼ばれるよりも先にエラー検知で弾いていること）。
+    /// <para>接続のソースは1つしか接続されないことを前提としています（このメソッドが呼ばれるよりも先にエラー検知で弾いていること）。</para>
+    /// <para>ValidateTopLevelSourceIds によるソース存在チェックが済んでいることを前提とします。</para>
     /// </summary>
     static (List<LogicConnection> result, IReadOnlyList<CircuitError> errors) SolveConnectors(
         Dictionary<string, (bool isTop, LogicNode node)> expandedNodes,
