@@ -28,6 +28,6 @@ public static class TestHelpers {
             sim.SetInput($"input{i}", 0, inputs[i]);
         }
         sim.Step();
-        Assert.That(sim.GetOutput("output", 0), Is.EqualTo(expected));
+        Assert.That(sim.GetOutput("output", "in"), Is.EqualTo(expected));
     }
 }

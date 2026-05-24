@@ -19,7 +19,7 @@ public class ConstValueLogicTest {
             ]);
         var sim = TestHelpers.Build(circuit);
         sim.Step();
-        Assert.That(sim.GetOutput("out0", 0), Is.EqualTo(expected));
+        Assert.That(sim.GetOutput("out0", "in"), Is.EqualTo(expected));
     }
 
     [Test]
@@ -40,10 +40,10 @@ public class ConstValueLogicTest {
         var sim = TestHelpers.Build(circuit);
         sim.Step();
         using (Assert.EnterMultipleScope()) {
-            Assert.That(sim.GetOutput("out0", 0), Is.EqualTo(LogicSignal.Low));
-            Assert.That(sim.GetOutput("out1", 0), Is.EqualTo(LogicSignal.High));
-            Assert.That(sim.GetOutput("out2", 0), Is.EqualTo(LogicSignal.Low));
-            Assert.That(sim.GetOutput("out3", 0), Is.EqualTo(LogicSignal.High));
+            Assert.That(sim.GetOutput("out0", "in"), Is.EqualTo(LogicSignal.Low));
+            Assert.That(sim.GetOutput("out1", "in"), Is.EqualTo(LogicSignal.High));
+            Assert.That(sim.GetOutput("out2", "in"), Is.EqualTo(LogicSignal.Low));
+            Assert.That(sim.GetOutput("out3", "in"), Is.EqualTo(LogicSignal.High));
         }
 
     }
@@ -66,10 +66,10 @@ public class ConstValueLogicTest {
         var sim = TestHelpers.Build(circuit);
         sim.Step();
         using (Assert.EnterMultipleScope()) {
-            Assert.That(sim.GetOutput("out0", 0), Is.EqualTo(LogicSignal.High));
-            Assert.That(sim.GetOutput("out1", 0), Is.EqualTo(LogicSignal.High));
-            Assert.That(sim.GetOutput("out2", 0), Is.EqualTo(LogicSignal.High));
-            Assert.That(sim.GetOutput("out3", 0), Is.EqualTo(LogicSignal.High));
+            Assert.That(sim.GetOutput("out0", "in"), Is.EqualTo(LogicSignal.High));
+            Assert.That(sim.GetOutput("out1", "in"), Is.EqualTo(LogicSignal.High));
+            Assert.That(sim.GetOutput("out2", "in"), Is.EqualTo(LogicSignal.High));
+            Assert.That(sim.GetOutput("out3", "in"), Is.EqualTo(LogicSignal.High));
         }
     }
 
@@ -89,11 +89,11 @@ public class ConstValueLogicTest {
         var sim = TestHelpers.Build(circuit);
         sim.SetInput("input", 0, LogicSignal.High);
         sim.Step();
-        Assert.That(sim.GetOutput("result", 0), Is.EqualTo(LogicSignal.High));
+        Assert.That(sim.GetOutput("result", "in"), Is.EqualTo(LogicSignal.High));
 
         sim.SetInput("input", 0, LogicSignal.Low);
         sim.Step();
-        Assert.That(sim.GetOutput("result", 0), Is.EqualTo(LogicSignal.Low));
+        Assert.That(sim.GetOutput("result", "in"), Is.EqualTo(LogicSignal.Low));
     }
 
     [TestCase(0)]

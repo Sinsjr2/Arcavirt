@@ -104,7 +104,7 @@ public class UDCounterTest {
         simulation.SetInput("SET", 0, LogicSignal.High);
         simulation.Step();
         for (int j = 0; j < bitCount; j++) {
-            Assert.That(simulation.GetOutput($"D{j}", 0), Is.EqualTo(LogicSignal.Low), $"reset: D{j}");
+            Assert.That(simulation.GetOutput($"D{j}", "in"), Is.EqualTo(LogicSignal.Low), $"reset: D{j}");
         }
 
         // Phase 2: プリセット確認
@@ -117,7 +117,7 @@ public class UDCounterTest {
             simulation.Step();
             // 2a. SET=High中の確認
             for (int j = 0; j < bitCount; j++) {
-                Assert.That(simulation.GetOutput($"D{j}", 0),
+                Assert.That(simulation.GetOutput($"D{j}", "in"),
                     Is.EqualTo(((preset & (1 << j)) != 0).ToSignal()),
                     $"preset=0x{preset:X}: D{j}");
             }
@@ -125,7 +125,7 @@ public class UDCounterTest {
             simulation.SetInput("SET", 0, LogicSignal.Low);
             simulation.Step();
             for (int j = 0; j < bitCount; j++) {
-                Assert.That(simulation.GetOutput($"D{j}", 0),
+                Assert.That(simulation.GetOutput($"D{j}", "in"),
                     Is.EqualTo(((preset & (1 << j)) != 0).ToSignal()),
                     $"after preset clear, preset=0x{preset:X}: D{j}");
             }
@@ -168,7 +168,7 @@ public class UDCounterTest {
 
         // 初期HI確認(クロック前)
         bool hiInitial = (isUp && startValue == maxValue) || (!isUp && startValue == 0);
-        Assert.That(simulation.GetOutput("HI", 0), Is.EqualTo(hiInitial.ToSignal()),
+        Assert.That(simulation.GetOutput("HI", "in"), Is.EqualTo(hiInitial.ToSignal()),
             $"{label} pre-clk HI");
 
         for (int i = 0; i < scenario.ClockCount; i++) {
@@ -184,11 +184,11 @@ public class UDCounterTest {
             using (Assert.EnterMultipleScope()) {
                 for (int j = 0; j < bitCount; j++) {
                     bool expectedBit = (expectedValue & (1 << j)) != 0;
-                    Assert.That(simulation.GetOutput($"D{j}", 0), Is.EqualTo(expectedBit.ToSignal()),
+                    Assert.That(simulation.GetOutput($"D{j}", "in"), Is.EqualTo(expectedBit.ToSignal()),
                         $"{label} i={i}: D{j}");
                 }
                 bool hiExpected = (isUp && expectedValue == maxValue) || (!isUp && expectedValue == 0);
-                Assert.That(simulation.GetOutput("HI", 0), Is.EqualTo(hiExpected.ToSignal()),
+                Assert.That(simulation.GetOutput("HI", "in"), Is.EqualTo(hiExpected.ToSignal()),
                     $"{label} i={i}: HI");
             }
         }

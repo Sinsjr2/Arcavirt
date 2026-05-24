@@ -21,9 +21,9 @@ public class ComparatorTests {
                 }
                 simulation.Step();
                 using (Assert.EnterMultipleScope()) {
-                    Assert.That(simulation.GetOutput("GT", 0), Is.EqualTo((a > b).ToSignal()), $"A=0x{a:X} > B=0x{b:X}");
-                    Assert.That(simulation.GetOutput("EQ", 0), Is.EqualTo((a == b).ToSignal()), $"A=0x{a:X} == B=0x{b:X}");
-                    Assert.That(simulation.GetOutput("LT", 0), Is.EqualTo((a < b).ToSignal()), $"A=0x{a:X} < B=0x{b:X}");
+                    Assert.That(simulation.GetOutput("GT", "in"), Is.EqualTo((a > b).ToSignal()), $"A=0x{a:X} > B=0x{b:X}");
+                    Assert.That(simulation.GetOutput("EQ", "in"), Is.EqualTo((a == b).ToSignal()), $"A=0x{a:X} == B=0x{b:X}");
+                    Assert.That(simulation.GetOutput("LT", "in"), Is.EqualTo((a < b).ToSignal()), $"A=0x{a:X} < B=0x{b:X}");
                 }
             }
         }

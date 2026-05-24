@@ -63,7 +63,7 @@ public class LogicGateTest {
         simulation.SetInput("input", 0, input);
         simulation.Step();
 
-        Assert.That(simulation.GetOutput("output", 0), Is.EqualTo(expected));
+        Assert.That(simulation.GetOutput("output", "in"), Is.EqualTo(expected));
     }
 
     [TestCase(new[] { LogicSignal.Low, LogicSignal.Low }, LogicSignal.High)]

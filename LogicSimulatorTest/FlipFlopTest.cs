@@ -70,7 +70,7 @@ public class FlipFlopTest {
             }
             simulation.Step();
             foreach (var expected in frame.Expecteds) {
-                Assert.That(simulation.GetOutput(expected.PinName, 0), Is.EqualTo(expected.Value.ToSignal()));
+                Assert.That(simulation.GetOutput(expected.PinName, "in"), Is.EqualTo(expected.Value.ToSignal()));
             }
         }
     }
@@ -160,7 +160,7 @@ public class FlipFlopTest {
             }
             simulation.Step();
             foreach (var expected in frame.Expecteds) {
-                Assert.That(simulation.GetOutput(expected.PinName, 0), Is.EqualTo(expected.Value.ToSignal()));
+                Assert.That(simulation.GetOutput(expected.PinName, "in"), Is.EqualTo(expected.Value.ToSignal()));
             }
         }
     }
@@ -249,7 +249,7 @@ public class FlipFlopTest {
             }
             simulation.Step();
             foreach (var expected in frame.Expecteds) {
-                Assert.That(simulation.GetOutput(expected.PinName, 0), Is.EqualTo(expected.Value.ToSignal()));
+                Assert.That(simulation.GetOutput(expected.PinName, "in"), Is.EqualTo(expected.Value.ToSignal()));
             }
         }
     }

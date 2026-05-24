@@ -43,7 +43,7 @@ public class MultiplexerTest {
                 using (Assert.EnterMultipleScope()) {
                     for (int b = 0; b < dataBit; b++) {
                         Assert.That(
-                            sim.GetOutput($"Y{b}", 0),
+                            sim.GetOutput($"Y{b}", "in"),
                             Is.EqualTo((((dataVal >> b) & 1) != 0).ToSignal()),
                             $"sel={sel}, dataVal=0x{dataVal:X}: Y{b}");
                     }
@@ -87,7 +87,7 @@ public class MultiplexerTest {
                                 ? (((dataVal >> b) & 1) != 0).ToSignal()
                                 : LogicSignal.Low;
                             Assert.That(
-                                sim.GetOutput($"Y{ch}_{b}", 0),
+                                sim.GetOutput($"Y{ch}_{b}", "in"),
                                 Is.EqualTo(expected),
                                 $"sel={sel}, dataVal=0x{dataVal:X}: Y{ch}_{b}");
                         }

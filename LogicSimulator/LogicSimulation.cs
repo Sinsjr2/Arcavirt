@@ -20,7 +20,7 @@ public class LogicSimulation {
     /// </summary>
     readonly List<int> outputValueChangedExecutorIndexes = [];
 
-    readonly Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>> logicIdAndPinNameToPinIndex;
+    readonly Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex, bool isInput)>> logicIdAndPinNameToPinIndex;
 
     class ExecutorContext {
         public ILogicExecutor Executor;
@@ -101,7 +101,7 @@ public class LogicSimulation {
 
     LogicSimulation(
         ExecutorContext[] executorContexts,
-        Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>> logicIdAndPinNameToPinIndex,
+        Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex, bool isInput)>> logicIdAndPinNameToPinIndex,
         List<int> initialInputChangedIndexes) {
         this.executorContexts = executorContexts;
         this.logicIdAndPinNameToPinIndex = logicIdAndPinNameToPinIndex;
@@ -376,33 +376,33 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     /// <see cref="BuildExecutorContexts"/> で executorContexts が確定した後に呼び出す必要があります。
     /// </para>
     /// </summary>
-    static Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>> BuildPinIndex(
+    static Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex, bool isInput)>> BuildPinIndex(
         List<(ExecutorContext ctx, IOConnectorDefinition[] defs)> executorAndDefinitionsList) {
-        var pinIndex = new Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>>();
+        var pinIndex = new Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex, bool isInput)>>();
 
         for (int i = 0; i < executorAndDefinitionsList.Count; i++) {
             var (ctx, definitions) = executorAndDefinitionsList[i];
             var execIdx = i;
             for (int logicNumInExec = 0; logicNumInExec < definitions.Length; logicNumInExec++) {
                 var def = definitions[logicNumInExec];
-                pinIndex[def.LogicID] = new Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>();
+                pinIndex[def.LogicID] = new Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex, bool isInput)>();
 
                 int currentInputPinOffset = 0;
                 foreach (var pin in def.InputPins) {
-                    pinIndex[def.LogicID][pin.PinName] = (execIdx, logicNumInExec, ctx.Inputs.GetPinIndex(logicNumInExec, currentInputPinOffset));
+                    pinIndex[def.LogicID][pin.PinName] = (execIdx, logicNumInExec, ctx.Inputs.GetPinIndex(logicNumInExec, currentInputPinOffset), true);
                     if (pin.IsIndexed) {
                         for (int k = 0; k < pin.BitSize; k++) {
-                            pinIndex[def.LogicID][$"{pin.PinName}[{k}]"] = (execIdx, logicNumInExec, ctx.Inputs.GetPinIndex(logicNumInExec, currentInputPinOffset + k));
+                            pinIndex[def.LogicID][$"{pin.PinName}[{k}]"] = (execIdx, logicNumInExec, ctx.Inputs.GetPinIndex(logicNumInExec, currentInputPinOffset + k), true);
                         }
                     }
                     currentInputPinOffset += pin.BitSize;
                 }
                 int currentOutputPinOffset = 0;
                 foreach (var pin in def.OutputPins) {
-                    pinIndex[def.LogicID][pin.PinName] = (execIdx, logicNumInExec, ctx.Outputs.GetPinIndex(logicNumInExec, currentOutputPinOffset));
+                    pinIndex[def.LogicID][pin.PinName] = (execIdx, logicNumInExec, ctx.Outputs.GetPinIndex(logicNumInExec, currentOutputPinOffset), false);
                     if (pin.IsIndexed) {
                         for (int k = 0; k < pin.BitSize; k++) {
-                            pinIndex[def.LogicID][$"{pin.PinName}[{k}]"] = (execIdx, logicNumInExec, ctx.Outputs.GetPinIndex(logicNumInExec, currentOutputPinOffset + k));
+                            pinIndex[def.LogicID][$"{pin.PinName}[{k}]"] = (execIdx, logicNumInExec, ctx.Outputs.GetPinIndex(logicNumInExec, currentOutputPinOffset + k), false);
                         }
                     }
                     currentOutputPinOffset += pin.BitSize;
@@ -419,7 +419,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     /// </summary>
     static IReadOnlyList<CircuitError> ResolveConnections(
         IReadOnlyList<LogicConnection> connections,
-        Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>> logicIdAndPinNameToPinIndex,
+        Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex, bool isInput)>> logicIdAndPinNameToPinIndex,
         ExecutorContext[] executorContexts) {
         var errors = new List<CircuitError>();
         foreach (var connection in connections) {
@@ -1201,7 +1201,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     /// <summary>
     /// InputConnector経由で入力値を設定します。
     /// </summary>
-    public void SetInput(string inputConnectorLogicID, int pinNumber, LogicSignal value) {
+    public void SetInput(string inputConnectorLogicID, int bitIndex, LogicSignal value) {
         if (!logicIdAndPinNameToPinIndex.TryGetValue(inputConnectorLogicID, out var pinMap) || !pinMap.TryGetValue("out", out var inputPinInfo)) {
             throw new ArgumentException($"Input connector {inputConnectorLogicID} not found or does not have 'out' pin.");
         }
@@ -1209,10 +1209,10 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
         var targetExecutorIndex = inputPinInfo.executorIndex;
         var targetLogicNumberInExecutor = inputPinInfo.logicNumberInExecutor;
         var ctx = executorContexts[targetExecutorIndex];
-        var globalPinIndex = ctx.Outputs.GetPinIndex(targetLogicNumberInExecutor, pinNumber);
+        var globalPinIndex = ctx.Outputs.GetPinIndex(targetLogicNumberInExecutor, bitIndex);
 
         // InputConnectorの出力ピンに値を書き込む
-        if (ctx.Outputs.WriteBit(targetLogicNumberInExecutor, pinNumber, value)) {
+        if (ctx.Outputs.WriteBit(targetLogicNumberInExecutor, bitIndex, value)) {
             // 変更があった場合は、伝播処理を行う必要がある
             if (!outputValueChangedExecutorIndexes.Contains(targetExecutorIndex)) {
                 outputValueChangedExecutorIndexes.Add(targetExecutorIndex);
@@ -1223,20 +1223,26 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     }
 
     /// <summary>
-    /// OutputConnector経由で出力値を取得します。
+    /// 任意のノードの任意のピンから値を取得します。
     /// </summary>
-    public LogicSignal GetOutput(string outputConnectorLogicID, int pinNumber) {
-        // logicIdAndPinNameToPinIndex を使用して OutputConnector の入力ピンを特定
-        // OutputConnectorは通常"in"ピンを持つ
-        if (!logicIdAndPinNameToPinIndex.TryGetValue(outputConnectorLogicID, out var pinMap) || !pinMap.TryGetValue("in", out var outputPinInfo)) {
-            throw new ArgumentException($"Output connector {outputConnectorLogicID} not found or does not have 'in' pin.");
+    public LogicSignal GetOutput(string logicId, string pinName, int bitIndex = 0) {
+        if (!logicIdAndPinNameToPinIndex.TryGetValue(logicId, out var pinMap)) {
+            throw new ArgumentException($"'{logicId}' not found.");
         }
 
-        var targetExecutorIndex = outputPinInfo.executorIndex;
-        var targetLogicNumberInExecutor = outputPinInfo.logicNumberInExecutor;
-        var ctx = executorContexts[targetExecutorIndex];
+        var lookupName = bitIndex == 0 ? pinName : $"{pinName}[{bitIndex}]";
+        if (!pinMap.TryGetValue(lookupName, out var pinInfo)) {
+            if (bitIndex == 0 && pinMap.TryGetValue($"{pinName}[0]", out var fallbackPinInfo)) {
+                pinInfo = fallbackPinInfo;
+            } else {
+                throw new ArgumentException($"'{logicId}'.'{lookupName}' not found.");
+            }
+        }
 
-        // OutputConnectorの入力ピンの値を読み取る
-        return ctx.Inputs.ReadBit(targetLogicNumberInExecutor, pinNumber);
+        var ctx = executorContexts[pinInfo.executorIndex];
+        if (pinInfo.isInput) {
+            return ctx.Inputs.Pins[pinInfo.pinIndex];
+        }
+        return ctx.Outputs.Pins[pinInfo.pinIndex];
     }
 }

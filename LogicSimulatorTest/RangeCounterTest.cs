@@ -545,7 +545,7 @@ public class RangeCounterTest {
     private static void CheckRangeOutput(LogicSimulation sim, int expectedRange) {
         LogicSignal expected = (expectedRange != 0) ? LogicSignal.High : LogicSignal.Low;
         Assert.That(
-            sim.GetOutput("RANGE", 0),
+            sim.GetOutput("RANGE", "in"),
             Is.EqualTo(expected));
     }
 
@@ -553,7 +553,7 @@ public class RangeCounterTest {
         for (int i = 0; i < 16; i++) {
             LogicSignal expected = ((expectedValue & (1 << i)) != 0) ? LogicSignal.High : LogicSignal.Low;
             Assert.That(
-                sim.GetOutput($"D{i}", 0),
+                sim.GetOutput($"D{i}", "in"),
                 Is.EqualTo(expected),
                 $"D{i}");
         }

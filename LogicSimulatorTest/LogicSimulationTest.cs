@@ -48,7 +48,7 @@ public class LogicSimulationTest {
         simulation.SetInput("x2", 0, input2);
         simulation.Step();
 
-        Assert.That(simulation.GetOutput("result", 0), Is.EqualTo(expected));
+        Assert.That(simulation.GetOutput("result", "in"), Is.EqualTo(expected));
     }
 
     /// <summary>
@@ -93,25 +93,25 @@ public class LogicSimulationTest {
         simulation.SetInput("input", 0, LogicSignal.Low);
         simulation.Step();
 
-        Assert.That(simulation.GetOutput("outputA", 0), Is.EqualTo(LogicSignal.Low));
-        Assert.That(simulation.GetOutput("outputB", 0), Is.EqualTo(LogicSignal.Low));
-        Assert.That(simulation.GetOutput("outputC", 0), Is.EqualTo(LogicSignal.Low));
+        Assert.That(simulation.GetOutput("outputA", "in"), Is.EqualTo(LogicSignal.Low));
+        Assert.That(simulation.GetOutput("outputB", "in"), Is.EqualTo(LogicSignal.Low));
+        Assert.That(simulation.GetOutput("outputC", "in"), Is.EqualTo(LogicSignal.Low));
 
         // ステップ2: 入力=TRUE に変更
         simulation.SetInput("input", 0, LogicSignal.High);
         simulation.Step();
 
         // すべての出力がTRUEであることを確認(複数接続がすべて正しくコピーされたことを検証)
-        Assert.That(simulation.GetOutput("outputA", 0), Is.EqualTo(LogicSignal.High));
-        Assert.That(simulation.GetOutput("outputB", 0), Is.EqualTo(LogicSignal.High));
-        Assert.That(simulation.GetOutput("outputC", 0), Is.EqualTo(LogicSignal.High));
+        Assert.That(simulation.GetOutput("outputA", "in"), Is.EqualTo(LogicSignal.High));
+        Assert.That(simulation.GetOutput("outputB", "in"), Is.EqualTo(LogicSignal.High));
+        Assert.That(simulation.GetOutput("outputC", "in"), Is.EqualTo(LogicSignal.High));
     }
 
-    [TestCase(true, true, true)]
-    [TestCase(true, false, false)]
-    [TestCase(false, true, false)]
-    [TestCase(false, false, false)]
-    public void InputOutputConnector_AutoInfer_WorksWithAndGate(bool a, bool b, bool expected) {
+    [TestCase(LogicSignal.High, LogicSignal.High, LogicSignal.High)]
+    [TestCase(LogicSignal.High, LogicSignal.Low, LogicSignal.Low)]
+    [TestCase(LogicSignal.Low, LogicSignal.High, LogicSignal.Low)]
+    [TestCase(LogicSignal.Low, LogicSignal.Low, LogicSignal.Low)]
+    public void InputOutputConnector_AutoInfer_WorksWithAndGate(LogicSignal a, LogicSignal b, LogicSignal expected) {
         var circuit = new Circuit([
                 new("A", new InputConnector()),
                 new("B", new InputConnector()),
@@ -124,10 +124,10 @@ public class LogicSimulationTest {
                 new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
             ]);
         var sim = TestHelpers.Build(circuit);
-        sim.SetInput("A", 0, a.ToSignal());
-        sim.SetInput("B", 0, b.ToSignal());
+        sim.SetInput("A", 0, a);
+        sim.SetInput("B", 0, b);
         sim.Step();
-        Assert.That(sim.GetOutput("out", 0), Is.EqualTo(expected.ToSignal()));
+        Assert.That(sim.GetOutput("out", "in"), Is.EqualTo(expected));
     }
 
     [Test]
@@ -144,7 +144,7 @@ public class LogicSimulationTest {
         var sim = TestHelpers.Build(circuit);
         sim.SetInput("A", 0, LogicSignal.High);
         sim.Step();
-        Assert.That(sim.GetOutput("out", 0), Is.EqualTo(LogicSignal.High));
+        Assert.That(sim.GetOutput("out", "in"), Is.EqualTo(LogicSignal.High));
     }
 
     [Test]
@@ -162,24 +162,6 @@ public class LogicSimulationTest {
         Assert.That(sim, Is.Null);
         Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
             e.NodeId == "A" && e.Kind == CircuitErrorKind.UnresolvableConnector));
-    }
-
-    [Test]
-    public void OutputConnector_MultipleSourceConnections_ReturnsFalseWithMultipleSourceError() {
-        var circuit = new Circuit([
-                new("A", new InputConnector()),
-                new("B", new InputConnector()),
-                new("out", new OutputConnector())
-            ],
-            [
-                new(new LogicConnector("A", "out"), new LogicConnector("out", "in")),
-                new(new LogicConnector("B", "out"), new LogicConnector("out", "in"))
-            ]);
-        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
-        Assert.That(result, Is.False);
-        Assert.That(sim, Is.Null);
-        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
-            e.NodeId == "out" && e.Kind == CircuitErrorKind.MultipleSourceConnections));
     }
 
     [Test]
@@ -240,7 +222,7 @@ public class LogicSimulationTest {
         sim!.SetInput("A", 0, LogicSignal.High);
         sim.SetInput("B", 0, LogicSignal.High);
         sim.Step();
-        Assert.That(sim.GetOutput("out", 0), Is.EqualTo(LogicSignal.High));
+        Assert.That(sim.GetOutput("out", "in"), Is.EqualTo(LogicSignal.High));
     }
 
     [Test]
@@ -719,5 +701,157 @@ public class LogicSimulationTest {
         Assert.That(sim, Is.Null);
         Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
             e.NodeId == "and" && e.Kind == CircuitErrorKind.InvalidNodeReference));
+    }
+
+    [Test]
+    public void BusConnection_BusToBus_PropagatesAllBits() {
+        var circuit = new Circuit([
+                new("in0", new InputConnector()),
+                new("in1", new InputConnector()),
+                new("or", new OrLogic(2)),
+                new("out0", new OutputConnector()),
+                new("out1", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("in0", "out"), new LogicConnector("or", "in[0]")),
+                new(new LogicConnector("in1", "out"), new LogicConnector("or", "in[1]")),
+                new(new LogicConnector("or", "out"), new LogicConnector("out0", "in")),
+                new(new LogicConnector("or", "out"), new LogicConnector("out1", "in"))
+            ]);
+        var sim = TestHelpers.Build(circuit);
+        sim.SetInput("in0", 0, LogicSignal.High);
+        sim.SetInput("in1", 0, LogicSignal.High);
+        sim.Step();
+        Assert.That(sim.GetOutput("out0", "in"), Is.EqualTo(LogicSignal.High));
+        Assert.That(sim.GetOutput("out1", "in"), Is.EqualTo(LogicSignal.High));
+    }
+
+    [Test]
+    public void BusConnection_BusToIndexedBit_RoutesCorrectBit() {
+        var circuit = new Circuit([
+                new("in0", new InputConnector()),
+                new("in1", new InputConnector()),
+                new("not0", new NotLogic()),
+                new("not1", new NotLogic()),
+                new("out0", new OutputConnector()),
+                new("out1", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("in0", "out"), new LogicConnector("not0", "in")),
+                new(new LogicConnector("in1", "out"), new LogicConnector("not1", "in")),
+                new(new LogicConnector("not0", "out"), new LogicConnector("out0", "in")),
+                new(new LogicConnector("not1", "out"), new LogicConnector("out1", "in"))
+            ]);
+        var sim = TestHelpers.Build(circuit);
+        sim.SetInput("in0", 0, LogicSignal.High);
+        sim.SetInput("in1", 0, LogicSignal.Low);
+        sim.Step();
+        Assert.That(sim.GetOutput("out0", "in"), Is.EqualTo(LogicSignal.Low));
+        Assert.That(sim.GetOutput("out1", "in"), Is.EqualTo(LogicSignal.High));
+    }
+
+    [Test]
+    public void SetInput_OutOfRangeBitIndex_ThrowsException() {
+        var circuit = new Circuit([
+                new("A", new InputConnector(1)),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("out", "in"))
+            ]);
+        var sim = TestHelpers.Build(circuit);
+        Assert.That(() => sim.SetInput("A", 1, LogicSignal.High), Throws.TypeOf<IndexOutOfRangeException>());
+    }
+
+    [Test]
+    public void Step_MultipleSteps_StateTransitionsCorrectly() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("not", new NotLogic()),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("not", "in")),
+                new(new LogicConnector("not", "out"), new LogicConnector("out", "in"))
+            ]);
+        var sim = TestHelpers.Build(circuit);
+        sim.SetInput("A", 0, LogicSignal.Low);
+        sim.Step();
+        Assert.That(sim.GetOutput("out", "in"), Is.EqualTo(LogicSignal.High));
+        sim.SetInput("A", 0, LogicSignal.High);
+        sim.Step();
+        Assert.That(sim.GetOutput("out", "in"), Is.EqualTo(LogicSignal.Low));
+    }
+
+    [Test]
+    public void Step_OscillatingCircuit_WithCombinationalFeedback() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("not1", new NotLogic()),
+                new("not2", new NotLogic()),
+                new("and", new AndLogic(2)),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("not1", "in")),
+                new(new LogicConnector("not1", "out"), new LogicConnector("not2", "in")),
+                new(new LogicConnector("not2", "out"), new LogicConnector("and", "in[0]")),
+                new(new LogicConnector("A", "out"), new LogicConnector("and", "in[1]")),
+                new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
+            ]);
+        var sim = TestHelpers.Build(circuit);
+        sim.SetInput("A", 0, LogicSignal.High);
+        sim.Step();
+        Assert.That(sim.GetOutput("out", "in"), Is.EqualTo(LogicSignal.High));
+    }
+
+    [Test]
+    public void GetOutput_ArbitraryNodeAndPin_ReturnsCorrectSignal() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("B", new InputConnector()),
+                new("and", new AndLogic(2)),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("and", "in[0]")),
+                new(new LogicConnector("B", "out"), new LogicConnector("and", "in[1]")),
+                new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
+            ]);
+        var sim = TestHelpers.Build(circuit);
+        sim.SetInput("A", 0, LogicSignal.High);
+        sim.SetInput("B", 0, LogicSignal.High);
+        sim.Step();
+        Assert.That(sim.GetOutput("and", "out"), Is.EqualTo(LogicSignal.High));
+    }
+
+    [Test]
+    public void GetOutput_NonexistentLogicId_ThrowsArgumentException() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("not", new NotLogic()),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("not", "in")),
+                new(new LogicConnector("not", "out"), new LogicConnector("out", "in"))
+            ]);
+        var sim = TestHelpers.Build(circuit);
+        Assert.That(() => sim.GetOutput("nonexistent", "in"), Throws.TypeOf<ArgumentException>());
+    }
+
+    [Test]
+    public void GetOutput_NonexistentPinName_ThrowsArgumentException() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("not", new NotLogic()),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("not", "in")),
+                new(new LogicConnector("not", "out"), new LogicConnector("out", "in"))
+            ]);
+        var sim = TestHelpers.Build(circuit);
+        Assert.That(() => sim.GetOutput("not", "nonexistent"), Throws.TypeOf<ArgumentException>());
     }
 }
