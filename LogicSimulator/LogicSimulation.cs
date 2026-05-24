@@ -288,7 +288,7 @@ public class LogicSimulation {
     /// 回路ノード内の CustomCircuit が参照する回路名が、circuitLibrary に存在するかを再帰的に検証します。
     /// <para>未登録の参照が存在する場合は InvalidNodeReference エラーを返します。</para>
     /// </summary>
-    private static IReadOnlyList<CircuitError> ValidateCircuitLibraryReferences(
+    static IReadOnlyList<CircuitError> ValidateCircuitLibraryReferences(
         IReadOnlyDictionary<string, Circuit> circuitLibrary,
         Circuit circuit) {
         var errors = new List<CircuitError>();
@@ -768,7 +768,7 @@ public class LogicSimulation {
     /// 接続リスト内の全バス接続について、InvalidPinAccess・BitWidthMismatch・InvalidNodeReference を検証してエラーを返します。
     /// <para>このメソッドが返すエラーが 0 件のとき、ExpandBusConnections を呼び出すことができます。</para>
     /// </summary>
-    private static IReadOnlyList<CircuitError> ValidateBusConnections(
+    static IReadOnlyList<CircuitError> ValidateBusConnections(
         IReadOnlyList<LogicConnection> connections,
         IReadOnlyDictionary<string, Dictionary<string, PinDefinition>> pinWidthMap,
         IReadOnlyDictionary<string, int> resolvedBits) {
