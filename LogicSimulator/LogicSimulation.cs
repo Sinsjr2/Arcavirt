@@ -155,53 +155,53 @@ public class LogicSimulation {
         );
     }
 
-/// <summary>
-/// 回路定義からシミュレーションを構築します。
-/// 構築に成功した場合は <see langword="true"/> を返し <paramref name="simulation"/> に値を設定します。
-/// 失敗した場合は <see langword="false"/> を返し <paramref name="errors"/> にエラーの一覧を設定します。
-/// </summary>
-/// <param name="circuit">構築する回路の定義。</param>
-/// <param name="simulation">構築に成功した場合のシミュレーションインスタンス。失敗時は <see langword="null"/>。</param>
-/// <param name="errors">検出されたエラーの配列。成功時は空配列。</param>
-/// <param name="circuitLibrary">CustomCircuit の展開に使用する回路ライブラリ。</param>
-/// <remarks>
-/// <para>このメソッドが返す <see cref="CircuitError"/> の <see cref="CircuitErrorKind"/> は以下の通りです。</para>
-/// <list type="table">
-///   <listheader>
-///     <term>ErrorKind</term>
-///     <description>発生条件</description>
-///   </listheader>
-///   <item>
-///     <term><see cref="CircuitErrorKind.DuplicateNodeId"/></term>
-///     <description>同じ LogicID を持つノードが複数登録されている。</description>
-///   </item>
-///   <item>
-///     <term><see cref="CircuitErrorKind.InvalidNodeReference"/></term>
-///     <description>接続定義に存在しない LogicID・ピン名が含まれているか、回路ライブラリに未登録の CustomCircuit 名が指定されている。</description>
-///   </item>
-///   <item>
-///     <term><see cref="CircuitErrorKind.UnregisteredLogicElement"/></term>
-///     <description>回路に含まれる素子の型が、登録済みのファクトリに存在しない。</description>
-///   </item>
-///   <item>
-///     <term><see cref="CircuitErrorKind.BitWidthMismatch"/></term>
-///     <description>接続されているピン同士のビット幅が一致しない。</description>
-///   </item>
-///   <item>
-///     <term><see cref="CircuitErrorKind.UnresolvableConnector"/></term>
-///     <description>InputConnector/OutputConnector のビット幅を接続から推論できない。</description>
-///   </item>
-///   <item>
-///     <term><see cref="CircuitErrorKind.UnconnectedInput"/></term>
-///     <description>入力ピンが未接続のままになっている。</description>
-///   </item>
-///   <item>
-///     <term><see cref="CircuitErrorKind.MultipleSourceConnections"/></term>
-///     <description>1つの入力ピンに複数の出力ピンが接続されている。</description>
-///   </item>
-/// </list>
-/// </remarks>
-public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimulation? simulation, out CircuitError[] errors, IReadOnlyDictionary<string, Circuit>? circuitLibrary = null) {
+    /// <summary>
+    /// 回路定義からシミュレーションを構築します。
+    /// 構築に成功した場合は <see langword="true"/> を返し <paramref name="simulation"/> に値を設定します。
+    /// 失敗した場合は <see langword="false"/> を返し <paramref name="errors"/> にエラーの一覧を設定します。
+    /// </summary>
+    /// <param name="circuit">構築する回路の定義。</param>
+    /// <param name="simulation">構築に成功した場合のシミュレーションインスタンス。失敗時は <see langword="null"/>。</param>
+    /// <param name="errors">検出されたエラーの配列。成功時は空配列。</param>
+    /// <param name="circuitLibrary">CustomCircuit の展開に使用する回路ライブラリ。</param>
+    /// <remarks>
+    /// <para>このメソッドが返す <see cref="CircuitError"/> の <see cref="CircuitErrorKind"/> は以下の通りです。</para>
+    /// <list type="table">
+    ///   <listheader>
+    ///     <term>ErrorKind</term>
+    ///     <description>発生条件</description>
+    ///   </listheader>
+    ///   <item>
+    ///     <term><see cref="CircuitErrorKind.DuplicateNodeId"/></term>
+    ///     <description>同じ LogicID を持つノードが複数登録されている。</description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="CircuitErrorKind.InvalidNodeReference"/></term>
+    ///     <description>接続定義に存在しない LogicID・ピン名が含まれているか、回路ライブラリに未登録の CustomCircuit 名が指定されている。</description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="CircuitErrorKind.UnregisteredLogicElement"/></term>
+    ///     <description>回路に含まれる素子の型が、登録済みのファクトリに存在しない。</description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="CircuitErrorKind.BitWidthMismatch"/></term>
+    ///     <description>接続されているピン同士のビット幅が一致しない。</description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="CircuitErrorKind.UnresolvableConnector"/></term>
+    ///     <description>InputConnector/OutputConnector のビット幅を接続から推論できない。</description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="CircuitErrorKind.UnconnectedInput"/></term>
+    ///     <description>入力ピンが未接続のままになっている。</description>
+    ///   </item>
+    ///   <item>
+    ///     <term><see cref="CircuitErrorKind.MultipleSourceConnections"/></term>
+    ///     <description>1つの入力ピンに複数の出力ピンが接続されている。</description>
+    ///   </item>
+    /// </list>
+    /// </remarks>
+    public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimulation? simulation, out CircuitError[] errors, IReadOnlyDictionary<string, Circuit>? circuitLibrary = null) {
         var (result, errorList) = BuildCore(circuit, CreateDefaultFactories(), circuitLibrary);
         if (errorList.Length > 0) {
             simulation = null;
