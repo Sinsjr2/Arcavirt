@@ -638,4 +638,66 @@ public class LogicSimulationTest {
         Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
             e.NodeId == "NONEXISTENT" && e.Kind == CircuitErrorKind.InvalidNodeReference));
     }
+
+    [Test]
+    public void ResolveConnectorBits_InputConnectorConnectedToConflictingWidths_ReturnsBitWidthMismatch() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("and", new AndLogic(2)),
+                new("or2", new OrLogic(2)),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("and", "in[0]")),
+                new(new LogicConnector("A", "out"), new LogicConnector("or2", "in")),
+                new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        using (Assert.EnterMultipleScope()) {
+            Assert.That(result, Is.False);
+            Assert.That(sim, Is.Null);
+            Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+                e.NodeId == "A" && e.Kind == CircuitErrorKind.BitWidthMismatch));
+        }
+    }
+
+    [Test]
+    public void OutputConnector_ExplicitDataBits_MismatchWithConnectedPin_ReturnsFalseWithBitWidthMismatch() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("B", new InputConnector()),
+                new("and", new AndLogic(2)),
+                new("out", new OutputConnector(2))
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("and", "in[0]")),
+                new(new LogicConnector("B", "out"), new LogicConnector("and", "in[1]")),
+                new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        using (Assert.EnterMultipleScope()) {
+            Assert.That(result, Is.False);
+            Assert.That(sim, Is.Null);
+            Assert.That(errors, Has.Some.Matches<CircuitError>(static e =>
+                e.NodeId == "out" && e.Kind == CircuitErrorKind.BitWidthMismatch));
+        }
+    }
+
+    [Test]
+    public void ResolveConnectorBits_ConnectorOnlyConnectedToUnresolvedConnectors_ReturnsUnresolvableConnector() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("out", "in"))
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        using (Assert.EnterMultipleScope()) {
+            Assert.That(result, Is.False);
+            Assert.That(sim, Is.Null);
+            Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+                e.NodeId == "A" && e.Kind == CircuitErrorKind.UnresolvableConnector));
+        }
+    }
 }

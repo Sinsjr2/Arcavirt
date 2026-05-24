@@ -665,7 +665,17 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
             }
         }
 
-        // 解決できなかったコネクタをエラーとして収集
+        errors.AddRange(ValidateConnectorResolution(connectorNodes, connections, resolved));
+
+        return (resolved, errors);
+    }
+
+    static IReadOnlyList<CircuitError> ValidateConnectorResolution(
+        Dictionary<string, LogicNode> connectorNodes,
+        IReadOnlyList<LogicConnection> connections,
+        IReadOnlyDictionary<string, int> resolved) {
+
+        var errors = new List<CircuitError>();
         foreach (var node in connectorNodes.Values) {
             if (resolved.ContainsKey(node.LogicID)) {
                 continue;
@@ -691,8 +701,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
                 }
             }
         }
-
-        return (resolved, errors);
+        return errors;
     }
 
     /// <summary>
