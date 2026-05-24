@@ -700,4 +700,24 @@ public class LogicSimulationTest {
                 e.NodeId == "A" && e.Kind == CircuitErrorKind.UnresolvableConnector));
         }
     }
+
+    [Test]
+    public void TryBuild_InvalidTargetPinName_ReturnsInvalidNodeReferenceError() {
+        var circuit = new Circuit([
+                new("A", new InputConnector()),
+                new("not1", new NotLogic()),
+                new("and", new AndLogic(2)),
+                new("out", new OutputConnector())
+            ],
+            [
+                new(new LogicConnector("A", "out"), new LogicConnector("not1", "in")),
+                new(new LogicConnector("not1", "out"), new LogicConnector("and", "INVALID_PIN")),
+                new(new LogicConnector("and", "out"), new LogicConnector("out", "in"))
+            ]);
+        var result = LogicSimulation.TryBuild(circuit, out var sim, out var errors);
+        Assert.That(result, Is.False);
+        Assert.That(sim, Is.Null);
+        Assert.That(errors, Has.Some.Matches<CircuitError>(e =>
+            e.NodeId == "and" && e.Kind == CircuitErrorKind.InvalidNodeReference));
+    }
 }
