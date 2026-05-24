@@ -232,6 +232,11 @@ public class LogicSimulation {
             circuit = new Circuit(CleanupNodes(flattenedNodes), solvedConns);
         }
 
+        errors = [.. ValidateElements(circuit.LogicNodes, factories)];
+        if (errors.Length > 0) {
+            return false;
+        }
+
         var pinWidthMap = BuildPinWidthMap(circuit.LogicNodes, factories);
         var (resolvedBits, resolveErrors) = ResolveConnectorBits(circuit.LogicNodes, circuit.LogicConnections, pinWidthMap);
         var busErrors = ValidateBusConnections(circuit.LogicConnections, pinWidthMap, resolvedBits);
@@ -265,6 +270,7 @@ public class LogicSimulation {
             { typeof(NOrLogic), new LogicExecutorFactory<NOrLogic>(new NOrLogicExecutorFactory()) },
             { typeof(XOrLogic), new LogicExecutorFactory<XOrLogic>(new XOrLogicExecutorFactory()) },
             { typeof(ConstValueLogic), new LogicExecutorFactory<ConstValueLogic>(new ConstValueLogicExecutorFactory()) },
+            { typeof(JunctionConnector), new LogicExecutorFactory<JunctionConnector>(new JunctionConnectorExecutorFactory()) },
         };
     }
 
@@ -279,6 +285,21 @@ public class LogicSimulation {
             if (!seen.Add(node.LogicID)) {
                 errors.Add(new CircuitError(node.LogicID, null, CircuitErrorKind.DuplicateNodeId,
                     $"Node '{node.LogicID}' is defined more than once in the circuit."));
+            }
+        }
+        return errors;
+    }
+
+    /// <summary>
+    /// 回路内の全ノードをファクトリの Validate メソッドで検証します。
+    /// </summary>
+    static IReadOnlyList<CircuitError> ValidateElements(
+        IReadOnlyList<LogicNode> nodes,
+        IReadOnlyDictionary<Type, ILogicExecutorFactory> factories) {
+        var errors = new List<CircuitError>();
+        foreach (var node in nodes) {
+            if (factories.TryGetValue(node.LogicData.GetType(), out var factory)) {
+                errors.AddRange(factory.Validate(node));
             }
         }
         return errors;

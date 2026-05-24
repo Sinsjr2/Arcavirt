@@ -35,6 +35,9 @@ public enum CircuitErrorKind {
     /// バスピン（IsIndexed=true）に対して有効範囲外インデックスでアクセスした。
     /// </summary>
     InvalidPinAccess,
+
+    /// <summary>JunctionConnector の InputBits.Sum() と OutputBits.Sum() が一致しません。</summary>
+    JunctionBitSumMismatch,
 }
 
 public record CircuitError(
