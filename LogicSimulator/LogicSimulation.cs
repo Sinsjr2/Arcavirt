@@ -417,30 +417,23 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
             if (!logicIdAndPinNameToPinIndex.TryGetValue(sourceLogicID, out var sourcePins)) {
                 errors.Add(new CircuitError(sourceLogicID, null, CircuitErrorKind.InvalidNodeReference,
                     $"Connection source '{sourceLogicID}' is not defined in the circuit."));
-                continue;
-            }
-            if (!sourcePins.ContainsKey(sourcePinName)) {
+            } else if (!sourcePins.ContainsKey(sourcePinName)) {
                 errors.Add(new CircuitError(sourceLogicID, sourcePinName, CircuitErrorKind.InvalidNodeReference,
                     $"Connection source '{sourceLogicID}' does not have pin '{sourcePinName}'."));
-                continue;
-            }
-            if (!logicIdAndPinNameToPinIndex.TryGetValue(targetLogicID, out var targetPins)) {
+            } else if (!logicIdAndPinNameToPinIndex.TryGetValue(targetLogicID, out var targetPins)) {
                 errors.Add(new CircuitError(targetLogicID, null, CircuitErrorKind.InvalidNodeReference,
                     $"Connection target '{targetLogicID}' is not defined in the circuit."));
-                continue;
-            }
-            if (!targetPins.ContainsKey(targetPinName)) {
+            } else if (!targetPins.ContainsKey(targetPinName)) {
                 errors.Add(new CircuitError(targetLogicID, targetPinName, CircuitErrorKind.InvalidNodeReference,
                     $"Connection target '{targetLogicID}' does not have pin '{targetPinName}'."));
-                continue;
+            } else {
+                var sourcePinInfo = sourcePins[sourcePinName];
+                var targetPinInfo = targetPins[targetPinName];
+
+                executorContexts[sourcePinInfo.executorIndex].OutputToInputPinConnections[sourcePinInfo.pinIndex].Add(
+                    new TargetConnection(targetPinInfo.executorIndex, new int[] { targetPinInfo.pinIndex })
+                );
             }
-
-            var sourcePinInfo = sourcePins[sourcePinName];
-            var targetPinInfo = targetPins[targetPinName];
-
-            executorContexts[sourcePinInfo.executorIndex].OutputToInputPinConnections[sourcePinInfo.pinIndex].Add(
-                new TargetConnection(targetPinInfo.executorIndex, new int[] { targetPinInfo.pinIndex })
-            );
         }
         return errors;
     }
@@ -991,6 +984,21 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
         return (expandedNodes, expandedConnections, flattenErrors);
     }
 
+    static IReadOnlyList<CircuitError> ValidateTopLevelSourceIds(
+        Dictionary<string, (bool isTop, LogicNode node)> expandedNodes,
+        List<(bool isTop, LogicConnection connection)> expandedConnections) {
+
+        var errors = new List<CircuitError>();
+        foreach (var conn in expandedConnections) {
+            if (conn.isTop && !expandedNodes.ContainsKey(conn.connection.Source.LogicID)) {
+                errors.Add(new CircuitError(conn.connection.Source.LogicID, null,
+                    CircuitErrorKind.InvalidNodeReference,
+                    $"Connection source '{conn.connection.Source.LogicID}' is not defined in the circuit."));
+            }
+        }
+        return errors;
+    }
+
     /// <summary>
     /// コネクタ（InputConnector/OutputConnector）を透過して、実際の接続（通常素子 ↔ トップレベルコネクタ）に変換します。
     /// 接続のソースは1つしか接続されないことを前提としています（このメソッドが呼ばれるよりも先にエラー検知で弾いていること）。
@@ -998,19 +1006,11 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     (List<LogicConnection> result, IReadOnlyList<CircuitError> errors) SolveConnectors(
         Dictionary<string, (bool isTop, LogicNode node)> expandedNodes,
         List<(bool isTop, LogicConnection connection)> expandedConnections) {
+        var validationErrors = ValidateTopLevelSourceIds(expandedNodes, expandedConnections);
+        if (validationErrors.Count > 0) {
+            return ([], validationErrors);
+        }
         var solveErrors = new List<CircuitError>();
-
-        // トップレベル接続のソース LogicID が存在するか事前検証
-        foreach (var conn in expandedConnections) {
-            if (conn.isTop && !expandedNodes.ContainsKey(conn.connection.Source.LogicID)) {
-                solveErrors.Add(new CircuitError(conn.connection.Source.LogicID, null,
-                    CircuitErrorKind.InvalidNodeReference,
-                    $"Connection source '{conn.connection.Source.LogicID}' is not defined in the circuit."));
-            }
-        }
-        if (solveErrors.Count > 0) {
-            return ([], solveErrors);
-        }
 
         // 計算量を減らすために辞書にして接続先を高速で検索できるようにする
         // 無効なソースを除外して KeyNotFoundException を防止
@@ -1075,17 +1075,14 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
         if (!skipSourceConnectorNames.Add(skipKey)) {
             return;
         }
-        if (!expandedNodes.TryGetValue(outputConnector.LogicID, out var targetNode)) {
-            return;
-        }
         // 一番外側の回路の場合は、出力用のコネクタを残す
-        if (targetNode.isTop) {
-            if (targetNode.node.LogicData is OutputConnector) {
+        if (sourceNode.isTop) {
+            if (sourceNode.node.LogicData is OutputConnector) {
                 resultConnections.Add(outputConnector);
                 return;
             }
         }
-        if (targetNode.node.LogicData is OutputConnector or InputConnector) {
+        if (sourceNode.node.LogicData is OutputConnector or InputConnector) {
             if (groupedSourceConnections.TryGetValue(outputConnector.LogicID, out var targetConnections)) {
                 foreach (var targetConnection in targetConnections) {
                     FindTargetConnections(
@@ -1097,7 +1094,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
                         errors);
                 }
             }
-        } else if (targetNode.node.LogicData is CustomCircuit) {
+        } else if (sourceNode.node.LogicData is CustomCircuit) {
             FindTargetConnections(
                 expandedNodes,
                 groupedSourceConnections,
