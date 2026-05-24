@@ -204,20 +204,32 @@ public class LogicSimulation {
     public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimulation? simulation, out CircuitError[] errors,
         IReadOnlyDictionary<string, Circuit>? circuitLibrary = null,
         IReadOnlyDictionary<Type, ILogicExecutorFactory>? factories = null) {
-        
+
         factories ??= CreateDefaultFactories();
+        simulation = null;
 
-        var dupErrors = ValidateDuplicateNodeIds(circuit);
-
-        IReadOnlyList<CircuitError> expandErrors = [];
-        if (circuitLibrary != null) {
-            (circuit, expandErrors) = ExpandCustomCircuits(circuitLibrary, circuit);
+        errors = [.. ValidateDuplicateNodeIds(circuit) ];
+        if (errors.Length > 0) {
+            return false;
         }
 
-        if (dupErrors.Count + expandErrors.Count > 0) {
-            errors = [.. dupErrors, .. expandErrors];
-            simulation = null;
-            return false;
+        if (circuitLibrary != null) {
+            // 内部回路の展開処理
+            errors = [.. ValidateCircuitLibraryReferences(circuitLibrary, circuit) ];
+            if (errors.Length > 0) {
+                return false;
+            }
+            var (flattenedNodes, flattenedConnections) = FlattenCircuit(circuitLibrary, circuit);
+            errors = [.. ValidateTopLevelSourceIds(flattenedNodes, flattenedConnections) ];
+            if (errors.Length > 0) {
+                return false;
+            }
+            var (solvedConns, solveErrors) = SolveConnectors(flattenedNodes, flattenedConnections);
+            errors = [.. solveErrors];
+            if (errors.Length > 0) {
+                return false;
+            }
+            circuit = new Circuit(CleanupNodes(flattenedNodes), solvedConns);
         }
 
         var pinWidthMap = BuildPinWidthMap(circuit.LogicNodes, factories);
@@ -226,22 +238,18 @@ public class LogicSimulation {
         var (executorAndDefinitionsList, executorContextsArray, initialInputChangedIndexes, unregsErrors) = BuildExecutorContexts(circuit.LogicNodes, factories, resolvedBits);
         var validateErrors = ValidateInputConnections(executorAndDefinitionsList, expandedConnections, pinWidthMap);
 
-        List<CircuitError> allErrors = [.. resolveErrors, .. busErrors, .. unregsErrors, .. validateErrors];
-        if (allErrors.Count > 0) {
-            simulation = null;
-            errors = [.. allErrors];
+        errors = [.. resolveErrors, .. busErrors, .. unregsErrors, .. validateErrors];
+        if (errors.Length > 0) {
             return false;
         }
 
         var logicIdAndPinNameToPinIndex = BuildPinIndex(executorAndDefinitionsList);
-        var connErrors = ResolveConnections(expandedConnections, logicIdAndPinNameToPinIndex, executorContextsArray);
-        if (connErrors.Count > 0) {
-            simulation = null;
-            errors = [.. connErrors];
+        errors = [.. ResolveConnections(expandedConnections, logicIdAndPinNameToPinIndex, executorContextsArray)];
+        if (errors.Length > 0) {
             return false;
         }
+
         simulation = new LogicSimulation(executorContextsArray, logicIdAndPinNameToPinIndex, initialInputChangedIndexes);
-        errors = [];
         return true;
     }
 
@@ -266,6 +274,39 @@ public class LogicSimulation {
                     $"Node '{node.LogicID}' is defined more than once in the circuit."));
             }
         }
+        return errors;
+    }
+
+    /// <summary>
+    /// 回路ノード内の CustomCircuit が参照する回路名が、circuitLibrary に存在するかを再帰的に検証します。
+    /// <para>未登録の参照が存在する場合は InvalidNodeReference エラーを返します。</para>
+    /// </summary>
+    private static IReadOnlyList<CircuitError> ValidateCircuitLibraryReferences(
+        IReadOnlyDictionary<string, Circuit> circuitLibrary,
+        Circuit circuit) {
+        var errors = new List<CircuitError>();
+        var visited = new HashSet<string>();
+
+        void ValidateRecursive(string prefix, Circuit current) {
+            foreach (var node in current.LogicNodes) {
+                var newLogicID = prefix + node.LogicID;
+                if (node.LogicData is CustomCircuit customCircuit) {
+                    var targetCircuitName = customCircuit.TargetCircuitName;
+                    if (!circuitLibrary.ContainsKey(targetCircuitName)) {
+                        errors.Add(new CircuitError(newLogicID, null, CircuitErrorKind.InvalidNodeReference,
+                            $"Circuit '{targetCircuitName}' not found in library."));
+                        continue;
+                    }
+                    if (!visited.Add(targetCircuitName)) {
+                        continue;
+                    }
+                    var idPrefix = $"{prefix}{node.LogicID}.";
+                    ValidateRecursive(idPrefix, circuitLibrary[targetCircuitName]);
+                }
+            }
+        }
+
+        ValidateRecursive("", circuit);
         return errors;
     }
 
@@ -919,37 +960,16 @@ public class LogicSimulation {
     }
 
     /// <summary>
-    /// CustomCircuit を含む回路をフラット化・コネクタ透過・ノード整理して展開します。
-    /// </summary>
-    static (Circuit circuit, IReadOnlyList<CircuitError> errors) ExpandCustomCircuits(
-        IReadOnlyDictionary<string, Circuit> circuitLibrary,
-        Circuit originalCircuit) {
-        var (expandedNodes, expandedConnections, flattenErrors) = FlattenCircuit(circuitLibrary, originalCircuit);
-        if (flattenErrors.Count > 0) {
-            return (originalCircuit, flattenErrors);
-        }
-        var (resultConnections, solveErrors) = SolveConnectors(expandedNodes, expandedConnections);
-        if (solveErrors.Count > 0) {
-            return (originalCircuit, solveErrors);
-        }
-        var resultNodes = CleanupNodes(expandedNodes);
-        return (new Circuit(resultNodes, resultConnections), []);
-    }
-
-    /// <summary>
     /// 全ノード・接続を prefix 付きでフラット化します。CustomCircuit を再帰的に展開します。
     /// isTop フラグはトップレベル回路（level == 0）のノード・接続であることを示します。
     /// </summary>
     static (Dictionary<string, (bool isTop, LogicNode node)> nodes,
-     List<(bool isTop, LogicConnection connection)> connections,
-     IReadOnlyList<CircuitError> errors)
+     List<(bool isTop, LogicConnection connection)> connections)
     FlattenCircuit(IReadOnlyDictionary<string, Circuit> circuitLibrary, Circuit originalCircuit) {
         var expandedNodes = new Dictionary<string, (bool isTop, LogicNode node)>();
         var expandedConnections = new List<(bool isTop, LogicConnection connection)>();
-        var flattenErrors = new List<CircuitError>();
 
         void Flatten(string prefix, Circuit circuit, int level) {
-            // 接続する名前も展開する回路の名前をつけてユニークにする
             foreach (var connection in circuit.LogicConnections) {
                 var source = connection.Source;
                 var target = connection.Target;
@@ -962,22 +982,15 @@ public class LogicSimulation {
                 var newNode = node with { LogicID = newLogicID };
                 expandedNodes[newLogicID] = (level == 0, newNode);
                 if (node.LogicData is CustomCircuit customCircuit) {
-                    // CustomCircuitノードの場合、内部回路を展開
                     var targetCircuitName = customCircuit.TargetCircuitName;
-                    if (!circuitLibrary.TryGetValue(targetCircuitName, out var circuitDef)) {
-                        flattenErrors.Add(new CircuitError(newLogicID, null, CircuitErrorKind.InvalidNodeReference,
-                            $"Circuit '{targetCircuitName}' not found in library."));
-                        continue;
-                    }
-                    // ネストを示すプリフィックス
                     var idPrefix = $"{prefix}{node.LogicID}.";
-                    Flatten(idPrefix, circuitDef, level + 1);
+                    Flatten(idPrefix, circuitLibrary[targetCircuitName], level + 1);
                 }
             }
         }
 
         Flatten("", originalCircuit, 0);
-        return (expandedNodes, expandedConnections, flattenErrors);
+        return (expandedNodes, expandedConnections);
     }
 
     static IReadOnlyList<CircuitError> ValidateTopLevelSourceIds(
@@ -1002,10 +1015,6 @@ public class LogicSimulation {
     static (List<LogicConnection> result, IReadOnlyList<CircuitError> errors) SolveConnectors(
         Dictionary<string, (bool isTop, LogicNode node)> expandedNodes,
         List<(bool isTop, LogicConnection connection)> expandedConnections) {
-        var validationErrors = ValidateTopLevelSourceIds(expandedNodes, expandedConnections);
-        if (validationErrors.Count > 0) {
-            return ([], validationErrors);
-        }
         var solveErrors = new List<CircuitError>();
 
         // 計算量を減らすために辞書にして接続先を高速で検索できるようにする
