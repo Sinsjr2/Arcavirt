@@ -6,7 +6,7 @@ using LogicSimulator.Runtime;
 namespace LogicSimulator;
 
 public class LogicSimulation {
-    ExecutorContext[] executorContexts = null!;
+    readonly ExecutorContext[] executorContexts;
 
     /// <summary>
     /// 入力が変化したので実行する必要があるexecutorの配列のインデックス
@@ -20,7 +20,7 @@ public class LogicSimulation {
     /// </summary>
     readonly List<int> outputValueChangedExecutorIndexes = [];
 
-    Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>> logicIdAndPinNameToPinIndex = null!;
+    readonly Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>> logicIdAndPinNameToPinIndex;
 
     class ExecutorContext {
         public ILogicExecutor Executor;
@@ -90,16 +90,23 @@ public class LogicSimulation {
     }
 
     class TargetConnection {
-        public int LogicTypeNumber;
+        public int ExecutorIndex;
         public int[] PinNumbers;
 
-        public TargetConnection(int logicTypeNumber, int[] pinNumbers) {
-            LogicTypeNumber = logicTypeNumber;
+        public TargetConnection(int executorIndex, int[] pinNumbers) {
+            ExecutorIndex = executorIndex;
             PinNumbers = pinNumbers;
         }
     }
 
-    LogicSimulation() { }
+    LogicSimulation(
+        ExecutorContext[] executorContexts,
+        Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>> logicIdAndPinNameToPinIndex,
+        List<int> initialInputChangedIndexes) {
+        this.executorContexts = executorContexts;
+        this.logicIdAndPinNameToPinIndex = logicIdAndPinNameToPinIndex;
+        this.inputValueChangedExecutorIndexes.AddRange(initialInputChangedIndexes);
+    }
 
     static ExecutorContext BuildSingleExecutorContext(
         ILogicExecutor executor,
@@ -195,8 +202,7 @@ public class LogicSimulation {
 /// </list>
 /// </remarks>
 public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimulation? simulation, out CircuitError[] errors, IReadOnlyDictionary<string, Circuit>? circuitLibrary = null) {
-        var instance = new LogicSimulation();
-        var (result, errorList) = instance.BuildCore(circuit, CreateDefaultFactories(), circuitLibrary);
+        var (result, errorList) = BuildCore(circuit, CreateDefaultFactories(), circuitLibrary);
         if (errorList.Length > 0) {
             simulation = null;
             errors = errorList;
@@ -219,7 +225,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
         };
     }
 
-    (LogicSimulation? simulation, CircuitError[] errors) BuildCore(
+    static (LogicSimulation? simulation, CircuitError[] errors) BuildCore(
         Circuit circuit,
         Dictionary<Type, ILogicExecutorFactory> factories,
         IReadOnlyDictionary<string, Circuit>? circuitLibrary) {
@@ -249,7 +255,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
         var (resolvedBits, resolveErrors) = ResolveConnectorBits(nodes, connections, pinWidthMap);
         var (expandedConnections, busErrors) = ExpandBusConnections(connections, pinWidthMap, resolvedBits);
         connections = expandedConnections;
-        var (executorAndDefinitionsList, unregsErrors) = BuildExecutorContexts(nodes, factories, resolvedBits);
+        var (executorAndDefinitionsList, executorContextsArray, initialInputChangedIndexes, unregsErrors) = BuildExecutorContexts(nodes, factories, resolvedBits);
         var validateErrors = ValidateInputConnections(executorAndDefinitionsList, connections, pinWidthMap);
 
         var allErrors = new List<CircuitError>(resolveErrors.Count + busErrors.Count + unregsErrors.Count + validateErrors.Count);
@@ -261,12 +267,12 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
             return (null, allErrors.ToArray());
         }
 
-        logicIdAndPinNameToPinIndex = BuildPinIndex(executorAndDefinitionsList);
-        var connErrors = ResolveConnections(connections);
+        var logicIdAndPinNameToPinIndex = BuildPinIndex(executorAndDefinitionsList);
+        var connErrors = ResolveConnections(connections, logicIdAndPinNameToPinIndex, executorContextsArray);
         if (connErrors.Count > 0) {
             return (null, connErrors.ToArray());
         }
-        return (this, []);
+        return (new LogicSimulation(executorContextsArray, logicIdAndPinNameToPinIndex, initialInputChangedIndexes), []);
     }
 
     static IReadOnlyList<CircuitError> ValidateDuplicateNodeIds(Circuit circuit) {
@@ -290,17 +296,23 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     /// <para>
     /// CreateExecutor のコールバック（onInputChangedNotify）が呼ばれた場合、
     /// その素子は構築時点で出力値が確定しているため（例: ConstValueLogic）、
-    /// <see cref="inputValueChangedExecutorIndexes"/> に登録して初期実行を予約します。
+    /// initialInputChangedIndexes に登録して初期実行を予約します。
     /// </para>
     /// </summary>
-    /// <returns>2パス目で logicIdAndPinNameToPinIndex を構築するために使用するリストと、検出されたエラー。</returns>
-    (List<(ExecutorContext ctx, IOConnectorDefinition[] defs)> results, IReadOnlyList<CircuitError> errors) BuildExecutorContexts(
+    /// <returns>2パス目で logicIdAndPinNameToPinIndex を構築するために使用するリスト、executorContexts配列、初期実行予約リスト、検出されたエラー。</returns>
+    static (
+        List<(ExecutorContext ctx, IOConnectorDefinition[] defs)> results,
+        ExecutorContext[] executorContexts,
+        List<int> initialInputChangedIndexes,
+        IReadOnlyList<CircuitError> errors
+    ) BuildExecutorContexts(
         IReadOnlyList<LogicNode> nodes,
         Dictionary<Type, ILogicExecutorFactory> factories,
         IReadOnlyDictionary<string, int> resolvedBits) {
         var executorList = new List<ExecutorContext>();
         var executorAndDefinitionsList = new List<(ExecutorContext ctx, IOConnectorDefinition[] defs)>();
         var buildErrors = new List<CircuitError>();
+        var initialInputChangedIndexes = new List<int>();
         var noOp = new NoOpExecutor();
 
         var inputConnectorNodes = nodes
@@ -350,13 +362,12 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
             executorList.Add(executorContext);
             executorAndDefinitionsList.Add((executorContext, definitions));
             if (needsInitialExecution) {
-                inputValueChangedExecutorIndexes.Add(executorList.Count - 1);
+                initialInputChangedIndexes.Add(executorList.Count - 1);
             }
         }
 
-        // ResolveConnections が executorContexts を使用するため、ここで確定させる
-        executorContexts = executorList.ToArray();
-        return (executorAndDefinitionsList, buildErrors);
+        var executorContextsArray = executorList.ToArray();
+        return (executorAndDefinitionsList, executorContextsArray, initialInputChangedIndexes, buildErrors);
     }
 
     /// <summary>
@@ -365,7 +376,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     /// <see cref="BuildExecutorContexts"/> で executorContexts が確定した後に呼び出す必要があります。
     /// </para>
     /// </summary>
-    Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>> BuildPinIndex(
+    static Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>> BuildPinIndex(
         List<(ExecutorContext ctx, IOConnectorDefinition[] defs)> executorAndDefinitionsList) {
         var pinIndex = new Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>>();
 
@@ -406,7 +417,10 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     /// 接続リストを解決し、各出力ピンから接続先入力ピンへの <see cref="ExecutorContext.OutputToInputPinConnections"/> を構築します。
     /// 接続定義に不正な LogicID またはピン名が含まれる場合は <see cref="CircuitErrorKind.InvalidNodeReference"/> エラーを返します。
     /// </summary>
-    IReadOnlyList<CircuitError> ResolveConnections(IReadOnlyList<LogicConnection> connections) {
+    static IReadOnlyList<CircuitError> ResolveConnections(
+        IReadOnlyList<LogicConnection> connections,
+        Dictionary<string, Dictionary<string, (int executorIndex, int logicNumberInExecutor, int pinIndex)>> logicIdAndPinNameToPinIndex,
+        ExecutorContext[] executorContexts) {
         var errors = new List<CircuitError>();
         foreach (var connection in connections) {
             var sourceLogicID = connection.Source.LogicID;
@@ -925,7 +939,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     /// <summary>
     /// CustomCircuit を含む回路をフラット化・コネクタ透過・ノード整理して展開します。
     /// </summary>
-    (Circuit circuit, IReadOnlyList<CircuitError> errors) ExpandCustomCircuits(
+    static (Circuit circuit, IReadOnlyList<CircuitError> errors) ExpandCustomCircuits(
         IReadOnlyDictionary<string, Circuit> circuitLibrary,
         Circuit originalCircuit) {
         var (expandedNodes, expandedConnections, flattenErrors) = FlattenCircuit(circuitLibrary, originalCircuit);
@@ -944,7 +958,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     /// 全ノード・接続を prefix 付きでフラット化します。CustomCircuit を再帰的に展開します。
     /// isTop フラグはトップレベル回路（level == 0）のノード・接続であることを示します。
     /// </summary>
-    (Dictionary<string, (bool isTop, LogicNode node)> nodes,
+    static (Dictionary<string, (bool isTop, LogicNode node)> nodes,
      List<(bool isTop, LogicConnection connection)> connections,
      IReadOnlyList<CircuitError> errors)
     FlattenCircuit(IReadOnlyDictionary<string, Circuit> circuitLibrary, Circuit originalCircuit) {
@@ -1003,7 +1017,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     /// コネクタ（InputConnector/OutputConnector）を透過して、実際の接続（通常素子 ↔ トップレベルコネクタ）に変換します。
     /// 接続のソースは1つしか接続されないことを前提としています（このメソッドが呼ばれるよりも先にエラー検知で弾いていること）。
     /// </summary>
-    (List<LogicConnection> result, IReadOnlyList<CircuitError> errors) SolveConnectors(
+    static (List<LogicConnection> result, IReadOnlyList<CircuitError> errors) SolveConnectors(
         Dictionary<string, (bool isTop, LogicNode node)> expandedNodes,
         List<(bool isTop, LogicConnection connection)> expandedConnections) {
         var validationErrors = ValidateTopLevelSourceIds(expandedNodes, expandedConnections);
@@ -1048,7 +1062,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     /// <summary>
     /// 指定された接続ターゲットから、コネクタを再帰的に辿って実際の接続先をリストに追加します。
     /// </summary>
-    void FindTargetConnections(
+    static void FindTargetConnections(
         Dictionary<string, (bool isTop, LogicNode node)> expandedNodes,
         Dictionary<string, (bool isTop, LogicConnection connection)[]> groupedSourceConnections,
         HashSet<string> skipSourceConnectorNames,
@@ -1110,7 +1124,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
     /// <summary>
     /// CustomCircuit ノードと、トップレベル以外の InputConnector/OutputConnector ノードを削除します。
     /// </summary>
-    LogicNode[] CleanupNodes(Dictionary<string, (bool isTop, LogicNode node)> expandedNodes) {
+    static LogicNode[] CleanupNodes(Dictionary<string, (bool isTop, LogicNode node)> expandedNodes) {
         return expandedNodes
             .Where(x =>
                 x.Value.node.LogicData is not CustomCircuit &&
@@ -1133,15 +1147,15 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
             // 出力の変化がある場合、入力に伝播
             if (0 < outputValueChangedExecutorIndexes.Count) {
                 // 変化があった出力ピンの値を入力ピンに適用する
-                foreach (var changedLogicNo in outputValueChangedExecutorIndexes) {
-                    var ctx = executorContexts[changedLogicNo];
+                foreach (var changedExecutorIndex in outputValueChangedExecutorIndexes) {
+                    var ctx = executorContexts[changedExecutorIndex];
                     ctx.ShouldCopy = false;
                     foreach (var changedPinNo in ctx.ValueChangedOutputPins) {
                         var outputToInputConnections = ctx.OutputToInputPinConnections[changedPinNo];
                         var currentOutputValue = ctx.Outputs.Pins[changedPinNo];
                         // 複数接続をサポート：各接続先に値を伝播
                         foreach (var outputToInputConnection in outputToInputConnections) {
-                            var writeTargetLogic = executorContexts[outputToInputConnection.LogicTypeNumber];
+                            var writeTargetLogic = executorContexts[outputToInputConnection.ExecutorIndex];
                             foreach (var inputPinNo in outputToInputConnection.PinNumbers) {
                                 var currentInputValue = writeTargetLogic.Inputs.Pins[inputPinNo];
                                 if (currentInputValue != currentOutputValue) {
@@ -1150,7 +1164,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
                                     // 入力が変化した素子で処理を実行することを通知する
                                     if (!writeTargetLogic.ShouldExecute) {
                                         writeTargetLogic.ShouldExecute = true;
-                                        inputValueChangedExecutorIndexes.Add(outputToInputConnection.LogicTypeNumber);
+                                        inputValueChangedExecutorIndexes.Add(outputToInputConnection.ExecutorIndex);
                                     }
                                 }
                             }
@@ -1162,8 +1176,8 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
             }
             // 入力が変化したことを検知し、出力を更新する
             if (0 < inputValueChangedExecutorIndexes.Count) {
-                foreach (var changedLogicNo in inputValueChangedExecutorIndexes) {
-                    var ctx = executorContexts[changedLogicNo];
+                foreach (var changedExecutorIndex in inputValueChangedExecutorIndexes) {
+                    var ctx = executorContexts[changedExecutorIndex];
                     ctx.ShouldExecute = false;
                     // 処理負荷軽減のため入力が変化していない場合は処理しない
                     if (0 < ctx.ValueChangedInputPins.Count || ctx.Inputs.Pins.Length == 0) {
@@ -1175,7 +1189,7 @@ public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimula
                         // Executor の出力が変化した場合、その出力の伝播処理を実行する必要がある
                         if (!ctx.ShouldCopy && 0 < ctx.ValueChangedOutputPins.Count) {
                             ctx.ShouldCopy = true;
-                            outputValueChangedExecutorIndexes.Add(changedLogicNo);
+                            outputValueChangedExecutorIndexes.Add(changedExecutorIndex);
                         }
                     }
                 }
