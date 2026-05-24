@@ -201,15 +201,47 @@ public class LogicSimulation {
     ///   </item>
     /// </list>
     /// </remarks>
-    public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimulation? simulation, out CircuitError[] errors, IReadOnlyDictionary<string, Circuit>? circuitLibrary = null) {
-        var (result, errorList) = BuildCore(circuit, CreateDefaultFactories(), circuitLibrary);
-        if (errorList.Length > 0) {
+    public static bool TryBuild(Circuit circuit, [NotNullWhen(true)] out LogicSimulation? simulation, out CircuitError[] errors,
+        IReadOnlyDictionary<string, Circuit>? circuitLibrary = null,
+        IReadOnlyDictionary<Type, ILogicExecutorFactory>? factories = null) {
+        
+        factories ??= CreateDefaultFactories();
+
+        var dupErrors = ValidateDuplicateNodeIds(circuit);
+
+        IReadOnlyList<CircuitError> expandErrors = [];
+        if (circuitLibrary != null) {
+            (circuit, expandErrors) = ExpandCustomCircuits(circuitLibrary, circuit);
+        }
+
+        if (dupErrors.Count + expandErrors.Count > 0) {
+            errors = [.. dupErrors, .. expandErrors];
             simulation = null;
-            errors = errorList;
             return false;
         }
-        simulation = result!;
-        errors = errorList;
+
+        var pinWidthMap = BuildPinWidthMap(circuit.LogicNodes, factories);
+        var (resolvedBits, resolveErrors) = ResolveConnectorBits(circuit.LogicNodes, circuit.LogicConnections, pinWidthMap);
+        var (expandedConnections, busErrors) = ExpandBusConnections(circuit.LogicConnections, pinWidthMap, resolvedBits);
+        var (executorAndDefinitionsList, executorContextsArray, initialInputChangedIndexes, unregsErrors) = BuildExecutorContexts(circuit.LogicNodes, factories, resolvedBits);
+        var validateErrors = ValidateInputConnections(executorAndDefinitionsList, expandedConnections, pinWidthMap);
+
+        List<CircuitError> allErrors = [.. resolveErrors, .. busErrors, .. unregsErrors, .. validateErrors];
+        if (allErrors.Count > 0) {
+            simulation = null;
+            errors = [.. allErrors];
+            return false;
+        }
+
+        var logicIdAndPinNameToPinIndex = BuildPinIndex(executorAndDefinitionsList);
+        var connErrors = ResolveConnections(expandedConnections, logicIdAndPinNameToPinIndex, executorContextsArray);
+        if (connErrors.Count > 0) {
+            simulation = null;
+            errors = [.. connErrors];
+            return false;
+        }
+        simulation = new LogicSimulation(executorContextsArray, logicIdAndPinNameToPinIndex, initialInputChangedIndexes);
+        errors = [];
         return true;
     }
 
@@ -223,56 +255,6 @@ public class LogicSimulation {
             { typeof(XOrLogic), new LogicExecutorFactory<XOrLogic>(new XOrLogicExecutorFactory()) },
             { typeof(ConstValueLogic), new LogicExecutorFactory<ConstValueLogic>(new ConstValueLogicExecutorFactory()) },
         };
-    }
-
-    static (LogicSimulation? simulation, CircuitError[] errors) BuildCore(
-        Circuit circuit,
-        Dictionary<Type, ILogicExecutorFactory> factories,
-        IReadOnlyDictionary<string, Circuit>? circuitLibrary) {
-
-        var dupErrors = ValidateDuplicateNodeIds(circuit);
-
-        IReadOnlyList<LogicNode> nodes = circuit.LogicNodes;
-        IReadOnlyList<LogicConnection> connections = circuit.LogicConnections;
-        IReadOnlyList<CircuitError> expandErrors = [];
-        if (circuitLibrary != null) {
-            var (expandedCircuit, expandErrs) = ExpandCustomCircuits(circuitLibrary, new Circuit(nodes, connections));
-            expandErrors = expandErrs;
-            if (expandErrors.Count == 0) {
-                nodes = expandedCircuit.LogicNodes;
-                connections = expandedCircuit.LogicConnections;
-            }
-        }
-
-        if (dupErrors.Count + expandErrors.Count > 0) {
-            var earlyErrors = new List<CircuitError>(dupErrors.Count + expandErrors.Count);
-            earlyErrors.AddRange(dupErrors);
-            earlyErrors.AddRange(expandErrors);
-            return (null, earlyErrors.ToArray());
-        }
-
-        var pinWidthMap = BuildPinWidthMap(nodes, factories);
-        var (resolvedBits, resolveErrors) = ResolveConnectorBits(nodes, connections, pinWidthMap);
-        var (expandedConnections, busErrors) = ExpandBusConnections(connections, pinWidthMap, resolvedBits);
-        connections = expandedConnections;
-        var (executorAndDefinitionsList, executorContextsArray, initialInputChangedIndexes, unregsErrors) = BuildExecutorContexts(nodes, factories, resolvedBits);
-        var validateErrors = ValidateInputConnections(executorAndDefinitionsList, connections, pinWidthMap);
-
-        var allErrors = new List<CircuitError>(resolveErrors.Count + busErrors.Count + unregsErrors.Count + validateErrors.Count);
-        allErrors.AddRange(resolveErrors);
-        allErrors.AddRange(busErrors);
-        allErrors.AddRange(unregsErrors);
-        allErrors.AddRange(validateErrors);
-        if (allErrors.Count > 0) {
-            return (null, allErrors.ToArray());
-        }
-
-        var logicIdAndPinNameToPinIndex = BuildPinIndex(executorAndDefinitionsList);
-        var connErrors = ResolveConnections(connections, logicIdAndPinNameToPinIndex, executorContextsArray);
-        if (connErrors.Count > 0) {
-            return (null, connErrors.ToArray());
-        }
-        return (new LogicSimulation(executorContextsArray, logicIdAndPinNameToPinIndex, initialInputChangedIndexes), []);
     }
 
     static IReadOnlyList<CircuitError> ValidateDuplicateNodeIds(Circuit circuit) {
@@ -307,7 +289,7 @@ public class LogicSimulation {
         IReadOnlyList<CircuitError> errors
     ) BuildExecutorContexts(
         IReadOnlyList<LogicNode> nodes,
-        Dictionary<Type, ILogicExecutorFactory> factories,
+        IReadOnlyDictionary<Type, ILogicExecutorFactory> factories,
         IReadOnlyDictionary<string, int> resolvedBits) {
         var executorList = new List<ExecutorContext>();
         var executorAndDefinitionsList = new List<(ExecutorContext ctx, IOConnectorDefinition[] defs)>();
@@ -457,7 +439,7 @@ public class LogicSimulation {
     /// </summary>
     static Dictionary<string, Dictionary<string, PinDefinition>> BuildPinWidthMap(
         IReadOnlyList<LogicNode> nodes,
-        Dictionary<Type, ILogicExecutorFactory> factories) {
+        IReadOnlyDictionary<Type, ILogicExecutorFactory> factories) {
 
         var pinWidthMap = new Dictionary<string, Dictionary<string, PinDefinition>>();
         foreach (var node in nodes) {
