@@ -5,3 +5,10 @@ services:
       dockerfile: Dockerfile
       tags:
         - cpu_sim_dev:latest
+    # E2 Lite（Renesas VID 0x045B）を USB パススルーする。
+    # /dev/bus/usb 全体をマウントし USB メジャー番号 189 を許可することで、
+    # エミュレータの抜き差し（再列挙）でノード番号が変わっても追従できる。
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb
+    device_cgroup_rules:
+      - 'c 189:* rmw'
