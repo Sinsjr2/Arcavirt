@@ -9,10 +9,12 @@
 ソフトウェアの力だけで「エンジニアが真に集中できる理想的な検証空間」を提供したいという願いが込められています。
 
 # dockerのビルド方法
-1. `https://llvm-gcc-renesas.com/ja/rx-download-toolchains/` より `GCC for Renesas 14.2.0.202511-GNURX Linux Toolchain (ELF)`を  
-  ダウンロードする。
-2. `docker/installers`にダウンロードしたファイルを保存する。
-3. `docker compose build` を実行する。
+1. `docker compose build` を実行する。
+   - RX 用ツールチェーン（gcc/binutils/newlib）をソースからビルドし、
+     デバッグ用の DebugComp/RX（e2-server-gdb 等）も取得するため、
+     手動でのダウンロードや e2 studio のインストールは不要。
+   - 初回ビルドはソースビルドのため数十分かかる。
+2. E2 Lite で実機デバッグする場合は `doc/renesas-rx-e2lite-debug.md` を参照する。
 
 # 使用ツール
 - vs code
@@ -23,9 +25,9 @@
   - 以下から、SDK をインストールする  
     https://dotnet.microsoft.com/ja-jp/download/dotnet/8.0
 - e2 studio  
-  RX 用の gcc コンパイラーのインストールが必要  
-  ※下記説明ではgccを使用するが、ビルドの設定を行うと cc rxでも可  
-  RX 用の開発環境 (デバッガープログラムなど)
+  ※ ビルド・実機デバッグとも Docker で完結するため必須ではない。  
+  e2 studio を使う場合は RX 用 gcc コンパイラーのインストールが必要  
+  （ビルド設定を行うと cc rx でも可）。
 
 
 # はじめかた
