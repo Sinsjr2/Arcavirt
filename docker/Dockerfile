@@ -132,6 +132,7 @@ ARG DEBUGCOMP_BASE_URL="https://tool-support.renesas.com/e2studio/2026/2026-04.2
 ARG DEBUGCOMP_DIR=/opt/renesas/DebugComp/RX
 
 # 実行時に必要な依存のみ。cmake は rx-elf-gcc と併用（CMake ビルド）。
+# ninja-build は cmake の Ninja ジェネレータが cmake --build 時に呼ぶビルド本体。
 # libusb は e2-server-gdb が E2 Lite と USB 通信するために必要。
 # usbutils は lsusb によるパススルー確認に使う。
 # libgmp10/libmpfr6/libmpc3 は gcc の cc1 が動的リンクするランタイム
@@ -139,6 +140,7 @@ ARG DEBUGCOMP_DIR=/opt/renesas/DebugComp/RX
 # libexpat1 は rx-elf-gdb がターゲット XML 記述の解釈に使う。
 RUN apt-get update && apt-get install -y --no-install-recommends \
         cmake \
+        ninja-build \
         libusb-1.0-0 \
         usbutils \
         libgmp10 libmpfr6 libmpc3 \

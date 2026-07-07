@@ -1,0 +1,34 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 25,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "rx64m",
+            "displayName": "RX64M",
+            "description": "RX64M 向けクロスビルド (RXv2, gcc -mcpu=rx64m)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-${presetName}",
+            "toolchainFile": "${sourceDir}/cross.cmake",
+            "cacheVariables": {
+                "RX_MCPU": {
+                    "type": "STRING",
+                    "value": "rx64m"
+                },
+                "RX_TOOLCHAIN_PREFIX": {
+                    "type": "STRING",
+                    "value": "/opt/rx-elf"
+                }
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "rx64m",
+            "configurePreset": "rx64m"
+        }
+    ]
+}

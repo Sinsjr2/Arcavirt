@@ -4,5 +4,8 @@ Release/
 trash/
 .settings/
 
+# CMake ビルド出力
+build-*/
+
 
 # End of https://www.toptal.com/developers/gitignore/api/e2studio,c
