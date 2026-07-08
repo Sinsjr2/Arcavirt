@@ -138,6 +138,7 @@ ARG DEBUGCOMP_DIR=/opt/renesas/DebugComp/RX
 # libgmp10/libmpfr6/libmpc3 は gcc の cc1 が動的リンクするランタイム
 #   （これが無いと cc1 が libmpc.so.3 を読めずコンパイル不可）。
 # libexpat1 は rx-elf-gdb がターゲット XML 記述の解釈に使う。
+# python3 は gdb_inspect_judge.py（検査結果の自動判定）の実行に使う。
 RUN apt-get update && apt-get install -y --no-install-recommends \
         cmake \
         ninja-build \
@@ -145,6 +146,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         usbutils \
         libgmp10 libmpfr6 libmpc3 \
         libexpat1 \
+        python3 \
         curl ca-certificates \
         xz-utils unzip \
     && rm -rf /var/lib/apt/lists/*
@@ -157,8 +159,6 @@ COPY --from=toolchain-builder ${TOOLCHAIN_PREFIX} ${TOOLCHAIN_PREFIX}
 #
 # 検証済み: jar を展開すると実体は *.tar.xz にまとまっており、下の
 #   ループでさらに展開する必要がある（gdb_server.tar.xz / debug_support.tar.xz）。
-#   rx-elf-gdb は DebugComp には含まれず、builder 段でソースビルドして
-#   ${TOOLCHAIN_PREFIX} 側から供給する。
 RUN <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
@@ -182,17 +182,22 @@ for id in $ART; do
     exit 1
   fi
   curl -fSL "${DEBUGCOMP_BASE_URL}/plugins/${id}_${ver}.jar" -o "$work/a.jar"
-  unzip -qo "$work/a.jar" -d "${DEBUGCOMP_DIR}"
-done
 
-# jar 内の実体は tar.xz にまとめられている（検証で判明）:
-#   gdb_server.tar.xz   → e2-server-gdb 本体・RtosPlugins
-#   debug_support.tar.xz → デバイス IO ファイル・system-gdbinit・python 等の支援ファイル
-# これらを DEBUGCOMP_DIR 直下へ展開し、e2-server-gdb を PATH 上に置く。
-for tb in "${DEBUGCOMP_DIR}"/*.tar.xz; do
-  [ -e "$tb" ] || continue
-  tar -xJf "$tb" -C "${DEBUGCOMP_DIR}"
-  rm -f "$tb"
+  # 重要: rx.debug / rx.debug.gdb.linux.x86_64 / rx.debug.jlink.linux.x86_64 /
+  #   rx.debug.ffw.linux.x86_64 の4パッケージは全て同名 debug_support.tar.xz を
+  #   持つ（中身は別）。全 jar を先に同一ディレクトリへ unzip すると後勝ちで
+  #   上書きされ、rx.debug.ffw.linux.x86_64 由来の RX/E2/libCommuni.so 等が
+  #   消えてしまう（実機接続不可の原因になった実バグ）。jar ごとに個別展開して
+  #   都度 DEBUGCOMP_DIR へマージ展開することで衝突を避ける。
+  jar_extract="$(mktemp -d)"
+  unzip -qo "$work/a.jar" -d "$jar_extract"
+  for tb in "$jar_extract"/*.tar.xz; do
+    [ -e "$tb" ] || continue
+    tar -xJf "$tb" -C "${DEBUGCOMP_DIR}"
+  done
+  find "$jar_extract" -maxdepth 1 -type f ! -name '*.tar.xz' \
+       -exec cp -f {} "${DEBUGCOMP_DIR}/" \;
+  rm -rf "$jar_extract"
 done
 
 # jar 展開で失われる実行権限を復元する
@@ -206,8 +211,11 @@ ENV DEBUGCOMP_DIR=${DEBUGCOMP_DIR}
 ENV PATH="${TOOLCHAIN_PREFIX}/bin:${DEBUGCOMP_DIR}:${PATH}"
 
 # E2 Lite デバッグ用のランタイムヘルパー（ビルドコンテキストは docker/）
-COPY e2-server-gdb.sh /usr/local/bin/e2-server-gdb.sh
-COPY rx64m.gdbinit    /opt/renesas/rx64m.gdbinit
-RUN chmod +x /usr/local/bin/e2-server-gdb.sh
+COPY e2-server-gdb.sh   /usr/local/bin/e2-server-gdb.sh
+COPY rx64m.gdbinit      /opt/renesas/rx64m.gdbinit
+COPY gdb_mi_inspect.py  /usr/local/bin/gdb_mi_inspect.py
+COPY gdb_inspect_judge.py /usr/local/bin/gdb_inspect_judge.py
+COPY run-inspection.sh  /usr/local/bin/run-inspection.sh
+RUN chmod +x /usr/local/bin/e2-server-gdb.sh /usr/local/bin/run-inspection.sh /usr/local/bin/gdb_inspect_judge.py /usr/local/bin/gdb_mi_inspect.py
 
 WORKDIR /work
