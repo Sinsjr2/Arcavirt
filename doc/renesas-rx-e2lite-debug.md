@@ -82,6 +82,12 @@ rx-elf-gdb ──TCP(GDB remote)──> e2-server-gdb ──USB──> E2 Lite �
   すべて同名 `debug_support.tar.xz` を持つため、単純に同一ディレクトリへ展開すると
   後勝ちで上書きされる（`libCommuni.so` 等が消える原因になった）。Dockerfile では
   jar ごとに個別展開してからマージするようにして回避している。
+- **リッスンポートへの素の TCP 接続（開通プローブ）で GDB を受け付けなくなる**:
+  e2-server-gdb の待ち受けポートに `bash` の `/dev/tcp` 等で接続確認を行うと、
+  サーバーがそれをクライアントの接続・切断（`Disconnected from the Target
+  Debugger.`）として扱い、以後 rx-elf-gdb の `-target-select` が応答しなくなる。
+  起動完了はポートではなく、サーバーログに `GDB: <ポート番号>` 行が出たことで
+  判定する（非 root 化の実機検証時に判明。root でも同様に再現する）。
 
 ## トラブルシュート
 - コンテナで lsusb に出ない → ホストで挿さっているか、compose の USB 設定、udev を確認。
