@@ -9,10 +9,60 @@
 ソフトウェアの力だけで「エンジニアが真に集中できる理想的な検証空間」を提供したいという願いが込められています。
 
 # dockerのビルド方法
-1. `https://llvm-gcc-renesas.com/ja/rx-download-toolchains/` より `GCC for Renesas 14.2.0.202511-GNURX Linux Toolchain (ELF)`を  
-  ダウンロードする。
-2. `docker/installers`にダウンロードしたファイルを保存する。
-3. `docker compose build` を実行する。
+1. `docker compose build` を実行する。
+   - RX 用ツールチェーン（gcc/binutils/newlib）をソースからビルドし、
+     デバッグ用の DebugComp/RX（e2-server-gdb 等）も取得するため、
+     手動でのダウンロードや e2 studio のインストールは不要。
+   - 初回ビルドはソースビルドのため数十分かかる。
+2. E2 Lite で実機デバッグする場合は `doc/renesas-rx-e2lite-debug.md` を参照する。
+
+## コンテナの実行ユーザー
+コンテナはデフォルトで非 root(UID 1000)で動作します。`tool/` のラッパースクリプトを
+使うと、ホストの UID/GID を自動で引き継いでコンテナを実行するため、
+ビルド成果物はホストユーザーの所有になります。
+
+- `tool/rx-run.sh <コマンド>` : 任意のコマンドをコンテナ内で実行する(例: `tool/rx-run.sh bash`)
+- `tool/build-rx.sh [preset]` : RX64M 向け CMake ビルドを一発実行する(preset 省略時は rx64m)
+
+`docker compose run` を直接使う場合、UID は 1000 固定になります。ホストの UID が
+1000 以外の環境ではラッパーを使ってください。
+
+### 過去に root コンテナでビルドしていた場合(移行手順)
+root 実行時代のビルド成果物が残っていると、非 root ビルドが書き込みに失敗します。
+一度削除してからビルドし直してください:
+``` bash
+sudo rm -rf RenesasRXNative/test/build-rx64m
+```
+
+### E2 Lite を非 root で使うための udev ルール
+非 root コンテナから e2-server-gdb が E2 Lite(USB)へアクセスするには、ホスト側に
+udev ルールが必要です。e2 studio をインストールしたことがあるホストには
+`/etc/udev/rules.d/99-renesas-emu.rules` として配置済みの場合があります。
+無い場合は以下の内容で `99-renesas-emu.rules` を作成してください:
+
+``` text
+ACTION!="add", SUBSYSTEM!="usb_device", GOTO="emu_rules_end"
+# Remove sudo access to E2/E2 Lite/E1/E20/IE850A emulator
+ATTR{idProduct}=="82a1", ATTR{idVendor}=="045b", MODE="666"
+ATTR{idProduct}=="82a0", ATTR{idVendor}=="045b", MODE="666"
+ATTR{idProduct}=="823b", ATTR{idVendor}=="045b", MODE="666"
+ATTR{idProduct}=="823c", ATTR{idVendor}=="045b", MODE="666"
+ATTR{idProduct}=="0250", ATTR{idVendor}=="045b", MODE="666"
+# Prevent E2/E2Lite/E1/E20/IE850A from being captured by modem manager service as E2/E2 Lite/E1/E20/IE850A is not a modem
+ATTR{idProduct}=="82a1", ATTR{idVendor}=="045b", ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTR{idProduct}=="82a0", ATTR{idVendor}=="045b", ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTR{idProduct}=="823b", ATTR{idVendor}=="045b", ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTR{idProduct}=="823c", ATTR{idVendor}=="045b", ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTR{idProduct}=="0250", ATTR{idVendor}=="045b", ENV{ID_MM_DEVICE_IGNORE}="1"
+LABEL="emu_rules_end"
+```
+
+インストール手順:
+``` bash
+sudo cp 99-renesas-emu.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
 
 # 使用ツール
 - vs code
@@ -22,38 +72,59 @@
   - Visual Studio からC# をインストールするか
   - 以下から、SDK をインストールする  
     https://dotnet.microsoft.com/ja-jp/download/dotnet/8.0
-- e2 studio  
-  RX 用の gcc コンパイラーのインストールが必要  
-  ※下記説明ではgccを使用するが、ビルドの設定を行うと cc rxでも可  
-  RX 用の開発環境 (デバッガープログラムなど)
 
 
 # はじめかた
 
 ### RX64M のプログラムをビルドする
-1. e2 studio より RenesasRXNative/test 内のプロジェクトをインポートしてください。
-2. e2 studio 内でビルドボタンを押しビルド(HardwareDebug)します。(gcc)
-3. フォルダー(HardwareDebug)にtest.elfファイルが作成されることを確認します。
+RX 用ツールチェーンや DebugComp は Docker イメージに同梱されているため、
+e2 studio のインストールは不要です。
+
+ホストから 1 コマンドでビルドできます:
+``` bash
+tool/build-rx.sh
+```
+`RenesasRXNative/test/build-rx64m/cmake_test` に elf ファイルが作成されます。
+コンテナはホストと同じ UID/GID で実行されるため、成果物はホストユーザーの所有になります。
+
+コンテナに入って手動でビルドする場合:
+1. コンテナに入る: `tool/rx-run.sh bash`
+2. CMake preset でビルドする:
+   ``` bash
+   cd RenesasRXNative/test
+   cmake --preset rx64m
+   cmake --build --preset rx64m
+   ```
+3. `RenesasRXNative/test/build-rx64m/cmake_test` に elf ファイルが作成されることを確認します。
+
+e2 studio を過去に使っていた場合、`RenesasRXNative/test/HardwareDebug/`・`trash/` に
+旧プロジェクトのビルド成果物が残っていることがあります（`.gitignore` 済みで
+git 管理外）。不要であれば手動で削除してください。
+なお `RenesasRXNative/test/test HardwareDebug.launch` は e2 studio + E2 Lite で
+デバッグする際の起動構成として残しています（ビルドは上記の CMake で行う）。
 
 ### RX64M用CPUシミュレータを実行する
 1. vs code で「実行とデバッグ」ペインを開きます(Ctrl + Shift + D)。
 2. Lanch GDB でCPUシミュレータを実行開始します。(TCPサーバーが起動します。)
 3. カレントディレクトリをgit リポジトリのルートに移動し、
   RX 用 GDB(rx-elf-gdb)をコンソール上で起動します。  
-  ※ rx-elf-gdb はe2 studioでICE デバッガーを使う場合にも起動します。
+  ※ この手順はホスト側で動作する CPU シミュレータ（localhost:3333）に
+  接続するため、gdb もホスト側で起動する必要があります（Docker コンテナ内の
+  gdb では到達できません）。
   ※ どこにインストールされているかは、windows であれば、タスクマネージャー、linux であれば、psを使用して探して下さい。
-  linux 版e2 studio では以下にインストールされます。  
+  e2 studio をインストール済みであれば、linux 版では以下にあります。  
   ``` bash
   ~/.local/share/renesas/e2_studio/toolchains/gcc-8.3.0.202411-GNURX-ELF/gcc_8.3.0.202411_rx_elf/bin/rx-elf-gdb
   ```
+  e2 studio をインストールしない場合は、ホスト上で RX 用 gdb を別途用意してください。
 4. gdb 上で以下のコマンドを実行し、プログラムをCPUシミュレータにロードします。
   ``` txt
   # connect to cpu simulator by tcp port
   target remote localhost:3333
   # load debug symbol
-  symbol-file ./RenesasRXNative/test/HardwareDebug/test.elf
+  symbol-file ./RenesasRXNative/test/build-rx64m/cmake_test
   # write binary to cpu simulator
-  load ./RenesasRXNative/test/HardwareDebug/test.elf
+  load ./RenesasRXNative/test/build-rx64m/cmake_test
   # reset CPU simulator
   monitor reset
 

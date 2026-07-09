@@ -5,3 +5,18 @@ services:
       dockerfile: Dockerfile
       tags:
         - cpu_sim_dev:latest
+    # コンテナをホストと同じ UID/GID で実行し、バインドマウント越しの成果物が
+    # ホストユーザー所有になるようにする。HOST_UID/HOST_GID は tool/rx-run.sh が
+    # id -u / id -g から注入する(手動で docker compose を使う場合は 1000 固定)。
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    # 任意のホスト UID で実行すると passwd エントリが無く HOME が定まらないため固定する。
+    environment:
+      HOME: /tmp
+    # E2 Lite（Renesas VID 0x045B）を USB パススルーする。
+    # /dev/bus/usb 全体をマウントし USB メジャー番号 189 を許可することで、
+    # エミュレータの抜き差し（再列挙）でノード番号が変わっても追従できる。
+    volumes:
+      - .:/work
+      - /dev/bus/usb:/dev/bus/usb
+    device_cgroup_rules:
+      - 'c 189:* rmw'

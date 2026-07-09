@@ -1,6 +1,7 @@
  set(CMAKE_SYSTEM_NAME Generic)
+ set(RX_TOOLCHAIN_PREFIX "/opt/rx-elf" CACHE PATH "RX GNU toolchain install prefix")
  set(CMAKE_SYSTEM_PROCESSOR GCCRX)
- set(CMAKE_FIND_ROOT_PATH "/usr/local/rx-elf/bin/")
+ set(CMAKE_FIND_ROOT_PATH "${RX_TOOLCHAIN_PREFIX}/bin/")
  set(CMAKE_C_COMPILER ${CMAKE_FIND_ROOT_PATH}rx-elf-gcc)
  set(CMAKE_CXX_COMPILER ${CMAKE_FIND_ROOT_PATH}rx-elf-gcc)
  set(CMAKE_SYSROOT ${sysroot_target})
