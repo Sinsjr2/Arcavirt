@@ -219,3 +219,9 @@ COPY run-inspection.sh  /usr/local/bin/run-inspection.sh
 RUN chmod +x /usr/local/bin/e2-server-gdb.sh /usr/local/bin/run-inspection.sh /usr/local/bin/gdb_inspect_judge.py /usr/local/bin/gdb_mi_inspect.py
 
 WORKDIR /work
+
+# デフォルトの実行ユーザーを非 root にする(Ubuntu 24.04 同梱の ubuntu = UID 1000)。
+# 実行時は docker-compose.yml の user: がホストの UID/GID で上書きする。
+# /work は通常バインドマウントで覆われるが、マウント無しでも書けるよう所有者を合わせる。
+RUN chown ubuntu:ubuntu /work
+USER ubuntu

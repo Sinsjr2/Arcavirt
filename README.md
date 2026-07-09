@@ -16,6 +16,54 @@
    - 初回ビルドはソースビルドのため数十分かかる。
 2. E2 Lite で実機デバッグする場合は `doc/renesas-rx-e2lite-debug.md` を参照する。
 
+## コンテナの実行ユーザー
+コンテナはデフォルトで非 root(UID 1000)で動作します。`tool/` のラッパースクリプトを
+使うと、ホストの UID/GID を自動で引き継いでコンテナを実行するため、
+ビルド成果物はホストユーザーの所有になります。
+
+- `tool/rx-run.sh <コマンド>` : 任意のコマンドをコンテナ内で実行する(例: `tool/rx-run.sh bash`)
+- `tool/build-rx.sh [preset]` : RX64M 向け CMake ビルドを一発実行する(preset 省略時は rx64m)
+
+`docker compose run` を直接使う場合、UID は 1000 固定になります。ホストの UID が
+1000 以外の環境ではラッパーを使ってください。
+
+### 過去に root コンテナでビルドしていた場合(移行手順)
+root 実行時代のビルド成果物が残っていると、非 root ビルドが書き込みに失敗します。
+一度削除してからビルドし直してください:
+``` bash
+sudo rm -rf RenesasRXNative/test/build-rx64m
+```
+
+### E2 Lite を非 root で使うための udev ルール
+非 root コンテナから e2-server-gdb が E2 Lite(USB)へアクセスするには、ホスト側に
+udev ルールが必要です。e2 studio をインストールしたことがあるホストには
+`/etc/udev/rules.d/99-renesas-emu.rules` として配置済みの場合があります。
+無い場合は以下の内容で `99-renesas-emu.rules` を作成してください:
+
+``` text
+ACTION!="add", SUBSYSTEM!="usb_device", GOTO="emu_rules_end"
+# Remove sudo access to E2/E2 Lite/E1/E20/IE850A emulator
+ATTR{idProduct}=="82a1", ATTR{idVendor}=="045b", MODE="666"
+ATTR{idProduct}=="82a0", ATTR{idVendor}=="045b", MODE="666"
+ATTR{idProduct}=="823b", ATTR{idVendor}=="045b", MODE="666"
+ATTR{idProduct}=="823c", ATTR{idVendor}=="045b", MODE="666"
+ATTR{idProduct}=="0250", ATTR{idVendor}=="045b", MODE="666"
+# Prevent E2/E2Lite/E1/E20/IE850A from being captured by modem manager service as E2/E2 Lite/E1/E20/IE850A is not a modem
+ATTR{idProduct}=="82a1", ATTR{idVendor}=="045b", ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTR{idProduct}=="82a0", ATTR{idVendor}=="045b", ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTR{idProduct}=="823b", ATTR{idVendor}=="045b", ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTR{idProduct}=="823c", ATTR{idVendor}=="045b", ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTR{idProduct}=="0250", ATTR{idVendor}=="045b", ENV{ID_MM_DEVICE_IGNORE}="1"
+LABEL="emu_rules_end"
+```
+
+インストール手順:
+``` bash
+sudo cp 99-renesas-emu.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
 # 使用ツール
 - vs code
 - .Net 8.0  
@@ -31,7 +79,16 @@
 ### RX64M のプログラムをビルドする
 RX 用ツールチェーンや DebugComp は Docker イメージに同梱されているため、
 e2 studio のインストールは不要です。
-1. コンテナに入る: `docker compose run --rm dev bash`
+
+ホストから 1 コマンドでビルドできます:
+``` bash
+tool/build-rx.sh
+```
+`RenesasRXNative/test/build-rx64m/cmake_test` に elf ファイルが作成されます。
+コンテナはホストと同じ UID/GID で実行されるため、成果物はホストユーザーの所有になります。
+
+コンテナに入って手動でビルドする場合:
+1. コンテナに入る: `tool/rx-run.sh bash`
 2. CMake preset でビルドする:
    ``` bash
    cd RenesasRXNative/test
