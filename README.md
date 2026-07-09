@@ -24,38 +24,50 @@
   - Visual Studio からC# をインストールするか
   - 以下から、SDK をインストールする  
     https://dotnet.microsoft.com/ja-jp/download/dotnet/8.0
-- e2 studio  
-  ※ ビルド・実機デバッグとも Docker で完結するため必須ではない。  
-  e2 studio を使う場合は RX 用 gcc コンパイラーのインストールが必要  
-  （ビルド設定を行うと cc rx でも可）。
 
 
 # はじめかた
 
 ### RX64M のプログラムをビルドする
-1. e2 studio より RenesasRXNative/test 内のプロジェクトをインポートしてください。
-2. e2 studio 内でビルドボタンを押しビルド(HardwareDebug)します。(gcc)
-3. フォルダー(HardwareDebug)にtest.elfファイルが作成されることを確認します。
+RX 用ツールチェーンや DebugComp は Docker イメージに同梱されているため、
+e2 studio のインストールは不要です。
+1. コンテナに入る: `docker compose run --rm dev bash`
+2. CMake preset でビルドする:
+   ``` bash
+   cd RenesasRXNative/test
+   cmake --preset rx64m
+   cmake --build --preset rx64m
+   ```
+3. `RenesasRXNative/test/build-rx64m/cmake_test` に elf ファイルが作成されることを確認します。
+
+e2 studio を過去に使っていた場合、`RenesasRXNative/test/HardwareDebug/`・`trash/` に
+旧プロジェクトのビルド成果物が残っていることがあります（`.gitignore` 済みで
+git 管理外）。不要であれば手動で削除してください。
+なお `RenesasRXNative/test/test HardwareDebug.launch` は e2 studio + E2 Lite で
+デバッグする際の起動構成として残しています（ビルドは上記の CMake で行う）。
 
 ### RX64M用CPUシミュレータを実行する
 1. vs code で「実行とデバッグ」ペインを開きます(Ctrl + Shift + D)。
 2. Lanch GDB でCPUシミュレータを実行開始します。(TCPサーバーが起動します。)
 3. カレントディレクトリをgit リポジトリのルートに移動し、
   RX 用 GDB(rx-elf-gdb)をコンソール上で起動します。  
-  ※ rx-elf-gdb はe2 studioでICE デバッガーを使う場合にも起動します。
+  ※ この手順はホスト側で動作する CPU シミュレータ（localhost:3333）に
+  接続するため、gdb もホスト側で起動する必要があります（Docker コンテナ内の
+  gdb では到達できません）。
   ※ どこにインストールされているかは、windows であれば、タスクマネージャー、linux であれば、psを使用して探して下さい。
-  linux 版e2 studio では以下にインストールされます。  
+  e2 studio をインストール済みであれば、linux 版では以下にあります。  
   ``` bash
   ~/.local/share/renesas/e2_studio/toolchains/gcc-8.3.0.202411-GNURX-ELF/gcc_8.3.0.202411_rx_elf/bin/rx-elf-gdb
   ```
+  e2 studio をインストールしない場合は、ホスト上で RX 用 gdb を別途用意してください。
 4. gdb 上で以下のコマンドを実行し、プログラムをCPUシミュレータにロードします。
   ``` txt
   # connect to cpu simulator by tcp port
   target remote localhost:3333
   # load debug symbol
-  symbol-file ./RenesasRXNative/test/HardwareDebug/test.elf
+  symbol-file ./RenesasRXNative/test/build-rx64m/cmake_test
   # write binary to cpu simulator
-  load ./RenesasRXNative/test/HardwareDebug/test.elf
+  load ./RenesasRXNative/test/build-rx64m/cmake_test
   # reset CPU simulator
   monitor reset
 
