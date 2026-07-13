@@ -93,3 +93,10 @@ rx-elf-gdb ──TCP(GDB remote)──> e2-server-gdb ──USB──> E2 Lite �
 - コンテナで lsusb に出ない → ホストで挿さっているか、compose の USB 設定、udev を確認。
 - `e2-server-gdb not found` → DebugComp 取得に失敗。ビルドログと DEBUGCOMP_BASE_URL を確認。
 - 接続できるが書き込めない → デバイス名（set_target）とエミュレータ結線（FINE/JTAG）を確認。
+- `-target-select` が応答しない（開通プローブ後に限らず、正規の切断後も再現する） →
+  `doc/renesas-rx-e2lite-monitor-commands.md` の「重要な発見: 初回切断後は新規接続を受け付けなくなる」
+  「復旧手順（USB 切断なし）」を参照。e2-server-gdb プロセスの再起動のみで復旧できる。
+
+## 関連ドキュメント
+- `doc/renesas-rx-e2lite-monitor-commands.md` — monitor コマンド一覧・動作・
+  復旧手順のリファレンス。
