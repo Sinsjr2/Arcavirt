@@ -1,7 +1,7 @@
 #!/bin/bash
 # RX64M + E2 Lite 用の検査オーケストレーションスクリプト。
-# gdb_mi_inspect.py（GDB MI モード版）を実行し、その出力を
-# gdb_inspect_judge.py に渡して自動合否判定させ、判定器の exit code を
+# gdb_mi_inspect.cs（GDB MI モード版）を実行し、その出力を
+# gdb_inspect_judge.cs に渡して自動合否判定させ、判定器の exit code を
 # そのまま返す。
 #
 # 使い方: run-inspection.sh <elfファイルパス> [タイムアウト秒(既定120)]
@@ -14,12 +14,12 @@
 #   rx-elf-gdb -batch -x で流す旧方式）は、この e2-server-gdb の
 #   non-stop モードにおける非同期 *stopped 通知を GDB バッチ CLI が
 #   待たずに次のコマンドへ進んでしまい失敗する。GDB MI モードで
-#   Python から明示的に *stopped を待つ gdb_mi_inspect.py に置き換えた。
+#   明示的に *stopped を待つ gdb_mi_inspect.cs に置き換えた。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MI_INSPECT="${SCRIPT_DIR}/gdb_mi_inspect.py"
-JUDGE="${SCRIPT_DIR}/gdb_inspect_judge.py"
+MI_INSPECT="${SCRIPT_DIR}/gdb_mi_inspect.cs"
+JUDGE="${SCRIPT_DIR}/gdb_inspect_judge.cs"
 
 ELF="${1:-}"
 TIMEOUT_SEC="${2:-120}"
@@ -32,11 +32,11 @@ fi
 LOGFILE="$(mktemp)"
 trap 'rm -f "${LOGFILE}"' EXIT
 
-# gdb_mi_inspect.py がハングした場合でも timeout が強制終了させる。その場合
+# gdb_mi_inspect.cs がハングした場合でも timeout が強制終了させる。その場合
 # INSPECT:ALL_DONE を出力しないため、判定器側で自動的に NG と判定される。
 # 非ゼロで終了しても set -e でスクリプトを止めず、最終的な合否判定は
 # judge スクリプトに委ねるため || true で握りつぶす。
-timeout "${TIMEOUT_SEC}" python3 "${MI_INSPECT}" "${ELF}" 2>&1 | tee "${LOGFILE}" || true
+timeout "${TIMEOUT_SEC}" "${MI_INSPECT}" "${ELF}" 2>&1 | tee "${LOGFILE}" || true
 
-python3 "${JUDGE}" "${LOGFILE}"
+"${JUDGE}" "${LOGFILE}"
 exit $?

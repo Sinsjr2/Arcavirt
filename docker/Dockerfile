@@ -138,7 +138,6 @@ ARG DEBUGCOMP_DIR=/opt/renesas/DebugComp/RX
 # libgmp10/libmpfr6/libmpc3 は gcc の cc1 が動的リンクするランタイム
 #   （これが無いと cc1 が libmpc.so.3 を読めずコンパイル不可）。
 # libexpat1 は rx-elf-gdb がターゲット XML 記述の解釈に使う。
-# python3 は gdb_inspect_judge.py（検査結果の自動判定）の実行に使う。
 RUN apt-get update && apt-get install -y --no-install-recommends \
         cmake \
         ninja-build \
@@ -146,10 +145,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         usbutils \
         libgmp10 libmpfr6 libmpc3 \
         libexpat1 \
-        python3 \
         curl ca-certificates \
         xz-utils unzip \
     && rm -rf /var/lib/apt/lists/*
+
+# .NET 10 SDK: gdb_mi_inspect.cs / gdb_inspect_judge.cs をシェバン
+# (#!/usr/bin/env -S dotnet run) 経由で直接実行するために使う。
+# dotnet publish による事前コンパイルは行わず、dotnet run のその場コンパイルに
+# 委ねる方針（初回実行時の ~14秒程度のコンパイル待ちは許容する。warm-up 対策は
+# 行わない）。ホストで検証済みの 10.0.100 系列と揃える。
+RUN curl -fSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
+    && chmod +x /tmp/dotnet-install.sh \
+    && /tmp/dotnet-install.sh --version 10.0.100 --install-dir /opt/dotnet \
+    && rm -f /tmp/dotnet-install.sh
+ENV PATH="/opt/dotnet:${PATH}"
+ENV DOTNET_NOLOGO=1
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
 
 # ビルド済みツールチェーンを builder 段から取り込む（ソース・ビルド依存は持ち込まない）
 COPY --from=toolchain-builder ${TOOLCHAIN_PREFIX} ${TOOLCHAIN_PREFIX}
@@ -213,10 +224,10 @@ ENV PATH="${TOOLCHAIN_PREFIX}/bin:${DEBUGCOMP_DIR}:${PATH}"
 # E2 Lite デバッグ用のランタイムヘルパー（ビルドコンテキストは docker/）
 COPY e2-server-gdb.sh   /usr/local/bin/e2-server-gdb.sh
 COPY rx64m.gdbinit      /opt/renesas/rx64m.gdbinit
-COPY gdb_mi_inspect.py  /usr/local/bin/gdb_mi_inspect.py
-COPY gdb_inspect_judge.py /usr/local/bin/gdb_inspect_judge.py
+COPY gdb_mi_inspect.cs  /usr/local/bin/gdb_mi_inspect.cs
+COPY gdb_inspect_judge.cs /usr/local/bin/gdb_inspect_judge.cs
 COPY run-inspection.sh  /usr/local/bin/run-inspection.sh
-RUN chmod +x /usr/local/bin/e2-server-gdb.sh /usr/local/bin/run-inspection.sh /usr/local/bin/gdb_inspect_judge.py /usr/local/bin/gdb_mi_inspect.py
+RUN chmod +x /usr/local/bin/e2-server-gdb.sh /usr/local/bin/run-inspection.sh /usr/local/bin/gdb_inspect_judge.cs /usr/local/bin/gdb_mi_inspect.cs
 
 WORKDIR /work
 
