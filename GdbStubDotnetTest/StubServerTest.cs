@@ -80,4 +80,44 @@ public class StubServerTest {
 
         Assert.That(receivedPayload, Is.Empty);
     }
+
+    /// <summary>
+    /// qC(特定コマンド)と汎用 q クエリの両方を登録した状態で "qC" を送ると、
+    /// 汎用クエリではなく qC 専用ハンドラにルーティングされることを確認する。
+    /// 汎用クエリのパーサーは "qC" にも部分一致してしまうため、OneOf の登録順
+    /// (特定を先、汎用を後)と Try によるバックトラックの両方が効いて
+    /// 初めて成立する(接頭辞衝突の回帰防止)。
+    /// </summary>
+    [Test]
+    public async Task QCCommand_WithGenericQueryAlsoRegistered_RoutesToCurrentThreadHandler() {
+        using var transport = new TcpTransport(new IPEndPoint(IPAddress.Loopback, 0));
+
+        using var server = new StubServerBuilder()
+            .Map(Commands.CurrentThread, (cmd, res) => res.Ok())
+            .Map(Commands.Query, (cmd, res) => res.Empty())
+            .UseTransport(transport)
+            .Build();
+        server.Start();
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, transport.Port);
+        var clientStream = client.GetStream();
+
+        byte[] request = Framer.Encode("qC"u8);
+        await clientStream.WriteAsync(request);
+
+        var framer = new Framer();
+        byte[]? receivedPayload = null;
+        byte[] readBuffer = new byte[256];
+        while (receivedPayload is null) {
+            int n = await clientStream.ReadAsync(readBuffer);
+            framer.ProcessBytes(readBuffer.AsSpan(0, n), evt => {
+                if (evt.Kind == FramerEventKind.Packet) {
+                    receivedPayload = evt.Payload;
+                }
+            });
+        }
+
+        Assert.That(receivedPayload, Is.EqualTo("OK"u8.ToArray()));
+    }
 }

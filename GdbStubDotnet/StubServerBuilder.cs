@@ -7,7 +7,7 @@ public sealed class StubServerBuilder {
     private ITransport? _transport;
 
     public StubServerBuilder Map<TCmd>(Parser<byte, TCmd> parser, Action<TCmd, ResponseWriter<SyncResponse>> handler) {
-        _entries.Add(parser.Before(Parser<byte>.End).Select(cmd => (IDispatchedCommand)new SyncDispatchedCommand<TCmd>(cmd, handler)));
+        _entries.Add(Parser.Try(parser.Before(Parser<byte>.End)).Select(cmd => (IDispatchedCommand)new SyncDispatchedCommand<TCmd>(cmd, handler)));
         return this;
     }
 

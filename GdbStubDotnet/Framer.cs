@@ -62,22 +62,13 @@ public sealed class Framer {
                 break;
 
             case State.InChecksumLow:
-                int received = (HexNibble(_checksumHighNibble) << 4) | HexNibble(b);
+                int received = (HexUtil.NibbleValue(_checksumHighNibble) << 4) | HexUtil.NibbleValue(b);
                 onEvent(received == _computedChecksum
                     ? new FramerEvent(FramerEventKind.Packet, _payloadBuffer.ToArray())
                     : new FramerEvent(FramerEventKind.ChecksumMismatch));
                 _state = State.Idle;
                 break;
         }
-    }
-
-    private static int HexNibble(byte c) {
-        return c switch {
-            >= (byte)'0' and <= (byte)'9' => c - (byte)'0',
-            >= (byte)'a' and <= (byte)'f' => c - (byte)'a' + 10,
-            >= (byte)'A' and <= (byte)'F' => c - (byte)'A' + 10,
-            _ => 0,
-        };
     }
 
     public static byte[] Encode(ReadOnlySpan<byte> payload) {
