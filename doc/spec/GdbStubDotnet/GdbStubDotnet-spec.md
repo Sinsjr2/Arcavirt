@@ -14,7 +14,7 @@
 - **アーキテクチャ方針**: コア**アーキテクチャ非依存**。（ライブラリ本体はアーキを内包しない）。
 - **トランスポート**: 抽象化された全二重 async バイト I/F。同梱・検証済みトランスポートは **TCP 単一クライアント**（同時 1 接続、切断後の再 listen による再接続可、多重接続なし）。
 
-本仕様書は本ライブラリ**固有**の設計・契約・根拠を定義する。RSP のワイヤ形式、Nibblr の内部、.NET BCL の仕様は**再掲しない**（§1.4 参照誘導）。
+本仕様書は本ライブラリ**固有**の設計・契約・根拠を定義する。RSP のワイヤ形式、Pidgin の内部、.NET BCL の仕様は**再掲しない**（§1.4 参照誘導）。
 
 ---
 
@@ -40,16 +40,16 @@
 | | 内容 |
 |---|---|
 | **記載する** | 本ライブラリ固有の: アーキテクチャと層責務／公開 API 契約／拡張機構／コア・拡張コマンド境界／エラーモデル／非同期・割込・スレッドモデル／性能制約／テスト戦略／決定ログ／クラス図／命名規則・library 語一覧 |
-| **記載しない（参照へ誘導）** | RSP ワイヤ形式（パケット構文・各コマンドのバイト配置・チェックサム算法）／Nibblr 内部（コンビネータ意味論・nom 由来仕様）／.NET BCL API ／参照から自明に導けるもの全般 |
+| **記載しない（参照へ誘導）** | RSP ワイヤ形式（パケット構文・各コマンドのバイト配置・チェックサム算法）／Pidgin 内部（コンビネータ意味論） ／.NET BCL API ／参照から自明に導けるもの全般 |
 
-> **基準の一文**: 「GDB RSP 参照 or Nibblr 仕様に書いてあることは再掲しない（参照する）。本仕様はこのライブラリ固有の決定・契約・根拠だけを記録する。」
+> **基準の一文**: 「GDB RSP 参照 or Pidgin 仕様に書いてあることは再掲しない（参照する）。本仕様はこのライブラリ固有の決定・契約・根拠だけを記録する。」
 
 ### 1.4 参照ドキュメント
 
 | 略称 | 文書 | 参照する内容 |
 |---|---|---|
 | GDB-RP | GDB *Remote Protocol*（`sourceware.org/gdb/current/onlinedocs/gdb.html/Remote-Protocol.html`） | パケット構文・各コマンドの意味・stop reply・通知・`qSupported` 機能名 |
-| Nibblr | Nibblr 仕様書（同梱） | パーサコンビネータの意味論・`IParser`・`SpanSlice`・エラーモデル |
+| Pidgin | Pidgin 公式ドキュメント（`github.com/benjamin-hodgson/Pidgin`、NuGet `Pidgin` 3.5.1） | パーサコンビネータの意味論・`Parser<TToken,T>`・`OneOf`/`Try`/`Map`・エラーモデル |
 | MS-Docs | Microsoft .NET ドキュメント | `ArrayBufferWriter<byte>`・`IBufferWriter<byte>`・`System.Threading.Channels`・`IUtf8SpanParsable`・`Utf8.TryWrite` 等 |
 
 ---
@@ -93,13 +93,13 @@
    ┌─────────────┬───────┴────────┬──────────────┬──────────────┐
    ▼             ▼                ▼              ▼              ▼
 [Transport]  [Framer]       [Dispatcher]   [Execution/    [Diagnostics]
- ITransport   (固定)         Alt(parsers)    Notification    StubFault
+ ITransport   (固定)         OneOf(parsers)  Notification    StubFault
  TcpTransport  $..#cs/RLE     +Map登録        Coordinator    →OnError
               /}esc/cksum                    +Queue(%/vStopped)
                                 │
                          ┌──────┴───────┐
                          ▼              ▼
-                   [Parsing(Nibblr)] [Response]
+                   [Parsing(Pidgin)] [Response]
                     Commands.*        ResponseWriter<TKind>
                     + Command DTOs    ExecutionResponder
 ```
@@ -108,8 +108,8 @@
 |---|---|---|
 | トランスポート | バイトの全二重搬送 | `ITransport` で差替可。同梱 `TcpTransport`。 |
 | フレーミング | `$payload#cs`・`+/-` ack・RLE・`}` エスケープ・チェックサム | **固定インフラ（単一内部シーム）。コマンド単位の拡張対象外**。 |
-| ディスパッチ/登録 | 登録パーサ群の `Alt` でルーティング、種に応じた responder を渡してハンドラ呼出 | `Map`/`OnInterrupt`/`OnDisconnect` で拡張。 |
-| 解析（Nibblr） | パケット payload → 型付きコマンド DTO | `Commands.*` を利用、独自コマンドはパーサを追加。 |
+| ディスパッチ/登録 | 登録パーサ群の `OneOf` でルーティング、種に応じた responder を渡してハンドラ呼出 | `Map`/`OnInterrupt`/`OnDisconnect` で拡張。 |
+| 解析（Pidgin） | パケット payload → 型付きコマンド DTO | `Commands.*` を利用、独自コマンドはパーサを追加。 |
 | 応答 | 終端応答（同期）／停止報告（実行）の整形 | `ResponseWriter<TKind>` の制約付き拡張で型安全。 |
 | 実行・通知 FW | resume の遅延応答・モード変換・相関・合流・`%Stop`/`vStopped` ドレイン・interrupt 経路 | 内部機構。利用者は `StopEvent` を渡すのみ。 |
 | 診断 | ハンドラ例外等を `StubFault` として `OnError` へ | イベント購読のみ。 |
@@ -118,7 +118,7 @@
 
 1. `ITransport` がバイトを受信。
 2. `Framer` が `$..#cs` を検証し、`-`/`+` を自動 ack、RLE/`}` を復号して **payload span** を得る。
-3. `Dispatcher` が登録パーサ群の `Alt` で payload を照合し、最初に成功したパーサの **コマンド DTO** を得る。一致なしなら**空パケット `$#00`**。
+3. `Dispatcher` が登録パーサ群の `OneOf` で payload を照合し、最初に成功したパーサの **コマンド DTO** を得る。一致なしなら**空パケット `$#00`**。
 4. DTO の応答種（`SyncResponse`/`ExecResponse`）に応じて responder を生成し、登録ハンドラを呼ぶ。
 5. ハンドラ（利用者）は自分のターゲットを叩き、`ResponseWriter` に終端を書く／`ExecutionResponder` に停止を報告する。
 6. `Framer` が応答を `$..#cs` で包んで `ITransport` へ送出。
@@ -233,7 +233,7 @@
 public sealed class StubServerBuilder
 {
     // 同期/実行を問わず登録は Map 一本。responder 型はコマンドの Kind で決まる。
-    StubServerBuilder Map<TCmd>(IParser<byte, TCmd, …> parser, HandlerOf<TCmd> handler);
+    StubServerBuilder Map<TCmd>(Pidgin.Parser<byte, TCmd> parser, HandlerOf<TCmd> handler);
 
     StubServerBuilder OnInterrupt(Action handler);      // 生 0x03 / vCtrlC
     StubServerBuilder OnDisconnect(Action handler);     // TCP 切断
@@ -247,36 +247,36 @@ public sealed class StubServerBuilder
 }
 ```
 
-- ルーティングは登録パーサ群の **`Alt`**（v1）。将来は先頭バイト `Dispatch` による分岐を検討（v1 ではしない）。
+- ルーティングは登録パーサ群の **`OneOf`**（v1）。接頭辞が衝突するコマンド族（`q*`/`v*`/`Z`/`z` 等）は個々のパーサを `Try` で包んでバックトラック可能にする。将来は先頭バイト `Dispatch` による分岐を検討（v1 ではしない）。
 - ハンドラの第 2 引数（responder）の型は、`TCmd` が持つ応答種マーカ（`SyncResponse`/`ExecResponse`）で決まる:
   - `SyncResponse` → `ResponseWriter<…>`
   - `ExecResponse` → `ExecutionResponder`
 - ハンドラの**戻り値は `void`**。完了は responder への書込/報告で示す。
 
-### 6.3 解析（Nibblr 連携）
+### 6.3 解析（Pidgin 連携）
 
-- 標準 RSP コマンドの Nibblr パーサを `GdbStubDotnet.Commands` が提供する。利用者は wire 解析を書かない。
-- 各パーサは **型付きコマンド DTO**（値型）を出力する。可変長/バイナリ payload は **`SpanSlice.Of(packet)`**（Nibblr のゼロコピー出力）で参照する。
-- ルーティングは登録パーサの `Alt`。初回実行時にコンビネータと `Map` のデリゲートを構築・キャッシュ（**初回のみ割当**）、以降ゼロアロケ。**リフレクション不使用**（§8）。
+- 標準 RSP コマンドの Pidgin パーサを `GdbStubDotnet.Commands` が提供する。利用者は wire 解析を書かない。
+- 各パーサは **型付きコマンド DTO**（値型）を出力する。可変長/バイナリ payload は **`byte[]`/`ReadOnlyMemory<byte>`** にコピーして保持する（Pidgin の `Span` はパーサのコールバック内でのみ有効なため、コピーして持ち出す）。
+- ルーティングは登録パーサの `OneOf`（＋接頭辞衝突箇所は `Try`）。`Dispatcher` のルーティングとコマンド解析（DTO 生成）は同一の Pidgin 呼出列であり、**この「Dispatch＋解析」区間はゼロアロケ対象外**とする（Pidgin は呼出毎に内部アロケートするため。§8・§9.2 参照）。フレーミング・応答整形・実行/通知 FW のゼロアロケ方針は変わらない。**リフレクション不使用**（§8）。
 
 提供パーサ（抜粋）:
 
 | パーサ | コマンド | DTO（抜粋フィールド） | 応答種 |
 |---|---|---|---|
 | `Commands.ReadMemory` | `m` | `Addr:ulong, Len:int, Thread:ThreadId` | Sync |
-| `Commands.WriteMemory` | `M` | `Addr, Data:SpanSlice, Thread` | Sync |
-| `Commands.WriteMemoryBinary` | `X` | `Addr, Data:SpanSlice, Thread` | Sync |
+| `Commands.WriteMemory` | `M` | `Addr, Data:byte[], Thread` | Sync |
+| `Commands.WriteMemoryBinary` | `X` | `Addr, Data:byte[], Thread` | Sync |
 | `Commands.ReadRegisters` | `g` | `Thread` | Sync |
-| `Commands.WriteRegisters` | `G` | `Data:SpanSlice, Thread` | Sync |
+| `Commands.WriteRegisters` | `G` | `Data:byte[], Thread` | Sync |
 | `Commands.ReadRegister` | `p` | `Number:int, Thread` | Sync |
-| `Commands.WriteRegister` | `P` | `Number, Data:SpanSlice, Thread` | Sync |
+| `Commands.WriteRegister` | `P` | `Number, Data:byte[], Thread` | Sync |
 | `Commands.InsertBreakpoint` | `Z` | `Type:BpType, Addr, Kind:int` | Sync |
 | `Commands.RemoveBreakpoint` | `z` | `Type, Addr, Kind` | Sync |
 | `Commands.SetThread` | `H` | `Op:char, Thread` | Sync（§6.6） |
 | `Commands.CurrentThread` | `qC` | — | Sync |
 | `Commands.ThreadInfo` | `qfThreadInfo`/`qsThreadInfo` | — | Sync |
-| `Commands.Supported` | `qSupported` | `Features:SpanSlice` | Sync |
-| `Commands.Query` | `qXXX`（汎用） | `Name:SpanSlice, Args:SpanSlice` | Sync |
+| `Commands.Supported` | `qSupported` | `Features:byte[]` | Sync |
+| `Commands.Query` | `qXXX`（汎用） | `Name:byte[], Args:byte[]` | Sync |
 | `Commands.Continue` | `c` | `Addr?:ulong` | Exec |
 | `Commands.Step` | `s` | `Addr?:ulong` | Exec |
 | `Commands.VCont` | `vCont` | `Actions:ResumeAction[]` | Exec |
@@ -415,9 +415,9 @@ public interface ITransport
 |---|---|
 | TFM | **`net10.0`**（単一ターゲット） |
 | AOT | **NativeAOT** を目標。**カスタム source generator は用いない**。 |
-| リフレクション | **不使用**。パーサ解決は `typeof` キーの辞書＋`IUtf8SpanParsable` による（リフレクションでタプルを自動導出する方式は**棄却**＝ボクシング・AOT 非親和）。 |
+| リフレクション | **不使用**。`Map<TCmd>` の**登録管理**（渡されたパーサ・ハンドラ・応答種別の対応）は `typeof` キーの辞書＋`IUtf8SpanParsable` による。**実際のペイロードルーティング**は Pidgin の `OneOf`（＋`Try`）が担う（§6.2・§6.3）。両者ともリフレクションでタプルを自動導出する方式は**棄却**＝ボクシング・AOT 非親和。 |
 | スレッド | 接続あたり**シングルスレッド**の I/O ループ。 |
-| ゼロアロケ | **プール/再利用**（一度確保して使い回す）。`stackalloc` には依存しない方針（小固定長を除く）。 |
+| ゼロアロケ | **プール/再利用**（一度確保して使い回す）。`stackalloc` には依存しない方針（小固定長を除く）。**Dispatch＋解析（Pidgin 呼出列）はこの対象外**（§6.3・§9.2）。 |
 | 応答バッファ | 標準 **`ArrayBufferWriter<byte>`**（`IBufferWriter<byte>`）。`Clear()` で再利用、独自 owner は作らない。 |
 | エスケープ | **書込時**に適用（`Binary` がバイナリ領域のみエスケープ）。フレーミングは `$..#cs` 付与のみ。 |
 | RLE | **既定オフ**（v1）。 |
@@ -426,14 +426,13 @@ public interface ITransport
 
 `net10.0` は次を提供し、出力側の旧制約（netstandard2.1 時代の手動整形）を解除する:
 
-- `allows ref struct`（C# 14）→ `ReadOnlySpan<byte>` をジェネリック型引数に使える。
 - `IUtf8SpanFormattable` / `Utf8.TryWrite` / `CompositeFormat`。
 
 ただし **ref struct は `await` を跨げない**（これは net10 でも不変）。よって遅延応答に関わる `ExecutionResponder` は**プールされた参照型**であり、ref struct ではない。
 
 ### 8.2 範囲外
 
-- **IL2CPP/Unity はスタブ本体の対象外**（`net10.0` は IL2CPP 非対応）。Nibblr は net10 上で消費し、その `#if NET10_0_OR_GREATER` 拡張層も利用可能だが、Nibblr 自体の IL2CPP 可搬性をスタブが必要とするわけではない。
+- **IL2CPP/Unity はスタブ本体の対象外**（`net10.0` は IL2CPP 非対応）。Pidgin 自体の IL2CPP 可搬性をスタブが必要とするわけではない。
 
 ---
 
@@ -453,7 +452,8 @@ public interface ITransport
 
 ### 9.2 ゼロアロケ検証
 
-- `GC.GetAllocatedBytesForCurrentThread()` の差分で確認し、**CI ゲート**にする（初回構築割当を除いた定常区間で 0）。
+- フレーミング・応答整形・実行/通知 FW を対象に `GC.GetAllocatedBytesForCurrentThread()` の差分で確認し、**CI ゲート**にする（初回構築割当を除いた定常区間で 0）。
+- **Dispatch＋解析（Pidgin 呼出列）はこの CI ゲートの測定対象外**（§6.3・§8）。Pidgin は呼出毎に内部アロケートするため。
 
 ### 9.3 CI マトリクス
 
@@ -508,19 +508,19 @@ classDiagram
     class Dispatcher {
         <<internal>>
         +Route(packet)
-        -Alt~parsers~
+        -OneOf~parsers~
     }
 
     class Commands {
         <<static>>
-        +ReadMemory IParser
-        +WriteMemory IParser
-        +ReadRegisters IParser
-        +VCont IParser
-        +InsertBreakpoint IParser
-        +Query IParser
-        +SetThread IParser
-        +Supported IParser
+        +ReadMemory Parser
+        +WriteMemory Parser
+        +ReadRegisters Parser
+        +VCont Parser
+        +InsertBreakpoint Parser
+        +Query Parser
+        +SetThread Parser
+        +Supported Parser
     }
     class ReadMemoryCommand {
         <<struct>>
@@ -540,8 +540,8 @@ classDiagram
     }
     class QueryCommand {
         <<struct>>
-        +SpanSlice Name
-        +SpanSlice Args
+        +byte[] Name
+        +byte[] Args
         +ThreadId Thread
     }
 
@@ -655,8 +655,8 @@ classDiagram
 | A-3 | all-stop ＋ non-stop、マルチスレッド/プロセス完全対応。ID は `pPID.TID`、`qSupported` 交渉。 | GDB の標準的デバッグ体験を満たす。 |
 | A-4 | フレーミング層は固定インフラ（単一内部シーム）。コマンド単位では拡張しない。 | プロトコル外殻は不変、拡張は意味層に限定。 |
 | A-5 | **強制 behavioral interface を廃止**し、全コマンドを `Map`＋クロージャに一本化。 | I/F 強制は利用者のコマンド拡張・差替を妨げる。 |
-| A-6 | ライブラリは標準 RSP の Nibblr パーサ群（`Commands.*`）・応答ライタ・実行/通知 FW を提供。利用者はハンドラのみ。 | wire 解析と協調機構の再実装を不要にする。 |
-| A-7 | 解析は Nibblr コンビネータ。各コマンド＝型付き値出力、ルーティングは `Alt`（v1）。可変長は `SpanSlice`。 | 正規表現では payload 抽出と型付けが両立しない問題を解消。リフレクション無しで AOT 安全。 |
+| A-6 | ライブラリは標準 RSP の Pidgin パーサ群（`Commands.*`）・応答ライタ・実行/通知 FW を提供。利用者はハンドラのみ。 | wire 解析と協調機構の再実装を不要にする。 |
+| A-7 | 解析は Pidgin コンビネータ。各コマンド＝型付き値出力、共通型（`ICommand` 等）へ変換した上でルーティングは `OneOf`＋接頭辞衝突箇所は `Try`（v1）。可変長は `byte[]`/`ReadOnlyMemory<byte>`。 | 正規表現では payload 抽出と型付けが両立しない問題を解消。リフレクション無しで AOT 安全（Arcavirt-o3e.1 で実証済み）。 |
 | A-8 | ハンドラ戻り値は `void`。完了は responder への書込/報告で示す。 | 同期/非同期を同一登録形に収める。 |
 | A-9 | 同期コマンドは `ResponseWriter<TKind>`（プール・呼出中のみ）。終端は {`E`/成功/`$#00`} の 3 種に正規化。`O`/`%Stop`/`F` は別シンク。 | 応答経路を型安全かつ単純化。 |
 | A-10 | 実行コマンドは `ExecutionResponder`（長命・スレッドセーフ）に `ReportStop(StopEvent)`。resume 駆動は利用者、遅延/モード変換/相関/合流/ドレインは FW。 | 同期 1 応答では resume の多段が表現不能なため。 |
@@ -664,11 +664,12 @@ classDiagram
 | A-12 | 生 `0x03` は `OnInterrupt`。`vCtrlC` も interrupt 経路へ集約。TCP 切断は `OnDisconnect`。終了は `Stop()`/`Dispose()`。`CancellationToken` 不使用。 | 非パケット割込と切断を通常経路から分離。 |
 | A-13 | `H`（現在スレッド）は FW が状態追跡し、後続 DTO の `Thread` に充填。既定 `H` ハンドラは上書き可。 | I/F 無しでスレッド文脈をハンドラへ届ける。 |
 | A-14 | エラーは 2 系統。対 GDB は RSP ネイティブ自動（`-`/`E NN`/`$#00`）、対ホストは `OnError(StubFault)` のみ。`ILogger`/`EventSource` 非依存。未購読欠落は許容。構成エラーは fail-fast。 | プロトコル応答と診断を分離、依存を最小化。 |
-| A-15 | TFM=`net10.0` 単一。NativeAOT 目標、source generator 無し、リフレクション無し、シングルスレッド。IL2CPP/Unity は対象外。 | AOT・ゼロアロケと net10 機能（`allows ref struct` 等）の両立。 |
-| A-16 | ゼロアロケ＝プール/再利用、`ArrayBufferWriter<byte>` 背面、書込時エスケープ、RLE 既定オフ。 | 定常区間 0 割当を CI で担保。 |
+| A-15 | TFM=`net10.0` 単一。NativeAOT 目標、source generator 無し、リフレクション無し、シングルスレッド。IL2CPP/Unity は対象外。 | AOT・ゼロアロケと net10 の応答側機能（`Utf8.TryWrite` 等）の両立。 |
+| A-16 | ゼロアロケ＝プール/再利用、`ArrayBufferWriter<byte>` 背面、書込時エスケープ、RLE 既定オフ。Dispatch＋解析（Pidgin 呼出列）はこの対象外。 | 定常区間 0 割当を CI で担保しつつ、Pidgin 採用による呼出毎アロケートを現実的な境界として受け入れる。 |
 | A-17 | `ExecutionResponder` は ref struct ではなくプール参照型。 | ref struct は `await` を跨げない（net10 でも不変）。 |
-| A-18 | テスト 3 層（L1 単体／L2 コンポーネント＝主戦場／L3 実 gdb）。golden transcript で決定的再生。ゼロアロケは `GC.GetAllocatedBytesForCurrentThread` 差分で CI ゲート。実 RX はライブラリ正当性に不要（CI 外オプション）。 | 決定性を最大化し、実 GDB 受入を絞る。 |
+| A-18 | テスト 3 層（L1 単体／L2 コンポーネント＝主戦場／L3 実 gdb）。golden transcript で決定的再生。ゼロアロケは `GC.GetAllocatedBytesForCurrentThread` 差分で CI ゲート（Dispatch＋解析を除く）。実 RX はライブラリ正当性に不要（CI 外オプション）。 | 決定性を最大化し、実 GDB 受入を絞る。 |
 | A-19 | ライブラリ名＝`GdbStubDotnet`（ルート namespace 兼パッケージ）。型から `Rsp`/`Gdb` 接頭辞は原則除去。 | 名前空間がブランドを担う。 |
+| A-20 | パーサーコンビネーターを Nibblr から Pidgin（NuGet 3.5.1）へ変更。 | GDB スタブの実装が目的であり、パーサーコンビネーターを自作すること自体は目的ではない。NativeAOT 互換性は Arcavirt-o3e.1 のスパイクで実証済み（Go）。 |
 
 ---
 
@@ -677,9 +678,9 @@ classDiagram
 | 文書 | 参照箇所 |
 |---|---|
 | GDB-RP | パケット構文・各コマンド意味・stop reply・通知・`qSupported` 機能名。`sourceware.org/gdb/current/onlinedocs/gdb.html/Remote-Protocol.html` |
-| Nibblr 仕様 | `IParser`・`ParseResult`・`SpanSlice`・コンビネータ（`Alt`/`Map`/`Tag`/`TakeWhile` 等）・エラーモデル・`#if NET10_0_OR_GREATER` 拡張層 |
+| Pidgin | `Parser<TToken,T>`・`OneOf`・`Try`・`Map`/`Select`・エラーモデル。`github.com/benjamin-hodgson/Pidgin`、NuGet `Pidgin` 3.5.1 |
 | MS-Docs | `ArrayBufferWriter<byte>`・`IBufferWriter<byte>`・`System.Threading.Channels`・`IUtf8SpanParsable`・`Utf8.TryWrite`・NativeAOT |
 
 ---
 
-*以上。本書は設計確定事項を記録する。ワイヤ仕様・Nibblr 内部・BCL の詳細は各参照に従い、本書では繰り返さない。*
+*以上。本書は設計確定事項を記録する。ワイヤ仕様・Pidgin 内部・BCL の詳細は各参照に従い、本書では繰り返さない。*
