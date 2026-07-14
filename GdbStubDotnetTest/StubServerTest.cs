@@ -1,0 +1,83 @@
+using System.Net;
+using System.Net.Sockets;
+using GdbStubDotnet;
+using NUnit.Framework;
+
+namespace GdbStubDotnetTest;
+
+[TestFixture]
+public class StubServerTest {
+    /// <summary>
+    /// gコマンドを実際にTCP経由で送信し、登録したハンドラが返すレジスタ値が
+    /// 正しいRSPフレーム($...#cs)としてクライアントに返ってくることを確認する。
+    /// </summary>
+    [Test]
+    public async Task GCommand_RoundTripOverTcp_ReturnsHexEncodedRegisters() {
+        using var transport = new TcpTransport(new IPEndPoint(IPAddress.Loopback, 0));
+        byte[] registerValues = [0x01, 0x02, 0x03, 0x04];
+
+        using var server = new StubServerBuilder()
+            .Map(Commands.ReadRegisters, (cmd, res) => res.HexBytes(registerValues))
+            .UseTransport(transport)
+            .Build();
+        server.Start();
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, transport.Port);
+        var clientStream = client.GetStream();
+
+        byte[] request = Framer.Encode("g"u8);
+        await clientStream.WriteAsync(request);
+
+        var framer = new Framer();
+        byte[]? receivedPayload = null;
+        byte[] readBuffer = new byte[256];
+        while (receivedPayload is null) {
+            int n = await clientStream.ReadAsync(readBuffer);
+            framer.ProcessBytes(readBuffer.AsSpan(0, n), evt => {
+                if (evt.Kind == FramerEventKind.Packet) {
+                    receivedPayload = evt.Payload;
+                }
+            });
+        }
+
+        Assert.That(receivedPayload, Is.EqualTo("01020304"u8.ToArray()));
+    }
+
+    /// <summary>
+    /// g パーサーは "g" に厳密一致し、"gX" のような接頭辞一致だけではマッチ
+    /// しないことを確認する。入力全体を消費できないコマンドは未対応として
+    /// 空パケット($#00)にフォールバックする(end-of-input アンカリングの回帰防止)。
+    /// </summary>
+    [Test]
+    public async Task UnregisteredCommandWithMatchingPrefix_RoundTripOverTcp_FallsBackToEmptyPacket() {
+        using var transport = new TcpTransport(new IPEndPoint(IPAddress.Loopback, 0));
+
+        using var server = new StubServerBuilder()
+            .Map(Commands.ReadRegisters, (cmd, res) => res.HexBytes([0x01]))
+            .UseTransport(transport)
+            .Build();
+        server.Start();
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, transport.Port);
+        var clientStream = client.GetStream();
+
+        byte[] request = Framer.Encode("gX"u8);
+        await clientStream.WriteAsync(request);
+
+        var framer = new Framer();
+        byte[]? receivedPayload = null;
+        byte[] readBuffer = new byte[256];
+        while (receivedPayload is null) {
+            int n = await clientStream.ReadAsync(readBuffer);
+            framer.ProcessBytes(readBuffer.AsSpan(0, n), evt => {
+                if (evt.Kind == FramerEventKind.Packet) {
+                    receivedPayload = evt.Payload;
+                }
+            });
+        }
+
+        Assert.That(receivedPayload, Is.Empty);
+    }
+}
