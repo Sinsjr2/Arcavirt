@@ -10,3 +10,13 @@
 
 ## コミット規約
 - `doc/commit-guidelines.md` に従う。
+
+## ビルド・テスト(サンドボックス制約)
+- `dotnet build`/`dotnet test`/`dotnet format`/`dotnet publish` は、NuGet
+  キャッシュへの書き込み(`~/.nuget/packages`, `~/.local/share/NuGet/http-cache`)や
+  `.gitmodules` の読み取りがサンドボックス内で拒否されるため、常に
+  `dangerouslyDisableSandbox: true` での実行が必要。
+- サブエージェントもサンドボックス内で実行されるため、ファイル作成の委任にビルド確認
+  まで含めると、サブエージェント側では毎回失敗して報告するだけになる。ファイル転記の
+  委任とビルド確認は分離し、ビルド・テスト・format の実行は統括が直接(サンドボックス
+  外で)行う。
