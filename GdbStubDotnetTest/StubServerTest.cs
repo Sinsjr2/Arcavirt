@@ -120,4 +120,84 @@ public class StubServerTest {
 
         Assert.That(receivedPayload, Is.EqualTo("OK"u8.ToArray()));
     }
+
+    /// <summary>
+    /// vCont;c(実行系)と vCont?(問い合わせ、Sync)の両方を登録した状態で
+    /// "vCont?" を送ると、vCont; 系のExecハンドラではなく vCont? 専用の
+    /// Syncハンドラにルーティングされることを確認する。
+    /// "vCont;c" と "vCont?" は "vCont" の接頭辞を共有するため、Try による
+    /// バックトラックが機能して初めて成立する(接頭辞衝突の回帰防止)。
+    /// </summary>
+    [Test]
+    public async Task VContQuery_WithVContAlsoRegistered_RoutesToVContQueryHandler() {
+        using var transport = new TcpTransport(new IPEndPoint(IPAddress.Loopback, 0));
+        var vContInvoked = new TaskCompletionSource<bool>();
+
+        using var server = new StubServerBuilder()
+            .Map(Commands.VCont, (VContCommand cmd, ExecutionResponder responder) => vContInvoked.SetResult(true))
+            .Map(Commands.VContQuery, (cmd, res) => res.Ok())
+            .UseTransport(transport)
+            .Build();
+        server.Start();
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, transport.Port);
+        var clientStream = client.GetStream();
+
+        byte[] request = Framer.Encode("vCont?"u8);
+        await clientStream.WriteAsync(request);
+
+        var framer = new Framer();
+        byte[]? receivedPayload = null;
+        byte[] readBuffer = new byte[256];
+        while (receivedPayload is null) {
+            int n = await clientStream.ReadAsync(readBuffer);
+            framer.ProcessBytes(readBuffer.AsSpan(0, n), evt => {
+                if (evt.Kind == FramerEventKind.Packet) {
+                    receivedPayload = evt.Payload;
+                }
+            });
+        }
+
+        Assert.Multiple(() => {
+            Assert.That(receivedPayload, Is.EqualTo("OK"u8.ToArray()));
+            Assert.That(vContInvoked.Task.IsCompleted, Is.False);
+        });
+    }
+
+    /// <summary>
+    /// ? コマンドを送信すると、登録した Sync ハンドラの応答がそのまま
+    /// 返ってくることを確認する。
+    /// </summary>
+    [Test]
+    public async Task HaltReasonCommand_RoundTripOverTcp_ReturnsHandlerResponse() {
+        using var transport = new TcpTransport(new IPEndPoint(IPAddress.Loopback, 0));
+
+        using var server = new StubServerBuilder()
+            .Map(Commands.HaltReason, (cmd, res) => res.HexBytes([0x05]))
+            .UseTransport(transport)
+            .Build();
+        server.Start();
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, transport.Port);
+        var clientStream = client.GetStream();
+
+        byte[] request = Framer.Encode("?"u8);
+        await clientStream.WriteAsync(request);
+
+        var framer = new Framer();
+        byte[]? receivedPayload = null;
+        byte[] readBuffer = new byte[256];
+        while (receivedPayload is null) {
+            int n = await clientStream.ReadAsync(readBuffer);
+            framer.ProcessBytes(readBuffer.AsSpan(0, n), evt => {
+                if (evt.Kind == FramerEventKind.Packet) {
+                    receivedPayload = evt.Payload;
+                }
+            });
+        }
+
+        Assert.That(receivedPayload, Is.EqualTo("05"u8.ToArray()));
+    }
 }

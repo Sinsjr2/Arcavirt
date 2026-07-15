@@ -104,6 +104,35 @@ public class ExecutionTest {
         Assert.That(errorReply, Is.EqualTo("E0e"u8.ToArray()));
     }
 
+    /// <summary>
+    /// s(Step)コマンド送信後、ハンドラが捕捉した ExecutionResponder に
+    /// ReportStop すると、クライアントに stop reply(T05)が返ることを確認する
+    /// (c コマンドと同型の Exec パスであることの確認)。
+    /// </summary>
+    [Test]
+    public async Task StepCommand_ThenReportStop_ReturnsStopReply() {
+        using var transport = new TcpTransport(new IPEndPoint(IPAddress.Loopback, 0));
+        var handlerInvoked = new TaskCompletionSource<ExecutionResponder>();
+
+        using var server = new StubServerBuilder()
+            .Map(Commands.Step, (cmd, responder) => handlerInvoked.SetResult(responder))
+            .UseTransport(transport)
+            .Build();
+        server.Start();
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, transport.Port);
+        var clientStream = client.GetStream();
+
+        await clientStream.WriteAsync(Framer.Encode("s"u8));
+
+        ExecutionResponder responder = await handlerInvoked.Task;
+        responder.ReportStop(new StopEvent(default, StopReason.Signal, 5, 0));
+
+        byte[]? stopReply = await ReadOnePacket(clientStream);
+        Assert.That(stopReply, Is.EqualTo("T05"u8.ToArray()));
+    }
+
     private static async Task<byte[]?> ReadOnePacket(NetworkStream stream) {
         var framer = new Framer();
         byte[]? received = null;

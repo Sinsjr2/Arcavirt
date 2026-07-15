@@ -131,4 +131,60 @@ public class CommandsTest {
             Assert.That(result.Value.Kind, Is.EqualTo(2));
         });
     }
+
+    /// <summary>
+    /// "?" をパースすると HaltReasonCommand になることを確認する。
+    /// </summary>
+    [Test]
+    public void HaltReason_ParsesQuestionMark() {
+        var result = Commands.HaltReason.Parse("?"u8);
+
+        Assert.That(result.Success, Is.True);
+    }
+
+    /// <summary>
+    /// "s"(アドレス省略)をパースすると Addr=null の StepCommand になる
+    /// ことを確認する。
+    /// </summary>
+    [Test]
+    public void Step_WithoutAddr_ParsesWithNullAddr() {
+        var result = Commands.Step.Parse("s"u8);
+
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.Value.Addr, Is.Null);
+    }
+
+    /// <summary>
+    /// "s1000" をパースすると Addr=0x1000 の StepCommand になることを確認する。
+    /// </summary>
+    [Test]
+    public void Step_WithAddr_ParsesHexAddr() {
+        var result = Commands.Step.Parse("s1000"u8);
+
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.Value.Addr, Is.EqualTo(0x1000UL));
+    }
+
+    /// <summary>
+    /// "vCont;c" をパースすると、Continue アクション1件を持つ VContCommand に
+    /// なることを確認する。
+    /// </summary>
+    [Test]
+    public void VCont_ParsesContinueAction() {
+        var result = Commands.VCont.Parse("vCont;c"u8);
+
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.Value.Actions, Has.Length.EqualTo(1));
+        Assert.That(result.Value.Actions[0].Kind, Is.EqualTo(ActionKind.Continue));
+    }
+
+    /// <summary>
+    /// "vCont?" をパースすると VContQueryCommand になることを確認する。
+    /// </summary>
+    [Test]
+    public void VContQuery_ParsesQuestionForm() {
+        var result = Commands.VContQuery.Parse("vCont?"u8);
+
+        Assert.That(result.Success, Is.True);
+    }
 }

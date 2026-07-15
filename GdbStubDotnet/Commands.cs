@@ -28,6 +28,14 @@ public readonly record struct RemoveBreakpointCommand(BpType Type, ulong Addr, i
 
 public readonly record struct ContinueCommand(ulong? Addr);
 
+public readonly record struct HaltReasonCommand;
+
+public readonly record struct StepCommand(ulong? Addr);
+
+public readonly record struct VContCommand(ResumeAction[] Actions);
+
+public readonly record struct VContQueryCommand;
+
 public static class Commands {
     public static readonly Parser<byte, ReadRegistersCommand> ReadRegisters =
         Parser<byte>.Token((byte)'g').ThenReturn(new ReadRegistersCommand(default));
@@ -100,6 +108,23 @@ public static class Commands {
                 HexParsers.HexULong.Select(static addr => (ulong?)addr)
                     .Or(Parser<byte>.Return((ulong?)null)))
             .Select(static maybeAddr => new ContinueCommand(maybeAddr));
+
+    public static readonly Parser<byte, HaltReasonCommand> HaltReason =
+        Parser<byte>.Token((byte)'?').ThenReturn(new HaltReasonCommand());
+
+    public static readonly Parser<byte, StepCommand> Step =
+        Parser<byte>.Token((byte)'s')
+            .Then(
+                HexParsers.HexULong.Select(static addr => (ulong?)addr)
+                    .Or(Parser<byte>.Return((ulong?)null)))
+            .Select(static maybeAddr => new StepCommand(maybeAddr));
+
+    public static readonly Parser<byte, VContCommand> VCont =
+        Parser<byte>.Sequence("vCont;c"u8.ToArray())
+            .ThenReturn(new VContCommand([new ResumeAction(default, ActionKind.Continue, 0)]));
+
+    public static readonly Parser<byte, VContQueryCommand> VContQuery =
+        Parser<byte>.Sequence("vCont?"u8.ToArray()).ThenReturn(new VContQueryCommand());
 
     private static BpType ParseBpType(ulong value) {
         return value switch {
