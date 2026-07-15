@@ -18,3 +18,22 @@ csharp_new_line_before_finally = false
 csharp_new_line_before_members_in_object_initializers = false
 csharp_new_line_before_members_in_anonymous_types = false
 csharp_new_line_between_query_expression_clauses = false
+
+dotnet_style_require_accessibility_modifiers = always:warning
+dotnet_style_qualification_for_field = true:warning
+csharp_style_namespace_declarations = file_scoped:warning
+
+dotnet_naming_rule.const_fields_should_be_upper_snake.severity = warning
+dotnet_naming_rule.const_fields_should_be_upper_snake.symbols = const_fields
+dotnet_naming_rule.const_fields_should_be_upper_snake.style = upper_snake_style
+dotnet_naming_symbols.const_fields.applicable_kinds = field
+dotnet_naming_symbols.const_fields.required_modifiers = const
+dotnet_naming_style.upper_snake_style.capitalization = all_upper
+dotnet_naming_style.upper_snake_style.word_separator = _
+
+dotnet_naming_rule.private_fields_should_be_camel_case.severity = warning
+dotnet_naming_rule.private_fields_should_be_camel_case.symbols = private_fields
+dotnet_naming_rule.private_fields_should_be_camel_case.style = camel_case_style
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.camel_case_style.capitalization = camel_case
