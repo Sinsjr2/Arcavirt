@@ -11,6 +11,11 @@ public sealed class StubServerBuilder {
         return this;
     }
 
+    public StubServerBuilder Map<TCmd>(Parser<byte, TCmd> parser, Action<TCmd, ExecutionResponder> handler) {
+        _entries.Add(Parser.Try(parser.Before(Parser<byte>.End)).Select(cmd => (IDispatchedCommand)new ExecDispatchedCommand<TCmd>(cmd, handler)));
+        return this;
+    }
+
     public StubServerBuilder UseTransport(ITransport transport) {
         _transport = transport;
         return this;

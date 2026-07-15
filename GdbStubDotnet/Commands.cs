@@ -26,6 +26,8 @@ public readonly record struct InsertBreakpointCommand(BpType Type, ulong Addr, i
 
 public readonly record struct RemoveBreakpointCommand(BpType Type, ulong Addr, int Kind);
 
+public readonly record struct ContinueCommand(ulong? Addr);
+
 public static class Commands {
     public static readonly Parser<byte, ReadRegistersCommand> ReadRegisters =
         Parser<byte>.Token((byte)'g').ThenReturn(new ReadRegistersCommand(default));
@@ -91,6 +93,13 @@ public static class Commands {
             .Then(HexParsers.HexULong, static (type, addr) => (type, addr))
             .Before(Parser<byte>.Token((byte)','))
             .Then(HexParsers.HexULong, static (t, kind) => new RemoveBreakpointCommand(ParseBpType(t.type), t.addr, (int)kind));
+
+    public static readonly Parser<byte, ContinueCommand> Continue =
+        Parser<byte>.Token((byte)'c')
+            .Then(
+                HexParsers.HexULong.Select(static addr => (ulong?)addr)
+                    .Or(Parser<byte>.Return((ulong?)null)))
+            .Select(static maybeAddr => new ContinueCommand(maybeAddr));
 
     private static BpType ParseBpType(ulong value) {
         return value switch {
