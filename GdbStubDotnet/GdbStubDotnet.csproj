@@ -10,4 +10,8 @@
     <PackageReference Include="Pidgin" Version="3.5.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="GdbStubDotnetTest" />
+  </ItemGroup>
+
 </Project>

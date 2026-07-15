@@ -1,26 +1,27 @@
-using System.Threading.Channels;
-
 namespace GdbStubDotnet;
 
 internal readonly record struct ExecOutcome(bool IsReject, StopEvent Stop, RspError RejectError);
 
 /// <summary>
 /// 実行コマンドの長命・スレッドセーフな応答器。ターゲットスレッドから
-/// 呼ばれることを前提に、ReportStop/Reject は Channel への書き込みのみを行い、
-/// コーディネーター状態の変更は一切しない(I/Oループ側でのみ状態を変更する)。
+/// 呼ばれることを前提に、ReportStop/Reject は ExecutionCoordinator へ
+/// token 付きで通知するのみで、報告が有効かどうかの判定(§4.4のスコープ規律)
+/// と共有チャネルへの書込は ExecutionCoordinator 側が行う。
 /// </summary>
 public sealed class ExecutionResponder {
-    private readonly ChannelWriter<ExecOutcome> _writer;
+    private readonly ExecutionCoordinator _coordinator;
+    private readonly int _token;
 
-    internal ExecutionResponder(ChannelWriter<ExecOutcome> writer) {
-        _writer = writer;
+    internal ExecutionResponder(ExecutionCoordinator coordinator, int token) {
+        _coordinator = coordinator;
+        _token = token;
     }
 
     public void ReportStop(in StopEvent stop) {
-        _writer.TryWrite(new ExecOutcome(false, stop, default));
+        _coordinator.OnReportStop(_token, in stop);
     }
 
     public void Reject(RspError error) {
-        _writer.TryWrite(new ExecOutcome(true, default, error));
+        _coordinator.OnReject(_token, error);
     }
 }

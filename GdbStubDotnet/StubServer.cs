@@ -11,13 +11,15 @@ public sealed class StubServer : IDisposable {
 
     private readonly ITransport _transport;
     private readonly Dispatcher _dispatcher;
+    private readonly ChannelReader<ExecOutcome> _execReader;
     private readonly Framer _framer = new();
     private readonly Action? _onInterrupt;
     private Task? _loopTask;
 
-    internal StubServer(ITransport transport, Dispatcher dispatcher, Action? onInterrupt) {
+    internal StubServer(ITransport transport, Dispatcher dispatcher, ChannelReader<ExecOutcome> execReader, Action? onInterrupt) {
         _transport = transport;
         _dispatcher = dispatcher;
+        _execReader = execReader;
         _onInterrupt = onInterrupt;
     }
 
@@ -28,33 +30,30 @@ public sealed class StubServer : IDisposable {
     /// <summary>
     /// transport の読み取りと、実行中コマンドの stop 待ちを同時に待ち受ける
     /// (§4.6: exec 実行中でも 0x03/vCtrlC による割込を検知できる必要がある)。
-    /// all-stop は resume 1回につき outstanding な exec が高々1つという前提
-    /// (現行スコープ)のため、execTask は単一。non-stop 対応(Arcavirt-o3e.10)
-    /// ではこの前提自体が崩れるため、pendingExecWait を複数相関する形へ
-    /// 作り直しが必要になる。
+    /// stop 待ちは接続共有の ExecOutcome チャネル(_execReader)を常に読み続ける
+    /// 形にした(Arcavirt-o3e.10.1: 旧 resume 1回ごとの専用チャネルから移行)。
+    /// resume が outstanding でない間もチャネルは単に読み待ちのまま滞留する
+    /// だけなので害はない。all-stop は resume 1回につき outstanding な exec が
+    /// 高々1つという前提(現行スコープ)のため execTask は単一。
+    /// non-stop 対応(Arcavirt-o3e.10.3以降)ではこの前提自体が崩れるため、
+    /// 複数の stop を相関する形へ作り直しが必要になる。
     /// readTask/execTask は Task.WhenAny で負けた側を次周回に持ち越す
     /// (transport/Channel いずれも同一 reader に対する二重の読み取り待ちを
     /// 作ってはならないため、勝った側だけを都度作り直す)。
     /// </summary>
     private async Task RunLoopAsync() {
         byte[] buffer = new byte[4096];
-        ChannelReader<ExecOutcome>? pendingExecWait = null;
         Task<int>? readTask = null;
         Task<ExecOutcome>? execTask = null;
 
         while (true) {
             readTask ??= _transport.ReadAsync(buffer).AsTask();
-            if (pendingExecWait is not null) {
-                execTask ??= pendingExecWait.ReadAsync().AsTask();
-            }
+            execTask ??= _execReader.ReadAsync().AsTask();
 
-            if (execTask is not null) {
-                await Task.WhenAny(readTask, execTask);
-            }
+            await Task.WhenAny(readTask, execTask);
 
             if (execTask is not null && execTask.IsCompleted) {
                 ExecOutcome outcome = await execTask;
-                pendingExecWait = null;
                 execTask = null;
                 byte[] replyPayload = outcome.IsReject
                     ? HexUtil.EncodeError(outcome.RejectError)
@@ -75,19 +74,10 @@ public sealed class StubServer : IDisposable {
             }
 
             List<byte[]> immediateWrites = [];
-            List<ChannelReader<ExecOutcome>> newExecWaits = [];
-            ProcessChunk(buffer.AsSpan(0, n), immediateWrites, newExecWaits);
+            ProcessChunk(buffer.AsSpan(0, n), immediateWrites);
 
             foreach (byte[] write in immediateWrites) {
                 await _transport.WriteAsync(write);
-            }
-
-            // all-stop の現行スコープでは outstanding な exec は高々1つ。
-            // 既に pendingExecWait がある状態で2つ目が来るのはプロトコル違反
-            // (non-stop/複数 resume は Arcavirt-o3e.10 の対象)であり、ここでは
-            // 最初の1件のみを採用し、以降は無視する。
-            if (pendingExecWait is null && newExecWaits.Count > 0) {
-                pendingExecWait = newExecWaits[0];
             }
         }
     }
@@ -97,24 +87,24 @@ public sealed class StubServer : IDisposable {
     /// Framer へ渡す。0x03 はパケットの一部ではないため、チャンク中のどこに
     /// 現れても即座に割込ハンドラを呼ぶ(§4.6)。
     /// </summary>
-    private void ProcessChunk(ReadOnlySpan<byte> chunk, List<byte[]> immediateWrites, List<ChannelReader<ExecOutcome>> execWaits) {
+    private void ProcessChunk(ReadOnlySpan<byte> chunk, List<byte[]> immediateWrites) {
         int start = 0;
         for (int i = 0; i < chunk.Length; i++) {
             if (chunk[i] != InterruptByte) {
                 continue;
             }
             if (i > start) {
-                ProcessFramerChunk(chunk[start..i], immediateWrites, execWaits);
+                ProcessFramerChunk(chunk[start..i], immediateWrites);
             }
             _onInterrupt?.Invoke();
             start = i + 1;
         }
         if (start < chunk.Length) {
-            ProcessFramerChunk(chunk[start..], immediateWrites, execWaits);
+            ProcessFramerChunk(chunk[start..], immediateWrites);
         }
     }
 
-    private void ProcessFramerChunk(ReadOnlySpan<byte> chunk, List<byte[]> immediateWrites, List<ChannelReader<ExecOutcome>> execWaits) {
+    private void ProcessFramerChunk(ReadOnlySpan<byte> chunk, List<byte[]> immediateWrites) {
         _framer.ProcessBytes(chunk, evt => {
             switch (evt.Kind) {
                 case FramerEventKind.Packet:
@@ -128,11 +118,10 @@ public sealed class StubServer : IDisposable {
                     RouteResult? routed = _dispatcher.Route(evt.Payload!);
                     if (routed is null) {
                         immediateWrites.Add(Framer.Encode(ReadOnlySpan<byte>.Empty));
-                    } else if (routed.Value.ExecWait is { } execWait) {
-                        execWaits.Add(execWait);
-                    } else {
+                    } else if (!routed.Value.ExecStarted) {
                         immediateWrites.Add(Framer.Encode(routed.Value.SyncResponse!));
                     }
+                    // ExecStarted の場合は共有チャネル経由で RunLoopAsync が後刻応答する。
                     break;
                 case FramerEventKind.ChecksumMismatch:
                     immediateWrites.Add(NakBytes);

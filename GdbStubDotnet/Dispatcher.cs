@@ -1,41 +1,43 @@
 using System.Buffers;
-using System.Threading.Channels;
 using Pidgin;
 
 namespace GdbStubDotnet;
 
 internal interface IDispatchedCommand {
     /// <summary>
-    /// 同期コマンドなら output にバイト列を書き込み null を返す。
-    /// 実行コマンドなら何も書き込まず、stop 結果を受け取る ChannelReader を返す。
+    /// 同期コマンドなら output にバイト列を書き込み false を返す。
+    /// 実行コマンドなら何も書き込まず、coordinator 経由で resume を開始して
+    /// true を返す(結果は ExecutionCoordinator 経由で接続共有チャネルへ
+    /// 後刻届く)。
     /// </summary>
-    ChannelReader<ExecOutcome>? Execute(IBufferWriter<byte> output);
+    bool Execute(IBufferWriter<byte> output, ExecutionCoordinator coordinator);
 }
 
 internal sealed class SyncDispatchedCommand<TCmd>(TCmd command, Action<TCmd, ResponseWriter<SyncResponse>> handler) : IDispatchedCommand {
-    public ChannelReader<ExecOutcome>? Execute(IBufferWriter<byte> output) {
+    public bool Execute(IBufferWriter<byte> output, ExecutionCoordinator coordinator) {
         var writer = new ResponseWriter<SyncResponse>(output);
         handler(command, writer);
-        return null;
+        return false;
     }
 }
 
 internal sealed class ExecDispatchedCommand<TCmd>(TCmd command, Action<TCmd, ExecutionResponder> handler) : IDispatchedCommand {
-    public ChannelReader<ExecOutcome>? Execute(IBufferWriter<byte> output) {
-        var channel = Channel.CreateBounded<ExecOutcome>(1);
-        var responder = new ExecutionResponder(channel.Writer);
+    public bool Execute(IBufferWriter<byte> output, ExecutionCoordinator coordinator) {
+        ExecutionResponder responder = coordinator.BeginResume();
         handler(command, responder);
-        return channel.Reader;
+        return true;
     }
 }
 
-internal readonly record struct RouteResult(byte[]? SyncResponse, ChannelReader<ExecOutcome>? ExecWait);
+internal readonly record struct RouteResult(byte[]? SyncResponse, bool ExecStarted);
 
 internal sealed class Dispatcher {
     private readonly Parser<byte, IDispatchedCommand> _router;
+    private readonly ExecutionCoordinator _coordinator;
 
-    public Dispatcher(IReadOnlyList<Parser<byte, IDispatchedCommand>> entries) {
+    public Dispatcher(IReadOnlyList<Parser<byte, IDispatchedCommand>> entries, ExecutionCoordinator coordinator) {
         _router = Parser.OneOf(entries);
+        _coordinator = coordinator;
     }
 
     public RouteResult? Route(ReadOnlySpan<byte> payload) {
@@ -44,9 +46,9 @@ internal sealed class Dispatcher {
             return null;
         }
         var buffer = new ArrayBufferWriter<byte>();
-        var execWait = result.Value.Execute(buffer);
-        return execWait is null
-            ? new RouteResult(buffer.WrittenSpan.ToArray(), null)
-            : new RouteResult(null, execWait);
+        bool execStarted = result.Value.Execute(buffer, _coordinator);
+        return execStarted
+            ? new RouteResult(null, true)
+            : new RouteResult(buffer.WrittenSpan.ToArray(), false);
     }
 }

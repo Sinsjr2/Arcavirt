@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using Pidgin;
 
 namespace GdbStubDotnet;
@@ -36,7 +37,9 @@ public sealed class StubServerBuilder {
         if (_transport is null) {
             throw new InvalidOperationException("UseTransport が呼ばれていません。");
         }
-        var dispatcher = new Dispatcher(_entries);
-        return new StubServer(_transport, dispatcher, _onInterrupt);
+        var execChannel = Channel.CreateBounded<ExecOutcome>(1);
+        var coordinator = new ExecutionCoordinator(execChannel.Writer);
+        var dispatcher = new Dispatcher(_entries, coordinator);
+        return new StubServer(_transport, dispatcher, execChannel.Reader, _onInterrupt);
     }
 }
