@@ -52,7 +52,7 @@ public sealed class StubServer : IDisposable {
             foreach (var execWait in execWaits) {
                 ExecOutcome outcome = await execWait.ReadAsync();
                 byte[] replyPayload = outcome.IsReject
-                    ? EncodeError(outcome.RejectError)
+                    ? HexUtil.EncodeError(outcome.RejectError)
                     : EncodeStopReply(outcome.Stop);
                 await _transport.WriteAsync(Framer.Encode(replyPayload));
             }
@@ -61,11 +61,6 @@ public sealed class StubServer : IDisposable {
 
     private static byte[] EncodeStopReply(StopEvent stop) {
         string text = "T" + stop.SignalOrExit.ToString("x2");
-        return Encoding.ASCII.GetBytes(text);
-    }
-
-    private static byte[] EncodeError(RspError error) {
-        string text = "E" + error.Code.ToString("x2");
         return Encoding.ASCII.GetBytes(text);
     }
 

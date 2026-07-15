@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Text;
 
 namespace GdbStubDotnet;
 
@@ -29,8 +28,7 @@ public readonly ref struct ResponseWriter<TKind> {
     }
 
     public void Error(RspError error) {
-        string text = "E" + error.Code.ToString("D2");
-        byte[] bytes = Encoding.ASCII.GetBytes(text);
+        byte[] bytes = HexUtil.EncodeError(error);
         var span = _output.GetSpan(bytes.Length);
         bytes.CopyTo(span);
         _output.Advance(bytes.Length);

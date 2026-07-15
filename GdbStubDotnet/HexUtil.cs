@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace GdbStubDotnet;
 
 internal static class HexUtil {
@@ -12,5 +14,13 @@ internal static class HexUtil {
 
     public static bool IsHexDigit(byte c) {
         return NibbleValue(c) >= 0;
+    }
+
+    /// <summary>
+    /// E NN エラー応答を整形する(RSP の仕様上 NN は16進数2桁)。
+    /// </summary>
+    public static byte[] EncodeError(RspError error) {
+        string text = "E" + error.Code.ToString("x2");
+        return Encoding.ASCII.GetBytes(text);
     }
 }

@@ -200,4 +200,39 @@ public class StubServerTest {
 
         Assert.That(receivedPayload, Is.EqualTo("05"u8.ToArray()));
     }
+
+    /// <summary>
+    /// ハンドラが Error(RspError) を呼ぶと、E NN が16進数2桁で整形されて
+    /// 返ることを確認する(Code=10 は E0a になり、10進数の E10 にはならない)。
+    /// </summary>
+    [Test]
+    public async Task SyncCommand_ThenError_ReturnsHexEncodedErrorReply() {
+        using var transport = new TcpTransport(new IPEndPoint(IPAddress.Loopback, 0));
+
+        using var server = new StubServerBuilder()
+            .Map(Commands.HaltReason, (cmd, res) => res.Error(new RspError(10, null)))
+            .UseTransport(transport)
+            .Build();
+        server.Start();
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, transport.Port);
+        var clientStream = client.GetStream();
+
+        await clientStream.WriteAsync(Framer.Encode("?"u8));
+
+        var framer = new Framer();
+        byte[]? receivedPayload = null;
+        byte[] readBuffer = new byte[256];
+        while (receivedPayload is null) {
+            int n = await clientStream.ReadAsync(readBuffer);
+            framer.ProcessBytes(readBuffer.AsSpan(0, n), evt => {
+                if (evt.Kind == FramerEventKind.Packet) {
+                    receivedPayload = evt.Payload;
+                }
+            });
+        }
+
+        Assert.That(receivedPayload, Is.EqualTo("E0a"u8.ToArray()));
+    }
 }
