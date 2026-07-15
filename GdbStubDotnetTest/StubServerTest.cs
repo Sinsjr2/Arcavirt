@@ -202,6 +202,73 @@ public class StubServerTest {
     }
 
     /// <summary>
+    /// 有効なパケットを送信すると、応答パケットの前に '+' (ack)
+    /// が送出されることを確認する(ack-mode 前提のフレーミング応答)。
+    /// </summary>
+    [Test]
+    public async Task ValidCommand_RoundTripOverTcp_SendsAckBeforeResponse() {
+        using var transport = new TcpTransport(new IPEndPoint(IPAddress.Loopback, 0));
+
+        using var server = new StubServerBuilder()
+            .Map(Commands.HaltReason, (cmd, res) => res.HexBytes([0x05]))
+            .UseTransport(transport)
+            .Build();
+        server.Start();
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, transport.Port);
+        var clientStream = client.GetStream();
+
+        await clientStream.WriteAsync(Framer.Encode("?"u8));
+
+        var framer = new Framer();
+        List<FramerEvent> events = [];
+        byte[]? receivedPayload = null;
+        byte[] readBuffer = new byte[256];
+        while (receivedPayload is null) {
+            int n = await clientStream.ReadAsync(readBuffer);
+            framer.ProcessBytes(readBuffer.AsSpan(0, n), evt => {
+                events.Add(evt);
+                if (evt.Kind == FramerEventKind.Packet) {
+                    receivedPayload = evt.Payload;
+                }
+            });
+        }
+
+        Assert.Multiple(() => {
+            Assert.That(events[0].Kind, Is.EqualTo(FramerEventKind.Ack));
+            Assert.That(events[1].Kind, Is.EqualTo(FramerEventKind.Packet));
+            Assert.That(receivedPayload, Is.EqualTo("05"u8.ToArray()));
+        });
+    }
+
+    /// <summary>
+    /// チェックサムが不正なパケットを送信すると、応答として '-' (nak)
+    /// が送出されることを確認する。
+    /// </summary>
+    [Test]
+    public async Task ChecksumMismatch_RoundTripOverTcp_SendsNak() {
+        using var transport = new TcpTransport(new IPEndPoint(IPAddress.Loopback, 0));
+
+        using var server = new StubServerBuilder()
+            .Map(Commands.HaltReason, (cmd, res) => res.HexBytes([0x05]))
+            .UseTransport(transport)
+            .Build();
+        server.Start();
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, transport.Port);
+        var clientStream = client.GetStream();
+
+        await clientStream.WriteAsync("$g#00"u8.ToArray());
+
+        byte[] readBuffer = new byte[16];
+        int n = await clientStream.ReadAsync(readBuffer);
+
+        Assert.That(readBuffer.AsSpan(0, n).ToArray(), Is.EqualTo(new[] { (byte)'-' }));
+    }
+
+    /// <summary>
     /// ハンドラが Error(RspError) を呼ぶと、E NN が16進数2桁で整形されて
     /// 返ることを確認する(Code=10 は E0a になり、10進数の E10 にはならない)。
     /// </summary>

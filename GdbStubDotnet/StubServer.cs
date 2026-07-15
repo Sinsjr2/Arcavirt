@@ -3,6 +3,9 @@ using System.Text;
 namespace GdbStubDotnet;
 
 public sealed class StubServer : IDisposable {
+    private static readonly byte[] AckBytes = [(byte)'+'];
+    private static readonly byte[] NakBytes = [(byte)'-'];
+
     private readonly ITransport _transport;
     private readonly Dispatcher _dispatcher;
     private readonly Framer _framer = new();
@@ -30,23 +33,29 @@ public sealed class StubServer : IDisposable {
                 return;
             }
 
-            List<byte[]> syncResponses = [];
+            List<byte[]> immediateWrites = [];
             List<System.Threading.Channels.ChannelReader<ExecOutcome>> execWaits = [];
             _framer.ProcessBytes(buffer.AsSpan(0, n), evt => {
-                if (evt.Kind == FramerEventKind.Packet) {
-                    RouteResult? routed = _dispatcher.Route(evt.Payload!);
-                    if (routed is null) {
-                        syncResponses.Add(Framer.Encode(ReadOnlySpan<byte>.Empty));
-                    } else if (routed.Value.ExecWait is { } execWait) {
-                        execWaits.Add(execWait);
-                    } else {
-                        syncResponses.Add(Framer.Encode(routed.Value.SyncResponse!));
-                    }
+                switch (evt.Kind) {
+                    case FramerEventKind.Packet:
+                        immediateWrites.Add(AckBytes);
+                        RouteResult? routed = _dispatcher.Route(evt.Payload!);
+                        if (routed is null) {
+                            immediateWrites.Add(Framer.Encode(ReadOnlySpan<byte>.Empty));
+                        } else if (routed.Value.ExecWait is { } execWait) {
+                            execWaits.Add(execWait);
+                        } else {
+                            immediateWrites.Add(Framer.Encode(routed.Value.SyncResponse!));
+                        }
+                        break;
+                    case FramerEventKind.ChecksumMismatch:
+                        immediateWrites.Add(NakBytes);
+                        break;
                 }
             });
 
-            foreach (byte[] response in syncResponses) {
-                await _transport.WriteAsync(response);
+            foreach (byte[] write in immediateWrites) {
+                await _transport.WriteAsync(write);
             }
 
             foreach (var execWait in execWaits) {
