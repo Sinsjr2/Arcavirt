@@ -166,8 +166,8 @@ public class CommandsTest {
     }
 
     /// <summary>
-    /// "vCont;c" をパースすると、Continue アクション1件を持つ VContCommand に
-    /// なることを確認する。
+    /// "vCont;c"(スレッド指定なし)をパースすると、Continue アクション1件
+    /// (Thread は未指定=default)を持つ VContCommand になることを確認する。
     /// </summary>
     [Test]
     public void VCont_ParsesContinueAction() {
@@ -175,7 +175,81 @@ public class CommandsTest {
 
         Assert.That(result.Success, Is.True);
         Assert.That(result.Value.Actions, Has.Length.EqualTo(1));
-        Assert.That(result.Value.Actions[0].Kind, Is.EqualTo(ActionKind.Continue));
+        Assert.Multiple(() => {
+            Assert.That(result.Value.Actions[0].Kind, Is.EqualTo(ActionKind.Continue));
+            Assert.That(result.Value.Actions[0].Thread, Is.EqualTo(default(ThreadId)));
+        });
+    }
+
+    /// <summary>
+    /// "vCont;c:1;s:2" をパースすると、1つ目が Continue(Thread tid=1)、
+    /// 2つ目が Step(Thread tid=2) の2アクションを持つ VContCommand に
+    /// なることを確認する(";" 区切りの複数セグメント解析)。
+    /// </summary>
+    [Test]
+    public void VCont_MultipleActionsWithThreadIds_ParsesEachSegment() {
+        var result = Commands.VCont.Parse("vCont;c:1;s:2"u8);
+
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.Value.Actions, Has.Length.EqualTo(2));
+        Assert.Multiple(() => {
+            Assert.That(result.Value.Actions[0].Kind, Is.EqualTo(ActionKind.Continue));
+            Assert.That(result.Value.Actions[0].Thread, Is.EqualTo(new ThreadId(0, 1)));
+            Assert.That(result.Value.Actions[1].Kind, Is.EqualTo(ActionKind.Step));
+            Assert.That(result.Value.Actions[1].Thread, Is.EqualTo(new ThreadId(0, 2)));
+        });
+    }
+
+    /// <summary>
+    /// "vCont;C05" をパースすると、Kind=Signal, Signal=5 の1アクションに
+    /// なることを確認する("C" + 16進シグナル番号の形式)。
+    /// </summary>
+    [Test]
+    public void VCont_SignalAction_ParsesSignalNumber() {
+        var result = Commands.VCont.Parse("vCont;C05"u8);
+
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.Value.Actions, Has.Length.EqualTo(1));
+        Assert.Multiple(() => {
+            Assert.That(result.Value.Actions[0].Kind, Is.EqualTo(ActionKind.Signal));
+            Assert.That(result.Value.Actions[0].Signal, Is.EqualTo(5));
+        });
+    }
+
+    /// <summary>
+    /// "vCont;c:p1.2" をパースすると、Thread=ThreadId(Pid=1,Tid=2) になる
+    /// ことを確認する(マルチプロセス形式 "p&lt;pid&gt;.&lt;tid&gt;")。
+    /// </summary>
+    [Test]
+    public void VCont_MultiProcessThreadId_ParsesPidAndTid() {
+        var result = Commands.VCont.Parse("vCont;c:p1.2"u8);
+
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.Value.Actions[0].Thread, Is.EqualTo(new ThreadId(1, 2)));
+    }
+
+    /// <summary>
+    /// "vCont;c:p-1.-1" をパースすると、Thread=ThreadId(-1,-1)(全スレッド
+    /// センチネル)になることを確認する。
+    /// </summary>
+    [Test]
+    public void VCont_AllThreadsSentinel_ParsesMinusOne() {
+        var result = Commands.VCont.Parse("vCont;c:p-1.-1"u8);
+
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.Value.Actions[0].Thread, Is.EqualTo(new ThreadId(-1, -1)));
+    }
+
+    /// <summary>
+    /// "vCont;X"(未定義のアクション文字)をパースすると失敗することを
+    /// 確認する(未対応アクションはパーサ全体が不一致になり、FW既定の
+    /// 空応答にフォールバックする設計であることの裏付け)。
+    /// </summary>
+    [Test]
+    public void VCont_UnknownActionLetter_FailsToParse() {
+        var result = Commands.VCont.Parse("vCont;X"u8);
+
+        Assert.That(result.Success, Is.False);
     }
 
     /// <summary>

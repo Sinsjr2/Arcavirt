@@ -119,9 +119,48 @@ public static class Commands {
                     .Or(Parser<byte>.Return((ulong?)null)))
             .Select(static maybeAddr => new StepCommand(maybeAddr));
 
+    /// <summary>
+    /// vCont のスレッド指定("p&lt;pid&gt;.&lt;tid&gt;" または裸の "&lt;tid&gt;")。
+    /// GDB-RP の "-1"(全スレッド)センチネルは10進リテラルであり16進ではないため、
+    /// 先に literal "-1" を Try で試してから通常の16進数へフォールバックする。
+    /// 裸の tid のみの形式では Pid=0(未指定)として扱う。
+    /// </summary>
+    private static readonly Parser<byte, int> ThreadIdComponent =
+        Parser.Try(Parser<byte>.Sequence("-1"u8.ToArray()).ThenReturn(-1))
+            .Or(HexParsers.HexULong.Select(static v => (int)v));
+
+    private static readonly Parser<byte, ThreadId> ThreadIdRef =
+        Parser.Try(
+            Parser<byte>.Token((byte)'p')
+                .Then(ThreadIdComponent)
+                .Before(Parser<byte>.Token((byte)'.'))
+                .Then(ThreadIdComponent, static (pid, tid) => new ThreadId(pid, tid)))
+            .Or(ThreadIdComponent.Select(static tid => new ThreadId(0, tid)));
+
+    /// <summary>
+    /// vCont の1アクション分("C" sig 以外は signal は0固定)。
+    /// "S sig"(ステップ+シグナル)は ActionKind に対応する値が存在しないため
+    /// 未対応(仕様確定済みDTOの範囲外)。該当パケットはこのパーサ全体が
+    /// 不一致になり、FW既定の空応答(§5.1)にフォールバックする。
+    /// </summary>
+    private static readonly Parser<byte, (ActionKind Kind, int Signal)> VContActionSpec =
+        Parser.OneOf(
+            Parser<byte>.Token((byte)'C').Then(HexParsers.HexULong, static (_, sig) => (ActionKind.Signal, (int)sig)),
+            Parser<byte>.Token((byte)'c').ThenReturn((ActionKind.Continue, 0)),
+            Parser<byte>.Token((byte)'s').ThenReturn((ActionKind.Step, 0)),
+            Parser<byte>.Token((byte)'t').ThenReturn((ActionKind.Stop, 0)));
+
+    private static readonly Parser<byte, ResumeAction> VContSegment =
+        Parser<byte>.Token((byte)';')
+            .Then(VContActionSpec)
+            .Then(
+                Parser<byte>.Token((byte)':').Then(ThreadIdRef).Select(static t => (ThreadId?)t)
+                    .Or(Parser<byte>.Return((ThreadId?)null)),
+                static (spec, threadOpt) => new ResumeAction(threadOpt ?? default, spec.Kind, spec.Signal));
+
     public static readonly Parser<byte, VContCommand> VCont =
-        Parser<byte>.Sequence("vCont;c"u8.ToArray())
-            .ThenReturn(new VContCommand([new ResumeAction(default, ActionKind.Continue, 0)]));
+        Parser<byte>.Sequence("vCont"u8.ToArray())
+            .Then(VContSegment.AtLeastOnce(), static (_, actions) => new VContCommand(actions.ToArray()));
 
     public static readonly Parser<byte, VContQueryCommand> VContQuery =
         Parser<byte>.Sequence("vCont?"u8.ToArray()).ThenReturn(new VContQueryCommand());
