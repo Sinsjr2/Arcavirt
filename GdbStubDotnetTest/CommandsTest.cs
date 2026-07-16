@@ -288,4 +288,38 @@ public class CommandsTest {
         Assert.That(result.Success, Is.True);
         Assert.That(result.Value.Thread, Is.EqualTo(new ThreadId(2, 3)));
     }
+
+    /// <summary>
+    /// "X1000,2:" に続けてエスケープされたバイナリ(}に続けて元の値と
+    /// 0x20のXOR)を送ると、'#'(0x23)と'z'(0x7a)にデコードされた
+    /// WriteMemoryCommandになることを確認する(§8のエスケープ方針の
+    /// 受信側対応、Arcavirt-o3e.15)。
+    /// </summary>
+    [Test]
+    public void WriteMemoryBinary_DecodesEscapedBytes() {
+        byte[] wire = [.. "X1000,2:"u8.ToArray(), 0x7d, 0x03, 0x7a];
+
+        var result = Commands.WriteMemoryBinary.Parse(wire);
+
+        Assert.That(result.Success, Is.True);
+        Assert.Multiple(() => {
+            Assert.That(result.Value.Addr, Is.EqualTo(0x1000UL));
+            Assert.That(result.Value.Len, Is.EqualTo(2));
+            Assert.That(result.Value.Data, Is.EqualTo(new byte[] { 0x23, 0x7a }));
+        });
+    }
+
+    /// <summary>
+    /// エスケープ文字自身(0x7d '}')がデータとして含まれる場合も
+    /// 正しくデコードされることを確認する。
+    /// </summary>
+    [Test]
+    public void WriteMemoryBinary_DecodesEscapedEscapeCharacterItself() {
+        byte[] wire = [.. "X2000,1:"u8.ToArray(), 0x7d, 0x5d];
+
+        var result = Commands.WriteMemoryBinary.Parse(wire);
+
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.Value.Data, Is.EqualTo(new byte[] { 0x7d }));
+    }
 }

@@ -203,6 +203,36 @@ public static class Commands {
             .Then(Parser<byte>.Token((byte)'g').Or(Parser<byte>.Token((byte)'c')))
             .Then(ThreadIdRef, static (op, thread) => new SetThreadCommand((char)op, thread));
 
+    /// <summary>
+    /// X&lt;addr&gt;,&lt;len&gt;:&lt;binary-data&gt; (§6.3)。データ部は
+    /// エスケープされた生バイナリ(0x7d '}' の直後のバイトは元の値と
+    /// 0x20 のXORで得られる、§8)であり、hexエンコードではない。
+    /// WriteMemoryCommand をそのまま再利用する(DTO形状が一致するため)。
+    /// </summary>
+    public static readonly Parser<byte, WriteMemoryCommand> WriteMemoryBinary =
+        Parser<byte>.Token((byte)'X')
+            .Then(HexParsers.HexULong)
+            .Before(Parser<byte>.Token((byte)','))
+            .Then(HexParsers.HexULong, static (addr, len) => (addr, len))
+            .Before(Parser<byte>.Token((byte)':'))
+            .Then(Parser<byte>.Any.Many(), static (t, raw) => new WriteMemoryCommand(t.addr, (int)t.len, DecodeEscapedBytes(raw), default));
+
+    private static byte[] DecodeEscapedBytes(IEnumerable<byte> raw) {
+        List<byte> result = [];
+        bool escapeNext = false;
+        foreach (byte b in raw) {
+            if (escapeNext) {
+                result.Add((byte)(b ^ 0x20));
+                escapeNext = false;
+            } else if (b == (byte)'}') {
+                escapeNext = true;
+            } else {
+                result.Add(b);
+            }
+        }
+        return result.ToArray();
+    }
+
     private static BpType ParseBpType(ulong value) {
         return value switch {
             0 => BpType.Soft,
