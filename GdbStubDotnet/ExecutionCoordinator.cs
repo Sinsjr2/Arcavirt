@@ -23,6 +23,8 @@ namespace GdbStubDotnet;
 /// CurrentThread は H(SetThread、Arcavirt-o3e.14)による現在スレッド選択
 /// 状態を保持する。接続ごとに単一のI/Oループ上でのみ読み書きされる
 /// (§4.2)ため、追加の同期は不要。
+/// DetailedErrors/OnError は §7.2/§7.3(Arcavirt-o3e.18)のエラー処理設定を
+/// 保持する(Build()時に確定する読み取り専用設定)。
 /// </summary>
 internal sealed class ExecutionCoordinator {
     private readonly ChannelWriter<ExecOutcome> _writer;
@@ -33,14 +35,28 @@ internal sealed class ExecutionCoordinator {
     private volatile ResumeMode _mode;
     private ThreadId _currentThread;
 
-    internal ExecutionCoordinator(ChannelWriter<ExecOutcome> writer, NotificationQueue notificationQueue) {
+    internal ExecutionCoordinator(ChannelWriter<ExecOutcome> writer, NotificationQueue notificationQueue, bool detailedErrors, Action<StubFault>? onError) {
         _writer = writer;
         _notificationQueue = notificationQueue;
+        DetailedErrors = detailedErrors;
+        OnError = onError;
     }
 
     internal ResumeMode Mode => _mode;
 
     internal ThreadId CurrentThread => _currentThread;
+
+    /// <summary>
+    /// §7.3。true でハンドラエラーを E.&lt;text&gt;(人間可読)、false
+    /// (既定)で E NN として応答する。
+    /// </summary>
+    internal bool DetailedErrors { get; }
+
+    /// <summary>
+    /// ハンドラ例外の診断通知先(§7.2)。GDB へは安全な E NN 応答を送りつつ、
+    /// 例外自体はこちらへのみ通知する(ILogger 依存なし)。
+    /// </summary>
+    internal Action<StubFault>? OnError { get; }
 
     /// <summary>
     /// QNonStop:1/0 受信時に呼ばれ、以後の OnReportStop の配送先を切り替える。

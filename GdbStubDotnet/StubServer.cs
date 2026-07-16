@@ -14,15 +14,19 @@ public sealed class StubServer : IDisposable {
     private readonly Dispatcher _dispatcher;
     private readonly ChannelReader<ExecOutcome> _execReader;
     private readonly ChannelReader<INotification> _notifyReader;
+    private readonly bool _detailedErrors;
     private readonly Framer _framer = new();
+    private readonly Action? _onDisconnect;
     private readonly Action? _onInterrupt;
     private Task? _loopTask;
 
-    internal StubServer(ITransport transport, Dispatcher dispatcher, ChannelReader<ExecOutcome> execReader, ChannelReader<INotification> notifyReader, Action? onInterrupt) {
+    internal StubServer(ITransport transport, Dispatcher dispatcher, ChannelReader<ExecOutcome> execReader, ChannelReader<INotification> notifyReader, bool detailedErrors, Action? onDisconnect, Action? onInterrupt) {
         _transport = transport;
         _dispatcher = dispatcher;
         _execReader = execReader;
         _notifyReader = notifyReader;
+        _detailedErrors = detailedErrors;
+        _onDisconnect = onDisconnect;
         _onInterrupt = onInterrupt;
     }
 
@@ -43,6 +47,8 @@ public sealed class StubServer : IDisposable {
     /// になる。readTask/execTask/notifyTask は Task.WhenAny で負けた側を
     /// 次周回に持ち越す(同一 reader に対する二重の読み取り待ちを作っては
     /// ならないため、勝った側だけを都度作り直す)。
+    /// transport切断(読み取り0バイトまたは例外)時は OnDisconnect を呼ぶ
+    /// (Arcavirt-o3e.18、§4.6)。
     /// </summary>
     private async Task RunLoopAsync() {
         byte[] buffer = new byte[4096];
@@ -61,7 +67,7 @@ public sealed class StubServer : IDisposable {
                 ExecOutcome outcome = await execTask;
                 execTask = null;
                 byte[] replyPayload = outcome.IsReject
-                    ? HexUtil.EncodeError(outcome.RejectError)
+                    ? HexUtil.EncodeError(outcome.RejectError, _detailedErrors)
                     : EncodeStopReply(outcome.Stop);
                 await _transport.WriteAsync(Framer.Encode(replyPayload));
                 continue;
@@ -83,10 +89,12 @@ public sealed class StubServer : IDisposable {
             try {
                 n = await readTask;
             } catch {
+                _onDisconnect?.Invoke();
                 return;
             }
             readTask = null;
             if (n == 0) {
+                _onDisconnect?.Invoke();
                 return;
             }
 

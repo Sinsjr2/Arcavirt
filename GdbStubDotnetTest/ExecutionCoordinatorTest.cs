@@ -19,7 +19,7 @@ public class ExecutionCoordinatorTest {
     [Test]
     public void OnReportStop_StaleResponderAfterNewResumeBegan_IsIgnoredAndOnlyLatestResultIsDelivered() {
         var channel = Channel.CreateBounded<ExecOutcome>(1);
-        var coordinator = new ExecutionCoordinator(channel.Writer, CreateUnusedNotificationQueue());
+        var coordinator = new ExecutionCoordinator(channel.Writer, CreateUnusedNotificationQueue(), false, null);
 
         ExecutionResponder first = coordinator.BeginResume();
         ExecutionResponder second = coordinator.BeginResume();
@@ -44,7 +44,7 @@ public class ExecutionCoordinatorTest {
     [Test]
     public void OnReject_StaleResponderAfterNewResumeBegan_IsIgnored() {
         var channel = Channel.CreateBounded<ExecOutcome>(1);
-        var coordinator = new ExecutionCoordinator(channel.Writer, CreateUnusedNotificationQueue());
+        var coordinator = new ExecutionCoordinator(channel.Writer, CreateUnusedNotificationQueue(), false, null);
 
         ExecutionResponder first = coordinator.BeginResume();
         ExecutionResponder second = coordinator.BeginResume();
@@ -72,7 +72,7 @@ public class ExecutionCoordinatorTest {
         var execChannel = Channel.CreateBounded<ExecOutcome>(1);
         var notifyChannel = Channel.CreateBounded<INotification>(1);
         var notificationQueue = new NotificationQueue(notifyChannel.Writer);
-        var coordinator = new ExecutionCoordinator(execChannel.Writer, notificationQueue);
+        var coordinator = new ExecutionCoordinator(execChannel.Writer, notificationQueue, false, null);
         coordinator.SetMode(ResumeMode.NonStop);
 
         ExecutionResponder responder = coordinator.BeginResume();
@@ -97,7 +97,7 @@ public class ExecutionCoordinatorTest {
     [Test]
     public void OnReportStop_MultipleThreadsStopUnderSameResumeInAllStop_MergesIntoSingleStopReply() {
         var channel = Channel.CreateBounded<ExecOutcome>(1);
-        var coordinator = new ExecutionCoordinator(channel.Writer, CreateUnusedNotificationQueue());
+        var coordinator = new ExecutionCoordinator(channel.Writer, CreateUnusedNotificationQueue(), false, null);
 
         ExecutionResponder responder = coordinator.BeginResume();
         responder.ReportStop(new StopEvent(new ThreadId(0, 1), StopReason.Signal, 5, 0));
@@ -123,7 +123,7 @@ public class ExecutionCoordinatorTest {
         var execChannel = Channel.CreateBounded<ExecOutcome>(1);
         var notifyChannel = Channel.CreateBounded<INotification>(1);
         var notificationQueue = new NotificationQueue(notifyChannel.Writer);
-        var coordinator = new ExecutionCoordinator(execChannel.Writer, notificationQueue);
+        var coordinator = new ExecutionCoordinator(execChannel.Writer, notificationQueue, false, null);
         coordinator.SetMode(ResumeMode.NonStop);
 
         ExecutionResponder responder = coordinator.BeginResume();
@@ -149,7 +149,7 @@ public class ExecutionCoordinatorTest {
         var execChannel = Channel.CreateBounded<ExecOutcome>(1);
         var notifyChannel = Channel.CreateBounded<INotification>(1);
         var notificationQueue = new NotificationQueue(notifyChannel.Writer);
-        var coordinator = new ExecutionCoordinator(execChannel.Writer, notificationQueue);
+        var coordinator = new ExecutionCoordinator(execChannel.Writer, notificationQueue, false, null);
         coordinator.SetMode(ResumeMode.NonStop);
 
         ExecutionResponder responder = coordinator.BeginResume();
@@ -174,7 +174,7 @@ public class ExecutionCoordinatorTest {
         var execChannel = Channel.CreateBounded<ExecOutcome>(1);
         var notifyChannel = Channel.CreateBounded<INotification>(1);
         var notificationQueue = new NotificationQueue(notifyChannel.Writer);
-        var coordinator = new ExecutionCoordinator(execChannel.Writer, notificationQueue);
+        var coordinator = new ExecutionCoordinator(execChannel.Writer, notificationQueue, false, null);
         coordinator.SetMode(ResumeMode.NonStop);
 
         ExecutionResponder first = coordinator.BeginResume();

@@ -17,10 +17,14 @@ internal static class HexUtil {
     }
 
     /// <summary>
-    /// E NN エラー応答を整形する(RSP の仕様上 NN は16進数2桁)。
+    /// エラー応答を整形する。detailed が false、または error.Detail が
+    /// null の場合は "E NN"(16進数2桁)。detailed が true かつ Detail が
+    /// 設定されている場合は "E.&lt;text&gt;"(人間可読、§7.3)。
     /// </summary>
-    public static byte[] EncodeError(RspError error) {
-        string text = "E" + error.Code.ToString("x2");
-        return Encoding.ASCII.GetBytes(text);
+    public static byte[] EncodeError(RspError error, bool detailed) {
+        if (detailed && error.Detail is not null) {
+            return Encoding.ASCII.GetBytes("E." + error.Detail);
+        }
+        return Encoding.ASCII.GetBytes("E" + error.Code.ToString("x2"));
     }
 }

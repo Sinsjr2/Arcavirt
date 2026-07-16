@@ -8,6 +8,9 @@ public sealed class StubServerBuilder {
     private readonly List<Parser<byte, IDispatchedCommand>> _entries = [];
     private ITransport? _transport;
     private Action? _onInterrupt;
+    private Action? _onDisconnect;
+    private Action<StubFault>? _onError;
+    private bool _detailedErrors;
 
     public StubServerBuilder Map<TCmd>(Parser<byte, TCmd> parser, Action<TCmd, ResponseWriter<SyncResponse>> handler) {
         _entries.Add(Parser.Try(parser.Before(Parser<byte>.End)).Select(cmd => (IDispatchedCommand)new SyncDispatchedCommand<TCmd>(cmd, handler)));
@@ -29,6 +32,34 @@ public sealed class StubServerBuilder {
         return this;
     }
 
+    /// <summary>
+    /// TCP切断時に呼ばれるハンドラを登録する(§4.6)。応答は発生しない。
+    /// D(detach)コマンドとは別の経路。
+    /// </summary>
+    public StubServerBuilder OnDisconnect(Action handler) {
+        _onDisconnect = handler;
+        return this;
+    }
+
+    /// <summary>
+    /// ハンドラ内で発生した予期しない例外の診断通知先を登録する(§7.2)。
+    /// GDBへは安全なE NN応答が自動送出され、例外自体はこちらへのみ通知
+    /// される(ILogger依存なし)。
+    /// </summary>
+    public StubServerBuilder OnError(Action<StubFault> handler) {
+        _onError = handler;
+        return this;
+    }
+
+    /// <summary>
+    /// §7.3。true にすると、Detail が設定されたエラー応答は E.&lt;text&gt;
+    /// (人間可読)として送出される。既定は false(E NN のみ)。
+    /// </summary>
+    public StubServerBuilder EnableDetailedErrors(bool on = true) {
+        _detailedErrors = on;
+        return this;
+    }
+
     public StubServerBuilder UseTransport(ITransport transport) {
         _transport = transport;
         return this;
@@ -41,7 +72,7 @@ public sealed class StubServerBuilder {
         var execChannel = Channel.CreateBounded<ExecOutcome>(1);
         var notifyChannel = Channel.CreateBounded<INotification>(1);
         var notificationQueue = new NotificationQueue(notifyChannel.Writer);
-        var coordinator = new ExecutionCoordinator(execChannel.Writer, notificationQueue);
+        var coordinator = new ExecutionCoordinator(execChannel.Writer, notificationQueue, _detailedErrors, _onError);
 
         // 組込み既定コマンド(QNonStop/vStopped/qSupportedへのQNonStop+広告/
         // H(SetThread))は利用者の Map 登録より後ろに追加する。Dispatcher の
@@ -58,7 +89,7 @@ public sealed class StubServerBuilder {
             BuiltInSetThread(coordinator),
         ];
         var dispatcher = new Dispatcher(allEntries, coordinator);
-        return new StubServer(_transport, dispatcher, execChannel.Reader, notifyChannel.Reader, _onInterrupt);
+        return new StubServer(_transport, dispatcher, execChannel.Reader, notifyChannel.Reader, _detailedErrors, _onDisconnect, _onInterrupt);
     }
 
     private readonly record struct QNonStopCommand(bool Enable);

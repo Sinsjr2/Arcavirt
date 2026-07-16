@@ -7,9 +7,11 @@ public readonly struct ExecResponse;
 
 public readonly ref struct ResponseWriter<TKind> {
     private readonly IBufferWriter<byte> _output;
+    private readonly bool _detailedErrors;
 
-    internal ResponseWriter(IBufferWriter<byte> output) {
+    internal ResponseWriter(IBufferWriter<byte> output, bool detailedErrors) {
         _output = output;
+        _detailedErrors = detailedErrors;
     }
 
     public void Ok() {
@@ -37,7 +39,7 @@ public readonly ref struct ResponseWriter<TKind> {
     }
 
     public void Error(RspError error) {
-        byte[] bytes = HexUtil.EncodeError(error);
+        byte[] bytes = HexUtil.EncodeError(error, _detailedErrors);
         var span = _output.GetSpan(bytes.Length);
         bytes.CopyTo(span);
         _output.Advance(bytes.Length);
