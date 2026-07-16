@@ -261,4 +261,31 @@ public class CommandsTest {
 
         Assert.That(result.Success, Is.True);
     }
+
+    /// <summary>
+    /// "Hg1" をパースすると、Op='g'、Thread=ThreadId(0,1) の
+    /// SetThreadCommand になることを確認する。
+    /// </summary>
+    [Test]
+    public void SetThread_ParsesOpAndBareThreadId() {
+        var result = Commands.SetThread.Parse("Hg1"u8);
+
+        Assert.That(result.Success, Is.True);
+        Assert.Multiple(() => {
+            Assert.That(result.Value.Op, Is.EqualTo('g'));
+            Assert.That(result.Value.Thread, Is.EqualTo(new ThreadId(0, 1)));
+        });
+    }
+
+    /// <summary>
+    /// "Hgp2.3" をパースすると、Thread=ThreadId(2,3)(マルチプロセス形式)
+    /// になることを確認する。
+    /// </summary>
+    [Test]
+    public void SetThread_ParsesMultiProcessThreadId() {
+        var result = Commands.SetThread.Parse("Hgp2.3"u8);
+
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.Value.Thread, Is.EqualTo(new ThreadId(2, 3)));
+    }
 }

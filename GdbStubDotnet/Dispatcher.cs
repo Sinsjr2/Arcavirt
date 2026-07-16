@@ -14,9 +14,15 @@ internal interface IDispatchedCommand {
 }
 
 internal sealed class SyncDispatchedCommand<TCmd>(TCmd command, Action<TCmd, ResponseWriter<SyncResponse>> handler) : IDispatchedCommand {
+    /// <summary>
+    /// TCmd が IThreadScoped を実装していれば、ハンドラ呼び出し
+    /// 直前に H(SetThread)で選択済みの現在スレッドをThreadフィールドへ
+    /// 差し替える(§6.6)。実装していないコマンドは素通しする。
+    /// </summary>
     public bool Execute(IBufferWriter<byte> output, ExecutionCoordinator coordinator) {
+        TCmd effective = command is IThreadScoped scoped ? (TCmd)scoped.WithThread(coordinator.CurrentThread) : command;
         var writer = new ResponseWriter<SyncResponse>(output);
-        handler(command, writer);
+        handler(effective, writer);
         return false;
     }
 }

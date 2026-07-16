@@ -20,6 +20,9 @@ namespace GdbStubDotnet;
 ///     (Arcavirt-o3e.10.4)。
 /// OnReject は Mode を問わず常に ExecOutcome チャネル経由(resume要求自体が
 /// 不正なときの同期応答であり、%Stop通知の対象ではない)。
+/// CurrentThread は H(SetThread、Arcavirt-o3e.14)による現在スレッド選択
+/// 状態を保持する。接続ごとに単一のI/Oループ上でのみ読み書きされる
+/// (§4.2)ため、追加の同期は不要。
 /// </summary>
 internal sealed class ExecutionCoordinator {
     private readonly ChannelWriter<ExecOutcome> _writer;
@@ -28,6 +31,7 @@ internal sealed class ExecutionCoordinator {
     private int _tokenSeed;
     private int _activeToken;
     private volatile ResumeMode _mode;
+    private ThreadId _currentThread;
 
     internal ExecutionCoordinator(ChannelWriter<ExecOutcome> writer, NotificationQueue notificationQueue) {
         _writer = writer;
@@ -36,11 +40,21 @@ internal sealed class ExecutionCoordinator {
 
     internal ResumeMode Mode => _mode;
 
+    internal ThreadId CurrentThread => _currentThread;
+
     /// <summary>
     /// QNonStop:1/0 受信時に呼ばれ、以後の OnReportStop の配送先を切り替える。
     /// </summary>
     internal void SetMode(ResumeMode mode) {
         _mode = mode;
+    }
+
+    /// <summary>
+    /// H(SetThread)受信時に呼ばれ、以後の IThreadScoped コマンドの
+    /// Thread フィールドへ自動的に充填される現在スレッドを更新する(§6.6)。
+    /// </summary>
+    internal void SetCurrentThread(ThreadId thread) {
+        _currentThread = thread;
     }
 
     /// <summary>

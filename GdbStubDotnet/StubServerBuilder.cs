@@ -43,18 +43,19 @@ public sealed class StubServerBuilder {
         var notificationQueue = new NotificationQueue(notifyChannel.Writer);
         var coordinator = new ExecutionCoordinator(execChannel.Writer, notificationQueue);
 
-        // 組込み既定コマンド(QNonStop/vStopped/qSupportedへのQNonStop+広告)は
-        // 利用者の Map 登録より後ろに追加する。Dispatcher の OneOf は先勝ちで
-        // マッチするため、利用者が同じコマンドを Map で上書きすればそちらが
-        // 優先される(§5.1「Map による既定登録ハンドラ（上書き可）」)。
-        // QNonStop/vStopped はプロトコル機構そのもの(利用者が独自実装する対象
-        // ではない)であり、上書きされる想定はない。non-stop 交渉のために
-        // 利用者側の記述は一切不要(ユーザーが毎回同じ処理を書かずに済む)。
+        // 組込み既定コマンド(QNonStop/vStopped/qSupportedへのQNonStop+広告/
+        // H(SetThread))は利用者の Map 登録より後ろに追加する。Dispatcher の
+        // OneOf は先勝ちでマッチするため、利用者が同じコマンドを Map で
+        // 上書きすればそちらが優先される(§5.1「Map による既定登録ハンドラ
+        // （上書き可）」、H は §6.6 で明示的に上書き可能とされている)。
+        // QNonStop/vStopped はプロトコル機構そのもの(利用者が独自実装する
+        // 対象ではない)であり、上書きされる想定はない。
         List<Parser<byte, IDispatchedCommand>> allEntries = [
             .. _entries,
             BuiltInQNonStop(coordinator),
             BuiltInVStopped(notificationQueue),
             BuiltInSupported(),
+            BuiltInSetThread(coordinator),
         ];
         var dispatcher = new Dispatcher(allEntries, coordinator);
         return new StubServer(_transport, dispatcher, execChannel.Reader, notifyChannel.Reader, _onInterrupt);
@@ -97,5 +98,13 @@ public sealed class StubServerBuilder {
     private static Parser<byte, IDispatchedCommand> BuiltInSupported() {
         return Parser.Try(Commands.Supported.Before(Parser<byte>.End))
             .Select(cmd => (IDispatchedCommand)new SyncDispatchedCommand<SupportedCommand>(cmd, static (_, res) => res.Text("QNonStop+"u8)));
+    }
+
+    private static Parser<byte, IDispatchedCommand> BuiltInSetThread(ExecutionCoordinator coordinator) {
+        return Parser.Try(Commands.SetThread.Before(Parser<byte>.End))
+            .Select(cmd => (IDispatchedCommand)new SyncDispatchedCommand<SetThreadCommand>(cmd, (c, res) => {
+                coordinator.SetCurrentThread(c.Thread);
+                res.Ok();
+            }));
     }
 }

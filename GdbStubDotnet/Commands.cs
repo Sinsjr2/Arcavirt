@@ -2,11 +2,29 @@ using Pidgin;
 
 namespace GdbStubDotnet;
 
-public readonly record struct ReadRegistersCommand(ThreadId Thread);
+/// <summary>
+/// H(SetThread)による現在スレッド選択状態を、後続コマンドのThreadフィールド
+/// へ充填するための内部インタフェース(§6.6)。SyncDispatchedCommand が
+/// ハンドラ呼び出し直前にWithThreadで差し替える。TCmdを型引数に取らない
+/// 非ジェネリックインタフェースとし、呼び出し側でTCmdへキャストし直す
+/// (TCmdは制約なしのため、自己参照ジェネリック制約は形成できない)。
+/// </summary>
+internal interface IThreadScoped {
+    ThreadId Thread { get; }
+    object WithThread(ThreadId thread);
+}
 
-public readonly record struct ReadMemoryCommand(ulong Addr, int Len, ThreadId Thread);
+public readonly record struct ReadRegistersCommand(ThreadId Thread) : IThreadScoped {
+    public object WithThread(ThreadId thread) => this with { Thread = thread };
+}
 
-public readonly record struct WriteMemoryCommand(ulong Addr, int Len, byte[] Data, ThreadId Thread);
+public readonly record struct ReadMemoryCommand(ulong Addr, int Len, ThreadId Thread) : IThreadScoped {
+    public object WithThread(ThreadId thread) => this with { Thread = thread };
+}
+
+public readonly record struct WriteMemoryCommand(ulong Addr, int Len, byte[] Data, ThreadId Thread) : IThreadScoped {
+    public object WithThread(ThreadId thread) => this with { Thread = thread };
+}
 
 public readonly record struct CurrentThreadCommand;
 
@@ -16,11 +34,17 @@ public readonly record struct SupportedCommand(byte[] Features);
 
 public readonly record struct QueryCommand(byte[] Name, byte[] Args);
 
-public readonly record struct WriteRegistersCommand(byte[] Data, ThreadId Thread);
+public readonly record struct WriteRegistersCommand(byte[] Data, ThreadId Thread) : IThreadScoped {
+    public object WithThread(ThreadId thread) => this with { Thread = thread };
+}
 
-public readonly record struct ReadRegisterCommand(int Number, ThreadId Thread);
+public readonly record struct ReadRegisterCommand(int Number, ThreadId Thread) : IThreadScoped {
+    public object WithThread(ThreadId thread) => this with { Thread = thread };
+}
 
-public readonly record struct WriteRegisterCommand(int Number, byte[] Data, ThreadId Thread);
+public readonly record struct WriteRegisterCommand(int Number, byte[] Data, ThreadId Thread) : IThreadScoped {
+    public object WithThread(ThreadId thread) => this with { Thread = thread };
+}
 
 public readonly record struct InsertBreakpointCommand(BpType Type, ulong Addr, int Kind);
 
@@ -35,6 +59,8 @@ public readonly record struct StepCommand(ulong? Addr);
 public readonly record struct VContCommand(ResumeAction[] Actions);
 
 public readonly record struct VContQueryCommand;
+
+public readonly record struct SetThreadCommand(char Op, ThreadId Thread);
 
 public static class Commands {
     public static readonly Parser<byte, ReadRegistersCommand> ReadRegisters =
@@ -123,7 +149,8 @@ public static class Commands {
     /// vCont のスレッド指定("p&lt;pid&gt;.&lt;tid&gt;" または裸の "&lt;tid&gt;")。
     /// GDB-RP の "-1"(全スレッド)センチネルは10進リテラルであり16進ではないため、
     /// 先に literal "-1" を Try で試してから通常の16進数へフォールバックする。
-    /// 裸の tid のみの形式では Pid=0(未指定)として扱う。
+    /// 裸の tid のみの形式では Pid=0(未指定)として扱う。SetThread(H)からも
+    /// 共用する。
     /// </summary>
     private static readonly Parser<byte, int> ThreadIdComponent =
         Parser.Try(Parser<byte>.Sequence("-1"u8.ToArray()).ThenReturn(-1))
@@ -164,6 +191,17 @@ public static class Commands {
 
     public static readonly Parser<byte, VContQueryCommand> VContQuery =
         Parser<byte>.Sequence("vCont?"u8.ToArray()).ThenReturn(new VContQueryCommand());
+
+    /// <summary>
+    /// H&lt;op&gt;&lt;thread-id&gt; (§6.6)。op は 'g'(汎用操作用)/'c'
+    /// (レガシーなcontinue/step用、vCont普及以降は非推奨)のいずれか。
+    /// 本ライブラリは両者を区別せず、既定ハンドラが単一の「現在スレッド」
+    /// として扱う(利用者は上書き可能、§6.6)。
+    /// </summary>
+    public static readonly Parser<byte, SetThreadCommand> SetThread =
+        Parser<byte>.Token((byte)'H')
+            .Then(Parser<byte>.Token((byte)'g').Or(Parser<byte>.Token((byte)'c')))
+            .Then(ThreadIdRef, static (op, thread) => new SetThreadCommand((char)op, thread));
 
     private static BpType ParseBpType(ulong value) {
         return value switch {
