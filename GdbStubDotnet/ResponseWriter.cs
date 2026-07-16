@@ -27,6 +27,15 @@ public readonly ref struct ResponseWriter<TKind> {
         _output.Advance(data.Length * 2);
     }
 
+    /// <summary>
+    /// hex エンコードを行わない生テキスト応答(qSupported の機能一覧等)。
+    /// </summary>
+    public void Text(ReadOnlySpan<byte> text) {
+        var span = _output.GetSpan(text.Length);
+        text.CopyTo(span);
+        _output.Advance(text.Length);
+    }
+
     public void Error(RspError error) {
         byte[] bytes = HexUtil.EncodeError(error);
         var span = _output.GetSpan(bytes.Length);

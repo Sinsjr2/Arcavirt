@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Threading.Channels;
 using Pidgin;
 
@@ -38,8 +39,63 @@ public sealed class StubServerBuilder {
             throw new InvalidOperationException("UseTransport が呼ばれていません。");
         }
         var execChannel = Channel.CreateBounded<ExecOutcome>(1);
-        var coordinator = new ExecutionCoordinator(execChannel.Writer);
-        var dispatcher = new Dispatcher(_entries, coordinator);
-        return new StubServer(_transport, dispatcher, execChannel.Reader, _onInterrupt);
+        var notifyChannel = Channel.CreateBounded<INotification>(1);
+        var notificationQueue = new NotificationQueue(notifyChannel.Writer);
+        var coordinator = new ExecutionCoordinator(execChannel.Writer, notificationQueue);
+
+        // 組込み既定コマンド(QNonStop/vStopped/qSupportedへのQNonStop+広告)は
+        // 利用者の Map 登録より後ろに追加する。Dispatcher の OneOf は先勝ちで
+        // マッチするため、利用者が同じコマンドを Map で上書きすればそちらが
+        // 優先される(§5.1「Map による既定登録ハンドラ（上書き可）」)。
+        // QNonStop/vStopped はプロトコル機構そのもの(利用者が独自実装する対象
+        // ではない)であり、上書きされる想定はない。non-stop 交渉のために
+        // 利用者側の記述は一切不要(ユーザーが毎回同じ処理を書かずに済む)。
+        List<Parser<byte, IDispatchedCommand>> allEntries = [
+            .. _entries,
+            BuiltInQNonStop(coordinator),
+            BuiltInVStopped(notificationQueue),
+            BuiltInSupported(),
+        ];
+        var dispatcher = new Dispatcher(allEntries, coordinator);
+        return new StubServer(_transport, dispatcher, execChannel.Reader, notifyChannel.Reader, _onInterrupt);
+    }
+
+    private readonly record struct QNonStopCommand(bool Enable);
+
+    private static readonly Parser<byte, QNonStopCommand> QNonStopWire =
+        Parser<byte>.Sequence("QNonStop:"u8.ToArray())
+            .Then(
+                Parser<byte>.Token((byte)'0').ThenReturn(false)
+                    .Or(Parser<byte>.Token((byte)'1').ThenReturn(true)),
+                static (_, enable) => new QNonStopCommand(enable));
+
+    private static Parser<byte, IDispatchedCommand> BuiltInQNonStop(ExecutionCoordinator coordinator) {
+        return Parser.Try(QNonStopWire.Before(Parser<byte>.End))
+            .Select(cmd => (IDispatchedCommand)new SyncDispatchedCommand<QNonStopCommand>(cmd, (c, res) => {
+                coordinator.SetMode(c.Enable ? ResumeMode.NonStop : ResumeMode.AllStop);
+                res.Ok();
+            }));
+    }
+
+    private readonly record struct VStoppedCommand;
+
+    private static Parser<byte, IDispatchedCommand> BuiltInVStopped(NotificationQueue notificationQueue) {
+        return Parser.Try(Parser<byte>.Sequence("vStopped"u8.ToArray()).Before(Parser<byte>.End))
+            .ThenReturn(default(VStoppedCommand))
+            .Select(cmd => (IDispatchedCommand)new SyncDispatchedCommand<VStoppedCommand>(cmd, (_, res) => {
+                INotification? next = notificationQueue.DrainVStopped();
+                if (next is null) {
+                    res.Ok();
+                    return;
+                }
+                var buffer = new ArrayBufferWriter<byte>();
+                next.WriteTo(buffer);
+                res.Text(buffer.WrittenSpan);
+            }));
+    }
+
+    private static Parser<byte, IDispatchedCommand> BuiltInSupported() {
+        return Parser.Try(Commands.Supported.Before(Parser<byte>.End))
+            .Select(cmd => (IDispatchedCommand)new SyncDispatchedCommand<SupportedCommand>(cmd, static (_, res) => res.Text("QNonStop+"u8)));
     }
 }

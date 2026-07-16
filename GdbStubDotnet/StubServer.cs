@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 using System.Threading.Channels;
 
@@ -12,14 +13,16 @@ public sealed class StubServer : IDisposable {
     private readonly ITransport _transport;
     private readonly Dispatcher _dispatcher;
     private readonly ChannelReader<ExecOutcome> _execReader;
+    private readonly ChannelReader<INotification> _notifyReader;
     private readonly Framer _framer = new();
     private readonly Action? _onInterrupt;
     private Task? _loopTask;
 
-    internal StubServer(ITransport transport, Dispatcher dispatcher, ChannelReader<ExecOutcome> execReader, Action? onInterrupt) {
+    internal StubServer(ITransport transport, Dispatcher dispatcher, ChannelReader<ExecOutcome> execReader, ChannelReader<INotification> notifyReader, Action? onInterrupt) {
         _transport = transport;
         _dispatcher = dispatcher;
         _execReader = execReader;
+        _notifyReader = notifyReader;
         _onInterrupt = onInterrupt;
     }
 
@@ -28,29 +31,31 @@ public sealed class StubServer : IDisposable {
     }
 
     /// <summary>
-    /// transport の読み取りと、実行中コマンドの stop 待ちを同時に待ち受ける
-    /// (§4.6: exec 実行中でも 0x03/vCtrlC による割込を検知できる必要がある)。
-    /// stop 待ちは接続共有の ExecOutcome チャネル(_execReader)を常に読み続ける
-    /// 形にした(Arcavirt-o3e.10.1: 旧 resume 1回ごとの専用チャネルから移行)。
-    /// resume が outstanding でない間もチャネルは単に読み待ちのまま滞留する
-    /// だけなので害はない。all-stop は resume 1回につき outstanding な exec が
-    /// 高々1つという前提(現行スコープ)のため execTask は単一。
-    /// non-stop 対応(Arcavirt-o3e.10.3以降)ではこの前提自体が崩れるため、
-    /// 複数の stop を相関する形へ作り直しが必要になる。
-    /// readTask/execTask は Task.WhenAny で負けた側を次周回に持ち越す
-    /// (transport/Channel いずれも同一 reader に対する二重の読み取り待ちを
-    /// 作ってはならないため、勝った側だけを都度作り直す)。
+    /// transport の読み取りと、実行中コマンドの stop 待ち・non-stop通知の
+    /// 送出待ちを同時に待ち受ける(§4.6: exec 実行中でも 0x03/vCtrlC による
+    /// 割込を検知できる必要がある)。stop 待ちは接続共有の ExecOutcome
+    /// チャネル(_execReader、all-stop用、Arcavirt-o3e.10.1)、通知待ちは
+    /// 接続共有の INotification プッシュチャネル(_notifyReader、non-stop用、
+    /// Arcavirt-o3e.10.3)をそれぞれ常に読み続ける形にした。いずれも
+    /// outstanding でない間は単に読み待ちのまま滞留するだけなので害はない。
+    /// 現行スコープは単一スレッド・単一 outstanding resume が前提であり、
+    /// 複数スレッドの同時 resume・相関は Arcavirt-o3e.10.4 で作り直しが必要
+    /// になる。readTask/execTask/notifyTask は Task.WhenAny で負けた側を
+    /// 次周回に持ち越す(同一 reader に対する二重の読み取り待ちを作っては
+    /// ならないため、勝った側だけを都度作り直す)。
     /// </summary>
     private async Task RunLoopAsync() {
         byte[] buffer = new byte[4096];
         Task<int>? readTask = null;
         Task<ExecOutcome>? execTask = null;
+        Task<INotification>? notifyTask = null;
 
         while (true) {
             readTask ??= _transport.ReadAsync(buffer).AsTask();
             execTask ??= _execReader.ReadAsync().AsTask();
+            notifyTask ??= _notifyReader.ReadAsync().AsTask();
 
-            await Task.WhenAny(readTask, execTask);
+            await Task.WhenAny(readTask, execTask, notifyTask);
 
             if (execTask is not null && execTask.IsCompleted) {
                 ExecOutcome outcome = await execTask;
@@ -59,6 +64,18 @@ public sealed class StubServer : IDisposable {
                     ? HexUtil.EncodeError(outcome.RejectError)
                     : EncodeStopReply(outcome.Stop);
                 await _transport.WriteAsync(Framer.Encode(replyPayload));
+                continue;
+            }
+
+            if (notifyTask is not null && notifyTask.IsCompleted) {
+                INotification notification = await notifyTask;
+                notifyTask = null;
+                var notifyBuffer = new ArrayBufferWriter<byte>();
+                // 現状 %Stop のみ実装(§4.5)。他の通知種別が増えたら種別ごとの
+                // プレフィックスを一般化する(Arcavirt-o3e.10.3のスコープ外)。
+                notifyBuffer.Write("Stop:"u8);
+                notification.WriteTo(notifyBuffer);
+                await _transport.WriteAsync(Framer.EncodeNotification(notifyBuffer.WrittenSpan));
                 continue;
             }
 
