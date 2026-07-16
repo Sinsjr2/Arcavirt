@@ -88,6 +88,111 @@ public class ExecutionCoordinatorTest {
         });
     }
 
+    /// <summary>
+    /// 1回のresume(同一 responder)に対して、異なるスレッドが異なるタイミングで
+    /// ReportStop を呼んでも、all-stopでは最初の1件だけが単一 stop reply として
+    /// 配送され、後続の(他スレッドからの)呼び出しは無視されることを確認する
+    /// (§4.3手順7「多スレッド停止の合流(代表1件)」、Arcavirt-o3e.10.4)。
+    /// </summary>
+    [Test]
+    public void OnReportStop_MultipleThreadsStopUnderSameResumeInAllStop_MergesIntoSingleStopReply() {
+        var channel = Channel.CreateBounded<ExecOutcome>(1);
+        var coordinator = new ExecutionCoordinator(channel.Writer, CreateUnusedNotificationQueue());
+
+        ExecutionResponder responder = coordinator.BeginResume();
+        responder.ReportStop(new StopEvent(new ThreadId(0, 1), StopReason.Signal, 5, 0));
+        responder.ReportStop(new StopEvent(new ThreadId(0, 2), StopReason.Signal, 9, 0));
+
+        bool delivered = channel.Reader.TryRead(out ExecOutcome outcome);
+        bool extra = channel.Reader.TryRead(out _);
+
+        Assert.Multiple(() => {
+            Assert.That(delivered, Is.True);
+            Assert.That(outcome.Stop.Thread, Is.EqualTo(new ThreadId(0, 1)));
+            Assert.That(extra, Is.False);
+        });
+    }
+
+    /// <summary>
+    /// 1回のresume(同一 responder)に対して、複数スレッドが異なるタイミングで
+    /// ReportStop を呼ぶと、non-stopでは各スレッド分の%Stop通知が(重複無く)
+    /// それぞれ配送されることを確認する(§4.3手順7、Arcavirt-o3e.10.4)。
+    /// </summary>
+    [Test]
+    public void OnReportStop_MultipleThreadsStopUnderSameResumeInNonStop_DeliversOneNotificationPerThread() {
+        var execChannel = Channel.CreateBounded<ExecOutcome>(1);
+        var notifyChannel = Channel.CreateBounded<INotification>(1);
+        var notificationQueue = new NotificationQueue(notifyChannel.Writer);
+        var coordinator = new ExecutionCoordinator(execChannel.Writer, notificationQueue);
+        coordinator.SetMode(ResumeMode.NonStop);
+
+        ExecutionResponder responder = coordinator.BeginResume();
+        responder.ReportStop(new StopEvent(new ThreadId(0, 1), StopReason.Signal, 5, 0));
+        responder.ReportStop(new StopEvent(new ThreadId(0, 2), StopReason.Signal, 9, 0));
+
+        bool firstPushed = notifyChannel.Reader.TryRead(out INotification? firstNotification);
+        INotification? secondFromDrain = notificationQueue.DrainVStopped();
+
+        Assert.Multiple(() => {
+            Assert.That(firstPushed, Is.True);
+            Assert.That(firstNotification, Is.EqualTo(new StopNotification(new StopEvent(new ThreadId(0, 1), StopReason.Signal, 5, 0))));
+            Assert.That(secondFromDrain, Is.EqualTo(new StopNotification(new StopEvent(new ThreadId(0, 2), StopReason.Signal, 9, 0))));
+        });
+    }
+
+    /// <summary>
+    /// non-stopで同一スレッドが同一resume中に複数回ReportStopを呼んでも、
+    /// 通知は1回だけ配送される(重複排除)ことを確認する。
+    /// </summary>
+    [Test]
+    public void OnReportStop_SameThreadReportsTwiceInNonStop_DeliversOnlyOnce() {
+        var execChannel = Channel.CreateBounded<ExecOutcome>(1);
+        var notifyChannel = Channel.CreateBounded<INotification>(1);
+        var notificationQueue = new NotificationQueue(notifyChannel.Writer);
+        var coordinator = new ExecutionCoordinator(execChannel.Writer, notificationQueue);
+        coordinator.SetMode(ResumeMode.NonStop);
+
+        ExecutionResponder responder = coordinator.BeginResume();
+        responder.ReportStop(new StopEvent(new ThreadId(0, 1), StopReason.Signal, 5, 0));
+        responder.ReportStop(new StopEvent(new ThreadId(0, 1), StopReason.Signal, 5, 0));
+
+        bool firstPushed = notifyChannel.Reader.TryRead(out _);
+        INotification? secondFromDrain = notificationQueue.DrainVStopped();
+
+        Assert.Multiple(() => {
+            Assert.That(firstPushed, Is.True);
+            Assert.That(secondFromDrain, Is.Null);
+        });
+    }
+
+    /// <summary>
+    /// non-stopでも、resumeが切り替わった後の古いresponderからの遅延ReportStopは
+    /// 無視されることを確認する(§4.4のスコープ規律、non-stop版の回帰防止)。
+    /// </summary>
+    [Test]
+    public void OnReportStop_StaleResponderAfterNewResumeBeganInNonStop_IsIgnored() {
+        var execChannel = Channel.CreateBounded<ExecOutcome>(1);
+        var notifyChannel = Channel.CreateBounded<INotification>(1);
+        var notificationQueue = new NotificationQueue(notifyChannel.Writer);
+        var coordinator = new ExecutionCoordinator(execChannel.Writer, notificationQueue);
+        coordinator.SetMode(ResumeMode.NonStop);
+
+        ExecutionResponder first = coordinator.BeginResume();
+        ExecutionResponder second = coordinator.BeginResume();
+
+        first.ReportStop(new StopEvent(new ThreadId(0, 1), StopReason.Signal, 9, 0));
+        second.ReportStop(new StopEvent(new ThreadId(0, 2), StopReason.Signal, 5, 0));
+
+        bool delivered = notifyChannel.Reader.TryRead(out INotification? notification);
+        bool extra = notifyChannel.Reader.TryRead(out _);
+
+        Assert.Multiple(() => {
+            Assert.That(delivered, Is.True);
+            Assert.That(notification, Is.EqualTo(new StopNotification(new StopEvent(new ThreadId(0, 2), StopReason.Signal, 5, 0))));
+            Assert.That(extra, Is.False);
+        });
+    }
+
     private static NotificationQueue CreateUnusedNotificationQueue() {
         return new NotificationQueue(Channel.CreateBounded<INotification>(1).Writer);
     }

@@ -65,4 +65,32 @@ public class NotificationQueueTest {
 
         Assert.That(drained, Is.Null);
     }
+
+    /// <summary>
+    /// 3件Enqueueした場合、1件目は即時push、2・3件目はDrainVStoppedの呼び出し
+    /// 順に沿ってFIFOで取り出せることを確認する(Arcavirt-o3e.10.4の
+    /// lockベース実装の回帰防止)。
+    /// </summary>
+    [Test]
+    public void Enqueue_ThreeNotifications_DeliversInFifoOrderAcrossPushAndDrain() {
+        var channel = Channel.CreateBounded<INotification>(1);
+        var queue = new NotificationQueue(channel.Writer);
+        var first = new StopNotification(new StopEvent(default, StopReason.Signal, 1, 0));
+        var second = new StopNotification(new StopEvent(default, StopReason.Signal, 2, 0));
+        var third = new StopNotification(new StopEvent(default, StopReason.Signal, 3, 0));
+
+        queue.Enqueue(first);
+        queue.Enqueue(second);
+        queue.Enqueue(third);
+
+        channel.Reader.TryRead(out INotification? pushed);
+        INotification? drained1 = queue.DrainVStopped();
+        INotification? drained2 = queue.DrainVStopped();
+
+        Assert.Multiple(() => {
+            Assert.That(pushed, Is.EqualTo(first));
+            Assert.That(drained1, Is.EqualTo(second));
+            Assert.That(drained2, Is.EqualTo(third));
+        });
+    }
 }

@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Collections.Concurrent;
 using System.Text;
 using System.Threading.Channels;
 
@@ -28,28 +27,37 @@ internal readonly record struct StopNotification(StopEvent Stop) : INotification
 /// 送出済み)状態を持てる。in-flightが無ければ Enqueue が直ちに push
 /// チャネルへ書き込み、StubServer が %通知として即時送出する。既に
 /// in-flightなら、次の vStopped 受信(DrainVStopped)まで滞留させる。
-/// 現行スコープ(Arcavirt-o3e.10.3)は単一スレッドを前提とする簡易実装であり、
-/// DrainVStopped が「保留無し」と判定してからin-flightを解除するまでの
-/// 極小窓での Enqueue との競合は考慮していない(複数スレッド相関は
-/// Arcavirt-o3e.10.4で再検討する)。
+/// Enqueue/DrainVStopped は _gate で排他し、「保留無し」の判定から
+/// in-flight解除までを1つの臨界区間にすることで、両者が競合する
+/// タイミング依存のすり抜け(Arcavirt-o3e.10.3で既知の限界として
+/// 保留していた極小窓)を構造的に排除する(Arcavirt-o3e.10.4で解消)。
 /// </summary>
 internal sealed class NotificationQueue {
-    private readonly ConcurrentQueue<INotification> _pending = new();
+    private readonly object _gate = new();
+    private readonly Queue<INotification> _pending = new();
     private readonly ChannelWriter<INotification> _pushWriter;
-    private int _inFlight;
+    private bool _inFlight;
 
     internal NotificationQueue(ChannelWriter<INotification> pushWriter) {
         _pushWriter = pushWriter;
     }
 
     /// <summary>
-    /// 通知をキューへ追加する。in-flightな通知が無ければ、この呼び出しで
-    /// キューの先頭(=今追加したもの)を即座に取り出して push チャネルへ
-    /// 書き込み、in-flight状態にする。
+    /// 通知をキューへ追加する。in-flightな通知が無ければ、その場で
+    /// in-flight状態にして push チャネルへ書き込む。既に in-flight なら
+    /// キューに滞留させるだけにする。
     /// </summary>
     internal void Enqueue(INotification notification) {
-        _pending.Enqueue(notification);
-        if (Interlocked.CompareExchange(ref _inFlight, 1, 0) == 0 && _pending.TryDequeue(out INotification? toPush)) {
+        INotification? toPush = null;
+        lock (_gate) {
+            if (_inFlight) {
+                _pending.Enqueue(notification);
+            } else {
+                _inFlight = true;
+                toPush = notification;
+            }
+        }
+        if (toPush is not null) {
             _pushWriter.TryWrite(toPush);
         }
     }
@@ -60,10 +68,12 @@ internal sealed class NotificationQueue {
     /// (呼び出し側が OK を書く、§4.5の内容ack完了)。
     /// </summary>
     internal INotification? DrainVStopped() {
-        if (_pending.TryDequeue(out INotification? next)) {
-            return next;
+        lock (_gate) {
+            if (_pending.TryDequeue(out INotification? next)) {
+                return next;
+            }
+            _inFlight = false;
+            return null;
         }
-        Volatile.Write(ref _inFlight, 0);
-        return null;
     }
 }
