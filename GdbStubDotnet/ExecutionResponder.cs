@@ -17,6 +17,13 @@ public sealed class ExecutionResponder {
         _token = token;
     }
 
+    /// <summary>
+    /// この responder がスコープされている resume の token。Dispatcher が
+    /// 例外発生時の resume 中断判定・non-stop即時OK可否判定に用いる
+    /// (internal専用、公開APIではない)。
+    /// </summary>
+    internal int Token => _token;
+
     public void ReportStop(in StopEvent stop) {
         _coordinator.OnReportStop(_token, in stop);
     }

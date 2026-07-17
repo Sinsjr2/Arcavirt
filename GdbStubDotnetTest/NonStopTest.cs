@@ -49,6 +49,50 @@ public class NonStopTest {
         Assert.That(drainReply, Is.EqualTo("OK"u8.ToArray()));
     }
 
+    /// <summary>
+    /// non-stopで、ハンドラが同期的にResponder.Rejectを呼んだ場合、
+    /// vCont;c の応答は即時OKではなくReject由来のエラー応答1回だけに
+    /// なることを確認する(コードレビューで判明した不具合の回帰防止:
+    /// 修正前は即時OKとエラー応答が二重に送出されていた)。
+    /// </summary>
+    [Test]
+    public async Task VContCommand_SynchronousRejectInNonStop_ReturnsOnlyRejectErrorNotDoubleResponse() {
+        using var transport = new TcpTransport(new IPEndPoint(IPAddress.Loopback, 0));
+
+        using var server = new StubServerBuilder()
+            .Map(Commands.VCont, (VContCommand cmd, ExecutionResponder responder) => responder.Reject(new RspError(14, null)))
+            .Map(Commands.HaltReason, (cmd, res) => res.Text("S05"u8))
+            .UseTransport(transport)
+            .Build();
+        server.Start();
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, transport.Port);
+        var clientStream = client.GetStream();
+
+        await clientStream.WriteAsync(Framer.Encode("QNonStop:1"u8));
+        byte[]? nonStopAck = await ReadOnePacket(clientStream);
+        Assert.That(nonStopAck, Is.EqualTo("OK"u8.ToArray()));
+
+        await clientStream.WriteAsync(Framer.Encode("vCont;c"u8));
+        byte[]? rejectReply = await ReadOnePacket(clientStream);
+        Assert.That(rejectReply, Is.EqualTo("E0e"u8.ToArray()));
+
+        await clientStream.WriteAsync(Framer.Encode("?"u8));
+        byte[]? haltReply = await ReadOnePacket(clientStream);
+        Assert.That(haltReply, Is.EqualTo("S05"u8.ToArray()));
+    }
+
+    /// <summary>
+    /// 1回のstream.ReadAsyncチャンクに複数パケットが含まれる場合(ackの
+    /// 直後に即座に応答が来る等、TCPが複数の送出をまとめて配送すること
+    /// がある)、Framer.ProcessBytesは1回のProcessBytes呼び出し内で
+    /// コールバックを複数回発火させる。最後に見つかったパケットで
+    /// 上書きしてしまうと「本来先に届くはずの余分な応答」を見失い、
+    /// 二重応答バグ等を検出できなくなる(コードレビューで判明)。
+    /// received が既に確定していれば以降のPacketイベントは無視し、
+    /// 最初の1件だけを返す。
+    /// </summary>
     private static async Task<byte[]?> ReadOnePacket(NetworkStream stream) {
         var framer = new Framer();
         byte[]? received = null;
@@ -56,7 +100,7 @@ public class NonStopTest {
         while (received is null) {
             int n = await stream.ReadAsync(buffer);
             framer.ProcessBytes(buffer.AsSpan(0, n), evt => {
-                if (evt.Kind == FramerEventKind.Packet) {
+                if (evt.Kind == FramerEventKind.Packet && received is null) {
                     received = evt.Payload;
                 }
             });

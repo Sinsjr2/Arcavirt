@@ -123,6 +123,15 @@ non-stop が動作します**。
 ハンドラ側のコード(`exec.ReportStop(...)` を呼ぶ)は all-stop/non-stop で
 **同じ**です。モードによる分岐はライブラリ内部で吸収されます。
 
+> **注意**: `Commands.Supported`(`qSupported`)を自分で `Map` して独自の
+> 機能一覧(`multiprocess+` 等)を返す場合、組込み既定の `qSupported`
+> ハンドラは丸ごと上書きされ、`QNonStop+` の広告も失われます。実 gdb は
+> `QNonStop+` が広告されていないと non-stop を有効化しようとしないため、
+> `qSupported` を自前で実装する場合は応答テキストに `QNonStop+` を
+> 自分で含めてください(例: `res.Text("multiprocess+;QNonStop+"u8)`)。
+> この制約はコードレビューで判明した既知の課題であり、恒久的な解決策
+> (FW側の機能一覧と利用者側の機能一覧を合成する仕組み)は別途検討中です。
+
 ## 7. `H`(スレッド選択)も自動対応
 
 `H`(`Hg<thread-id>`)コマンドもライブラリが組込み既定で処理します。以後、

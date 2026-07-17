@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Text;
 using System.Threading.Channels;
 
 namespace GdbStubDotnet;
@@ -16,8 +15,7 @@ internal interface INotification {
 
 internal readonly record struct StopNotification(StopEvent Stop) : INotification {
     public void WriteTo(IBufferWriter<byte> writer) {
-        byte[] bytes = Encoding.ASCII.GetBytes("T" + Stop.SignalOrExit.ToString("x2"));
-        writer.Write(bytes);
+        HexUtil.WriteStopReplyText(writer, Stop.SignalOrExit);
     }
 }
 

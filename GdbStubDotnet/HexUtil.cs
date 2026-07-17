@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 
 namespace GdbStubDotnet;
@@ -26,5 +27,18 @@ internal static class HexUtil {
             return Encoding.ASCII.GetBytes("E." + error.Detail);
         }
         return Encoding.ASCII.GetBytes("E" + error.Code.ToString("x2"));
+    }
+
+    /// <summary>
+    /// stop-reply本体("T"+signal/exitコードの16進数2桁)を書き込む。
+    /// all-stopの単一stop reply(StubServer)とnon-stopの%Stop通知
+    /// (NotificationQueue.StopNotification)の双方が同じ書式を必要とする
+    /// ため、ここへ一本化している(重複実装の回避)。
+    /// </summary>
+    public static void WriteStopReplyText(IBufferWriter<byte> writer, int signalOrExit) {
+        var span = writer.GetSpan(3);
+        span[0] = (byte)'T';
+        signalOrExit.TryFormat(span.Slice(1, 2), out _, "x2");
+        writer.Advance(3);
     }
 }

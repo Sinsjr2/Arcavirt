@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Threading.Channels;
 using GdbStubDotnet;
 using NUnit.Framework;
@@ -191,6 +192,35 @@ public class ExecutionCoordinatorTest {
             Assert.That(notification, Is.EqualTo(new StopNotification(new StopEvent(new ThreadId(0, 2), StopReason.Signal, 5, 0))));
             Assert.That(extra, Is.False);
         });
+    }
+
+    /// <summary>
+    /// ExecDispatchedCommand.Execute で、ハンドラが responder を捕まえた
+    /// (キャプチャした)後に例外を投げると、coordinator.AbortResume により
+    /// resume の token が無効化され、ハンドラが例外前に捕まえていた
+    /// (古い)responderが後から呼ばれても何も配送されないことを確認する
+    /// (コードレビューで判明した不具合の回帰防止)。StubServer/ソケットを
+    /// 介すとチャネル読み取り側の非同期継続タイミングに依存し決定論的に
+    /// 検証できないため、ExecDispatchedCommand を直接操作する。
+    /// </summary>
+    [Test]
+    public void ExecDispatchedCommandExecute_HandlerThrowsAfterCapturingResponder_AbortsTokenSoLaterReportStopIsIgnored() {
+        var execChannel = Channel.CreateBounded<ExecOutcome>(1);
+        var coordinator = new ExecutionCoordinator(execChannel.Writer, CreateUnusedNotificationQueue(), false, null);
+        ExecutionResponder? captured = null;
+
+        var dispatched = new ExecDispatchedCommand<ContinueCommand>(new ContinueCommand(null), (cmd, responder) => {
+            captured = responder;
+            throw new InvalidOperationException("boom");
+        });
+
+        var buffer = new ArrayBufferWriter<byte>();
+        Assert.Throws<InvalidOperationException>(() => dispatched.Execute(buffer, coordinator));
+
+        captured!.ReportStop(new StopEvent(default, StopReason.Signal, 5, 0));
+
+        bool delivered = execChannel.Reader.TryRead(out _);
+        Assert.That(delivered, Is.False);
     }
 
     private static NotificationQueue CreateUnusedNotificationQueue() {

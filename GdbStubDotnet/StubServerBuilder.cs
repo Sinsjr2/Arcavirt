@@ -13,7 +13,7 @@ public sealed class StubServerBuilder {
     private bool _detailedErrors;
 
     public StubServerBuilder Map<TCmd>(Parser<byte, TCmd> parser, Action<TCmd, ResponseWriter<SyncResponse>> handler) {
-        _entries.Add(Parser.Try(parser.Before(Parser<byte>.End)).Select(cmd => (IDispatchedCommand)new SyncDispatchedCommand<TCmd>(cmd, handler)));
+        _entries.Add(WrapSync(parser, handler));
         return this;
     }
 
@@ -89,7 +89,17 @@ public sealed class StubServerBuilder {
             BuiltInSetThread(coordinator),
         ];
         var dispatcher = new Dispatcher(allEntries, coordinator);
-        return new StubServer(_transport, dispatcher, execChannel.Reader, notifyChannel.Reader, _detailedErrors, _onDisconnect, _onInterrupt);
+        return new StubServer(_transport, dispatcher, execChannel.Reader, notifyChannel.Reader, coordinator, _onDisconnect, _onInterrupt);
+    }
+
+    /// <summary>
+    /// 同期コマンドの Pidgin パーサ+ハンドラを IDispatchedCommand へ包む
+    /// 共通処理。公開 Map(同期版)と組込み既定コマンド(QNonStop/vStopped/
+    /// qSupported/H)の登録が同じ包み方(Try+End+SyncDispatchedCommand化)を
+    /// 必要とするため、ここへ一本化している。
+    /// </summary>
+    private static Parser<byte, IDispatchedCommand> WrapSync<TCmd>(Parser<byte, TCmd> parser, Action<TCmd, ResponseWriter<SyncResponse>> handler) {
+        return Parser.Try(parser.Before(Parser<byte>.End)).Select(cmd => (IDispatchedCommand)new SyncDispatchedCommand<TCmd>(cmd, handler));
     }
 
     private readonly record struct QNonStopCommand(bool Enable);
@@ -102,40 +112,35 @@ public sealed class StubServerBuilder {
                 static (_, enable) => new QNonStopCommand(enable));
 
     private static Parser<byte, IDispatchedCommand> BuiltInQNonStop(ExecutionCoordinator coordinator) {
-        return Parser.Try(QNonStopWire.Before(Parser<byte>.End))
-            .Select(cmd => (IDispatchedCommand)new SyncDispatchedCommand<QNonStopCommand>(cmd, (c, res) => {
-                coordinator.SetMode(c.Enable ? ResumeMode.NonStop : ResumeMode.AllStop);
-                res.Ok();
-            }));
+        return WrapSync(QNonStopWire, (c, res) => {
+            coordinator.SetMode(c.Enable ? ResumeMode.NonStop : ResumeMode.AllStop);
+            res.Ok();
+        });
     }
 
     private readonly record struct VStoppedCommand;
 
     private static Parser<byte, IDispatchedCommand> BuiltInVStopped(NotificationQueue notificationQueue) {
-        return Parser.Try(Parser<byte>.Sequence("vStopped"u8.ToArray()).Before(Parser<byte>.End))
-            .ThenReturn(default(VStoppedCommand))
-            .Select(cmd => (IDispatchedCommand)new SyncDispatchedCommand<VStoppedCommand>(cmd, (_, res) => {
-                INotification? next = notificationQueue.DrainVStopped();
-                if (next is null) {
-                    res.Ok();
-                    return;
-                }
-                var buffer = new ArrayBufferWriter<byte>();
-                next.WriteTo(buffer);
-                res.Text(buffer.WrittenSpan);
-            }));
+        return WrapSync(Parser<byte>.Sequence("vStopped"u8.ToArray()).ThenReturn(default(VStoppedCommand)), (_, res) => {
+            INotification? next = notificationQueue.DrainVStopped();
+            if (next is null) {
+                res.Ok();
+                return;
+            }
+            var buffer = new ArrayBufferWriter<byte>();
+            next.WriteTo(buffer);
+            res.Text(buffer.WrittenSpan);
+        });
     }
 
     private static Parser<byte, IDispatchedCommand> BuiltInSupported() {
-        return Parser.Try(Commands.Supported.Before(Parser<byte>.End))
-            .Select(cmd => (IDispatchedCommand)new SyncDispatchedCommand<SupportedCommand>(cmd, static (_, res) => res.Text("QNonStop+"u8)));
+        return WrapSync(Commands.Supported, static (_, res) => res.Text("QNonStop+"u8));
     }
 
     private static Parser<byte, IDispatchedCommand> BuiltInSetThread(ExecutionCoordinator coordinator) {
-        return Parser.Try(Commands.SetThread.Before(Parser<byte>.End))
-            .Select(cmd => (IDispatchedCommand)new SyncDispatchedCommand<SetThreadCommand>(cmd, (c, res) => {
-                coordinator.SetCurrentThread(c.Thread);
-                res.Ok();
-            }));
+        return WrapSync(Commands.SetThread, (c, res) => {
+            coordinator.SetCurrentThread(c.Thread);
+            res.Ok();
+        });
     }
 }

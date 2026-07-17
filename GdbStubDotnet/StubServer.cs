@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Text;
 using System.Threading.Channels;
 
 namespace GdbStubDotnet;
@@ -14,18 +13,19 @@ public sealed class StubServer : IDisposable {
     private readonly Dispatcher _dispatcher;
     private readonly ChannelReader<ExecOutcome> _execReader;
     private readonly ChannelReader<INotification> _notifyReader;
-    private readonly bool _detailedErrors;
+    private readonly ExecutionCoordinator _coordinator;
     private readonly Framer _framer = new();
     private readonly Action? _onDisconnect;
     private readonly Action? _onInterrupt;
     private Task? _loopTask;
+    private volatile bool _stopping;
 
-    internal StubServer(ITransport transport, Dispatcher dispatcher, ChannelReader<ExecOutcome> execReader, ChannelReader<INotification> notifyReader, bool detailedErrors, Action? onDisconnect, Action? onInterrupt) {
+    internal StubServer(ITransport transport, Dispatcher dispatcher, ChannelReader<ExecOutcome> execReader, ChannelReader<INotification> notifyReader, ExecutionCoordinator coordinator, Action? onDisconnect, Action? onInterrupt) {
         _transport = transport;
         _dispatcher = dispatcher;
         _execReader = execReader;
         _notifyReader = notifyReader;
-        _detailedErrors = detailedErrors;
+        _coordinator = coordinator;
         _onDisconnect = onDisconnect;
         _onInterrupt = onInterrupt;
     }
@@ -48,7 +48,9 @@ public sealed class StubServer : IDisposable {
     /// 次周回に持ち越す(同一 reader に対する二重の読み取り待ちを作っては
     /// ならないため、勝った側だけを都度作り直す)。
     /// transport切断(読み取り0バイトまたは例外)時は OnDisconnect を呼ぶ
-    /// (Arcavirt-o3e.18、§4.6)。
+    /// (Arcavirt-o3e.18、§4.6)。ただし Stop()/Dispose() が自ら transport を
+    /// 閉じたことによる例外・0バイト読み取りは、リモート切断ではなく
+    /// 自発的終了なので _stopping フラグで判別して OnDisconnect を呼ばない。
     /// </summary>
     private async Task RunLoopAsync() {
         byte[] buffer = new byte[4096];
@@ -67,7 +69,7 @@ public sealed class StubServer : IDisposable {
                 ExecOutcome outcome = await execTask;
                 execTask = null;
                 byte[] replyPayload = outcome.IsReject
-                    ? HexUtil.EncodeError(outcome.RejectError, _detailedErrors)
+                    ? HexUtil.EncodeError(outcome.RejectError, _coordinator.DetailedErrors)
                     : EncodeStopReply(outcome.Stop);
                 await _transport.WriteAsync(Framer.Encode(replyPayload));
                 continue;
@@ -89,12 +91,19 @@ public sealed class StubServer : IDisposable {
             try {
                 n = await readTask;
             } catch {
-                _onDisconnect?.Invoke();
+                // Stop()/Dispose() が自ら transport を閉じたことで発生した
+                // 例外は、リモート切断ではなく自発的な終了なので
+                // OnDisconnect の対象外とする。
+                if (!_stopping) {
+                    _onDisconnect?.Invoke();
+                }
                 return;
             }
             readTask = null;
             if (n == 0) {
-                _onDisconnect?.Invoke();
+                if (!_stopping) {
+                    _onDisconnect?.Invoke();
+                }
                 return;
             }
 
@@ -156,11 +165,13 @@ public sealed class StubServer : IDisposable {
     }
 
     private static byte[] EncodeStopReply(StopEvent stop) {
-        string text = "T" + stop.SignalOrExit.ToString("x2");
-        return Encoding.ASCII.GetBytes(text);
+        var buffer = new ArrayBufferWriter<byte>(3);
+        HexUtil.WriteStopReplyText(buffer, stop.SignalOrExit);
+        return buffer.WrittenSpan.ToArray();
     }
 
     public void Stop() {
+        _stopping = true;
         _transport.Close();
     }
 

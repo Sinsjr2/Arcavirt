@@ -91,6 +91,41 @@ public class ErrorHandlingTest {
         Assert.That(result, Is.True);
     }
 
+    /// <summary>
+    /// 実行コマンドのハンドラが例外を投げても、Route の例外境界により
+    /// 安全な E01 応答が返ることを確認する(§7.2の例外境界が同期コマンドに
+    /// 限らず実行コマンドにも適用されることの確認)。ハンドラ例外前に
+    /// 捕まえたresponderが後から呼ばれても無視されるべき、というtoken
+    /// 無効化の不変条件そのものは、ソケット越しの非同期タイミングに
+    /// 依存せず決定論的に検証できる ExecutionCoordinatorTest 側で確認する。
+    /// </summary>
+    [Test]
+    public async Task ExecHandlerThrows_ReturnsGenericErrorOverTheWire() {
+        using var transport = new TcpTransport(new IPEndPoint(IPAddress.Loopback, 0));
+
+        using var server = new StubServerBuilder()
+            .Map(Commands.Continue, (ContinueCommand cmd, ExecutionResponder responder) => throw new InvalidOperationException("boom"))
+            .UseTransport(transport)
+            .Build();
+        server.Start();
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, transport.Port);
+        var clientStream = client.GetStream();
+
+        await clientStream.WriteAsync(Framer.Encode("c"u8));
+        byte[]? errorReply = await ReadOnePacket(clientStream);
+        Assert.That(errorReply, Is.EqualTo("E01"u8.ToArray()));
+    }
+
+    /// <summary>
+    /// 1回のstream.ReadAsyncチャンクに複数パケットが含まれる場合、
+    /// Framer.ProcessBytesは1回の呼び出し内でコールバックを複数回
+    /// 発火させる。最後に見つかったパケットで上書きすると、本来先に
+    /// 届くはずの余分な応答を見失う(コードレビューで判明)。received
+    /// が既に確定していれば以降のPacketイベントは無視し、最初の1件だけ
+    /// を返す。
+    /// </summary>
     private static async Task<byte[]?> ReadOnePacket(NetworkStream stream) {
         var framer = new Framer();
         byte[]? received = null;
@@ -98,7 +133,7 @@ public class ErrorHandlingTest {
         while (received is null) {
             int n = await stream.ReadAsync(buffer);
             framer.ProcessBytes(buffer.AsSpan(0, n), evt => {
-                if (evt.Kind == FramerEventKind.Packet) {
+                if (evt.Kind == FramerEventKind.Packet && received is null) {
                     received = evt.Payload;
                 }
             });

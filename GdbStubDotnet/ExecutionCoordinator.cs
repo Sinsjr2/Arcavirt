@@ -29,7 +29,7 @@ namespace GdbStubDotnet;
 internal sealed class ExecutionCoordinator {
     private readonly ChannelWriter<ExecOutcome> _writer;
     private readonly NotificationQueue _notificationQueue;
-    private readonly ConcurrentDictionary<ThreadId, byte> _reportedThreadsInEpisode = new();
+    private readonly ConcurrentDictionary<(int Token, ThreadId Thread), byte> _reportedThreadsInEpisode = new();
     private int _tokenSeed;
     private int _activeToken;
     private volatile ResumeMode _mode;
@@ -76,14 +76,49 @@ internal sealed class ExecutionCoordinator {
     /// <summary>
     /// resume を1つ開始し、この resume にスコープされた ExecutionResponder を
     /// 返す。token は Interlocked.Increment により一意に払い出され、
-    /// 以後この resume からの報告だけが token 判定に成功する。新しい
-    /// episode の開始として、直前の episode の重複排除状態もクリアする。
+    /// 以後この resume からの報告だけが token 判定に成功する。
+    /// _reportedThreadsInEpisode は (token, Thread) の複合キーで管理して
+    /// おり、新しい token は過去のどの (token, Thread) エントリとも一致
+    /// しないため、ここで明示的にクリアする必要はない(クリアを挟むと
+    /// 「古いtokenの判定通過後・新episodeのクリア後」という極小window で
+    /// 古い報告が新episodeの重複排除表へ紛れ込む競合状態が生じるため、
+    /// 意図的にクリアしない設計にしている)。
     /// </summary>
     internal ExecutionResponder BeginResume() {
         int token = Interlocked.Increment(ref _tokenSeed);
         Interlocked.Exchange(ref _activeToken, token);
-        _reportedThreadsInEpisode.Clear();
         return new ExecutionResponder(this, token);
+    }
+
+    /// <summary>
+    /// token が現在アクティブな resume の token と一致する場合のみ CAS で
+    /// 消費する(§4.4)。OnReportStop の AllStop 経路・OnReject の両方が
+    /// 使う共通判定であり、本コンポーネントの不変条件。簡略化・省略しては
+    /// ならない。
+    /// </summary>
+    private bool TryConsumeToken(int token) {
+        return Interlocked.CompareExchange(ref _activeToken, 0, token) == token;
+    }
+
+    /// <summary>
+    /// token が現在アクティブな resume の token と一致するかだけを判定する
+    /// (消費はしない)。ExecDispatchedCommand が、resume 開始直後に
+    /// ハンドラが同期的に Reject を呼んだかどうかを判定するために使う
+    /// (Reject は Mode を問わず TryConsumeToken で token を消費するため、
+    /// ReportStop(NonStopでは token を消費しない)の有無に関わらず、
+    /// Reject が起きたかどうかだけを正確に反映する)。
+    /// </summary>
+    internal bool IsPending(int token) {
+        return Volatile.Read(ref _activeToken) == token;
+    }
+
+    /// <summary>
+    /// resume を異常終了させる(ハンドラが例外を投げた場合)。token が
+    /// 現在アクティブなら消費して以後の報告を無効化する。既に
+    /// ReportStop/Reject 済みなら何もしない(CASが失敗するだけで安全)。
+    /// </summary>
+    internal void AbortResume(int token) {
+        Interlocked.CompareExchange(ref _activeToken, 0, token);
     }
 
     /// <summary>
@@ -91,22 +126,26 @@ internal sealed class ExecutionCoordinator {
     /// 場合のみ CAS で消費し、最初の1件を単一 stop reply として配送する
     /// (§4.3手順7、代表1件による合流)。一致しない場合(既に消費済み、
     /// 他スレッドの後続報告、または別の resume に切り替わった後の遅延・
-    /// 重複呼び出し)は§4.4の規律に従い無視する。この CAS 判定は
-    /// 本コンポーネントの不変条件であり、簡略化・省略してはならない。
-    /// NonStop では token を消費せず、episode内のスレッド単位で重複排除
-    /// しつつ複数回配送を許す(Arcavirt-o3e.10.4)。
+    /// 重複呼び出し)は§4.4の規律に従い無視する。
+    /// NonStop では token を消費せず(複数スレッドが独立に停止しうる
+    /// ため)、episode内のスレッド単位で重複排除しつつ複数回配送を許す
+    /// (Arcavirt-o3e.10.4)。判定は Volatile.Read の読み取り専用チェックで
+    /// 行い、_reportedThreadsInEpisode のキーに token 自体を含めることで、
+    /// 「チェック通過後に別の BeginResume が割り込む」タイミング依存の
+    /// すり抜けを構造的に防ぐ(旧・単純なThreadIdキー+Clear()方式では
+    /// この窓が存在した)。
     /// </summary>
     internal void OnReportStop(int token, in StopEvent stop) {
         if (_mode == ResumeMode.NonStop) {
             if (Volatile.Read(ref _activeToken) != token) {
                 return;
             }
-            if (_reportedThreadsInEpisode.TryAdd(stop.Thread, 0)) {
+            if (_reportedThreadsInEpisode.TryAdd((token, stop.Thread), 0)) {
                 _notificationQueue.Enqueue(new StopNotification(stop));
             }
             return;
         }
-        if (Interlocked.CompareExchange(ref _activeToken, 0, token) != token) {
+        if (!TryConsumeToken(token)) {
             return;
         }
         _writer.TryWrite(new ExecOutcome(false, stop, default));
@@ -118,7 +157,7 @@ internal sealed class ExecutionCoordinator {
     /// 常に ExecOutcome チャネル経由で伝える(%Stop通知の対象ではない)。
     /// </summary>
     internal void OnReject(int token, RspError error) {
-        if (Interlocked.CompareExchange(ref _activeToken, 0, token) != token) {
+        if (!TryConsumeToken(token)) {
             return;
         }
         _writer.TryWrite(new ExecOutcome(true, default, error));
