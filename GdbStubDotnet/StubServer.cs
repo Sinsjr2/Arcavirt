@@ -166,7 +166,7 @@ public sealed class StubServer : IDisposable {
 
     private static byte[] EncodeStopReply(StopEvent stop) {
         var buffer = new ArrayBufferWriter<byte>(3);
-        HexUtil.WriteStopReplyText(buffer, stop.SignalOrExit);
+        HexUtil.WriteStopReplyText(buffer, stop.SignalOrExit, stop.Thread);
         return buffer.WrittenSpan.ToArray();
     }
 

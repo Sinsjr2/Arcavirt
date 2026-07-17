@@ -123,14 +123,21 @@ non-stop が動作します**。
 ハンドラ側のコード(`exec.ReportStop(...)` を呼ぶ)は all-stop/non-stop で
 **同じ**です。モードによる分岐はライブラリ内部で吸収されます。
 
-> **注意**: `Commands.Supported`(`qSupported`)を自分で `Map` して独自の
-> 機能一覧(`multiprocess+` 等)を返す場合、組込み既定の `qSupported`
-> ハンドラは丸ごと上書きされ、`QNonStop+` の広告も失われます。実 gdb は
-> `QNonStop+` が広告されていないと non-stop を有効化しようとしないため、
-> `qSupported` を自前で実装する場合は応答テキストに `QNonStop+` を
-> 自分で含めてください(例: `res.Text("multiprocess+;QNonStop+"u8)`)。
-> この制約はコードレビューで判明した既知の課題であり、恒久的な解決策
-> (FW側の機能一覧と利用者側の機能一覧を合成する仕組み)は別途検討中です。
+> **注意**: `Commands.Supported`(`qSupported`)を通常の `Map` で登録すると、
+> 先勝ちOneOfにより組込み既定の `qSupported` ハンドラは丸ごと上書きされ、
+> `QNonStop+` の広告が失われます。実 gdb は `QNonStop+` が広告されていないと
+> non-stop を有効化しようとしないため、独自の機能一覧(`multiprocess+` 等)を
+> 追加したい場合は `Map` ではなく専用の `MapSupported` を使ってください。
+> `MapSupported` はハンドラが書いたテキストへ FW 側が `QNonStop+` を自動で
+> 合成します(既に含まれていればそのまま、無ければ末尾へ補います)。
+>
+> ```csharp
+> stub.MapSupported((cmd, res) => res.Text("multiprocess+"u8));
+> // 実際にgdbへ送られるのは "multiprocess+;QNonStop+"
+> ```
+>
+> なお `Map(Commands.Supported, ...)` 自体は引き続き利用できますが、その
+> 場合は完全な上書きになり `QNonStop+` は自動で補われません(Arcavirt-580)。
 
 ## 7. `H`(スレッド選択)も自動対応
 

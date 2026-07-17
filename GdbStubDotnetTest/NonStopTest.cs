@@ -50,6 +50,61 @@ public class NonStopTest {
     }
 
     /// <summary>
+    /// non-stopで、片方のresume(thread1)が完了する前にもう片方(thread2)の
+    /// vContを発行しても、両方が独立して%Stop通知を配送できることを
+    /// 確認する(Arcavirt-cwmの受け入れ基準)。修正前の実装では、2回目の
+    /// vCont(thread2)のBeginResumeが内部の単一アクティブtokenを上書きし、
+    /// 1回目(thread1)のReportStopが握りつぶされてgdbに永久に通知されない
+    /// 不具合があった(この場合 ReadOnePacket が notif1 を待ち続けて
+    /// デッドロックし、テストがタイムアウトで失敗する)。
+    /// </summary>
+    [Test]
+    public async Task NonStopFlow_TwoSeparateVContCallsForDifferentThreads_BothDeliverIndependentStopNotifications() {
+        using var transport = new TcpTransport(new IPEndPoint(IPAddress.Loopback, 0));
+        var firstResponder = new TaskCompletionSource<ExecutionResponder>();
+        var secondResponder = new TaskCompletionSource<ExecutionResponder>();
+        int vContCallCount = 0;
+
+        using var server = new StubServerBuilder()
+            .Map(Commands.VCont, (VContCommand cmd, ExecutionResponder responder) => {
+                if (Interlocked.Increment(ref vContCallCount) == 1) {
+                    firstResponder.SetResult(responder);
+                } else {
+                    secondResponder.SetResult(responder);
+                }
+            })
+            .UseTransport(transport)
+            .Build();
+        server.Start();
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, transport.Port);
+        var clientStream = client.GetStream();
+
+        await clientStream.WriteAsync(Framer.Encode("QNonStop:1"u8));
+        await ReadOnePacket(clientStream);
+
+        await clientStream.WriteAsync(Framer.Encode("vCont;c:p0.1"u8));
+        await ReadOnePacket(clientStream);
+        ExecutionResponder responder1 = await firstResponder.Task;
+
+        await clientStream.WriteAsync(Framer.Encode("vCont;c:p0.2"u8));
+        await ReadOnePacket(clientStream);
+        ExecutionResponder responder2 = await secondResponder.Task;
+
+        responder1.ReportStop(new StopEvent(new ThreadId(0, 1), StopReason.Signal, 5, 0));
+        byte[]? notif1 = await ReadOnePacket(clientStream);
+        Assert.That(notif1, Is.EqualTo("Stop:T05thread:1;"u8.ToArray()));
+
+        await clientStream.WriteAsync(Framer.Encode("vStopped"u8));
+        await ReadOnePacket(clientStream);
+
+        responder2.ReportStop(new StopEvent(new ThreadId(0, 2), StopReason.Signal, 9, 0));
+        byte[]? notif2 = await ReadOnePacket(clientStream);
+        Assert.That(notif2, Is.EqualTo("Stop:T09thread:2;"u8.ToArray()));
+    }
+
+    /// <summary>
     /// non-stopで、ハンドラが同期的にResponder.Rejectを呼んだ場合、
     /// vCont;c の応答は即時OKではなくReject由来のエラー応答1回だけに
     /// なることを確認する(コードレビューで判明した不具合の回帰防止:

@@ -302,4 +302,113 @@ public class StubServerTest {
 
         Assert.That(receivedPayload, Is.EqualTo("E0a"u8.ToArray()));
     }
+
+    /// <summary>
+    /// qSupported を誰も Map/MapSupported していない場合、組込み既定の
+    /// "QNonStop+" のみが返ることを確認する(MapSupported合成ロジックの
+    /// ベースライン、Arcavirt-580)。
+    /// </summary>
+    [Test]
+    public async Task QSupportedCommand_NoUserHandlerRegistered_ReturnsQNonStopOnly() {
+        using var transport = new TcpTransport(new IPEndPoint(IPAddress.Loopback, 0));
+
+        using var server = new StubServerBuilder()
+            .UseTransport(transport)
+            .Build();
+        server.Start();
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, transport.Port);
+        var clientStream = client.GetStream();
+
+        await clientStream.WriteAsync(Framer.Encode("qSupported"u8));
+
+        var framer = new Framer();
+        byte[]? receivedPayload = null;
+        byte[] readBuffer = new byte[256];
+        while (receivedPayload is null) {
+            int n = await clientStream.ReadAsync(readBuffer);
+            framer.ProcessBytes(readBuffer.AsSpan(0, n), evt => {
+                if (evt.Kind == FramerEventKind.Packet) {
+                    receivedPayload = evt.Payload;
+                }
+            });
+        }
+
+        Assert.That(receivedPayload, Is.EqualTo("QNonStop+"u8.ToArray()));
+    }
+
+    /// <summary>
+    /// MapSupported で独自の機能一覧(例: multiprocess+)を登録しても、
+    /// 組込みの QNonStop+ 広告が失われず末尾へ合成されて返ることを確認する
+    /// (Arcavirt-580の受け入れ基準: 利用者が独自qSupportedハンドラを
+    /// 登録してもQNonStop+広告が失われずgdbに伝わる)。通常の
+    /// Map(Commands.Supported, ...)ではこの合成は起きない(完全上書き)ため、
+    /// MapSupportedを使うことが本テストの前提。
+    /// </summary>
+    [Test]
+    public async Task QSupportedCommand_MapSupportedWithExtraFeature_ComposesWithBuiltInQNonStopAdvertisement() {
+        using var transport = new TcpTransport(new IPEndPoint(IPAddress.Loopback, 0));
+
+        using var server = new StubServerBuilder()
+            .MapSupported((cmd, res) => res.Text("multiprocess+"u8))
+            .UseTransport(transport)
+            .Build();
+        server.Start();
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, transport.Port);
+        var clientStream = client.GetStream();
+
+        await clientStream.WriteAsync(Framer.Encode("qSupported"u8));
+
+        var framer = new Framer();
+        byte[]? receivedPayload = null;
+        byte[] readBuffer = new byte[256];
+        while (receivedPayload is null) {
+            int n = await clientStream.ReadAsync(readBuffer);
+            framer.ProcessBytes(readBuffer.AsSpan(0, n), evt => {
+                if (evt.Kind == FramerEventKind.Packet) {
+                    receivedPayload = evt.Payload;
+                }
+            });
+        }
+
+        Assert.That(receivedPayload, Is.EqualTo("multiprocess+;QNonStop+"u8.ToArray()));
+    }
+
+    /// <summary>
+    /// MapSupported のハンドラが既に "QNonStop+" を自分で含めている場合、
+    /// 二重に付与されないことを確認する(ContainsFeatureTokenの回帰防止)。
+    /// </summary>
+    [Test]
+    public async Task QSupportedCommand_MapSupportedAlreadyIncludingQNonStop_DoesNotDuplicateAdvertisement() {
+        using var transport = new TcpTransport(new IPEndPoint(IPAddress.Loopback, 0));
+
+        using var server = new StubServerBuilder()
+            .MapSupported((cmd, res) => res.Text("multiprocess+;QNonStop+"u8))
+            .UseTransport(transport)
+            .Build();
+        server.Start();
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, transport.Port);
+        var clientStream = client.GetStream();
+
+        await clientStream.WriteAsync(Framer.Encode("qSupported"u8));
+
+        var framer = new Framer();
+        byte[]? receivedPayload = null;
+        byte[] readBuffer = new byte[256];
+        while (receivedPayload is null) {
+            int n = await clientStream.ReadAsync(readBuffer);
+            framer.ProcessBytes(readBuffer.AsSpan(0, n), evt => {
+                if (evt.Kind == FramerEventKind.Packet) {
+                    receivedPayload = evt.Payload;
+                }
+            });
+        }
+
+        Assert.That(receivedPayload, Is.EqualTo("multiprocess+;QNonStop+"u8.ToArray()));
+    }
 }

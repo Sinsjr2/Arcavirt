@@ -15,7 +15,7 @@ internal interface INotification {
 
 internal readonly record struct StopNotification(StopEvent Stop) : INotification {
     public void WriteTo(IBufferWriter<byte> writer) {
-        HexUtil.WriteStopReplyText(writer, Stop.SignalOrExit);
+        HexUtil.WriteStopReplyText(writer, Stop.SignalOrExit, Stop.Thread);
     }
 }
 

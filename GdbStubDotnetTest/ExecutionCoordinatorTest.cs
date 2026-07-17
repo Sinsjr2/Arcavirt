@@ -167,11 +167,21 @@ public class ExecutionCoordinatorTest {
     }
 
     /// <summary>
-    /// non-stopでも、resumeが切り替わった後の古いresponderからの遅延ReportStopは
-    /// 無視されることを確認する(§4.4のスコープ規律、non-stop版の回帰防止)。
+    /// non-stopでは、別々のvCont呼び出し(=別々のBeginResume)で始まった
+    /// 複数のresume episodeが互いを無効化せず、どちらのresponderから
+    /// ReportStopしても正しく通知配送されることを確認する(Arcavirt-cwm)。
+    /// all-stopの「新しいresumeが古いresumeを無効化する」規律(§4.4)は
+    /// 「実gdbはstop reply受信前に次のresumeを送らない=1本勝負」という
+    /// 前提の上に成り立つが、non-stopでは複数スレッドを別々のタイミングで
+    /// 個別にresumeさせる使い方があり、この前提が成り立たない。旧実装は
+    /// 単一の _activeToken を無条件で上書きしていたため、1つ目の
+    /// resumeからの停止報告が2つ目のBeginResume後に握りつぶされる不具合が
+    /// あった(このテストが置き換えた旧テスト
+    /// OnReportStop_StaleResponderAfterNewResumeBeganInNonStop_IsIgnoredは、
+    /// この不具合そのものを「期待動作」として固定してしまっていた)。
     /// </summary>
     [Test]
-    public void OnReportStop_StaleResponderAfterNewResumeBeganInNonStop_IsIgnored() {
+    public void OnReportStop_TwoIndependentResumesInNonStop_BothDeliverNotificationsWithoutInvalidatingEachOther() {
         var execChannel = Channel.CreateBounded<ExecOutcome>(1);
         var notifyChannel = Channel.CreateBounded<INotification>(1);
         var notificationQueue = new NotificationQueue(notifyChannel.Writer);
@@ -184,13 +194,13 @@ public class ExecutionCoordinatorTest {
         first.ReportStop(new StopEvent(new ThreadId(0, 1), StopReason.Signal, 9, 0));
         second.ReportStop(new StopEvent(new ThreadId(0, 2), StopReason.Signal, 5, 0));
 
-        bool delivered = notifyChannel.Reader.TryRead(out INotification? notification);
-        bool extra = notifyChannel.Reader.TryRead(out _);
+        bool firstDelivered = notifyChannel.Reader.TryRead(out INotification? firstNotification);
+        INotification? secondFromDrain = notificationQueue.DrainVStopped();
 
         Assert.Multiple(() => {
-            Assert.That(delivered, Is.True);
-            Assert.That(notification, Is.EqualTo(new StopNotification(new StopEvent(new ThreadId(0, 2), StopReason.Signal, 5, 0))));
-            Assert.That(extra, Is.False);
+            Assert.That(firstDelivered, Is.True);
+            Assert.That(firstNotification, Is.EqualTo(new StopNotification(new StopEvent(new ThreadId(0, 1), StopReason.Signal, 9, 0))));
+            Assert.That(secondFromDrain, Is.EqualTo(new StopNotification(new StopEvent(new ThreadId(0, 2), StopReason.Signal, 5, 0))));
         });
     }
 

@@ -10,10 +10,27 @@ public sealed class StubServerBuilder {
     private Action? _onInterrupt;
     private Action? _onDisconnect;
     private Action<StubFault>? _onError;
+    private Action<SupportedCommand, ResponseWriter<SyncResponse>>? _supportedHandler;
     private bool _detailedErrors;
 
     public StubServerBuilder Map<TCmd>(Parser<byte, TCmd> parser, Action<TCmd, ResponseWriter<SyncResponse>> handler) {
         _entries.Add(WrapSync(parser, handler));
+        return this;
+    }
+
+    /// <summary>
+    /// qSupported(Commands.Supported)専用の拡張点(Arcavirt-580)。通常の
+    /// Map(Commands.Supported, ...) は先勝ちOneOfで組込み既定を丸ごと
+    /// 上書きするため、独自の機能一覧を返すと組込みの "QNonStop+" 広告が
+    /// 失われ、実gdbがnon-stopを有効化しなくなる。MapSupported はハンドラの
+    /// 出力をFW側が合成する: ハンドラが書いたテキストに既に "QNonStop+"
+    /// トークンが含まれていればそのまま、含まれていなければ ";QNonStop+"
+    /// を末尾へ補って応答する(qSupportedだけがFWと利用者の両方が機能を
+    /// 持ち寄る「合成」対象であるという性質を反映した専用APIであり、
+    /// 他のコマンドのような単純な先勝ち上書きにはしない)。
+    /// </summary>
+    public StubServerBuilder MapSupported(Action<SupportedCommand, ResponseWriter<SyncResponse>> handler) {
+        _supportedHandler = handler;
         return this;
     }
 
@@ -85,7 +102,7 @@ public sealed class StubServerBuilder {
             .. _entries,
             BuiltInQNonStop(coordinator),
             BuiltInVStopped(notificationQueue),
-            BuiltInSupported(),
+            BuiltInSupported(coordinator, _supportedHandler),
             BuiltInSetThread(coordinator),
         ];
         var dispatcher = new Dispatcher(allEntries, coordinator);
@@ -133,8 +150,63 @@ public sealed class StubServerBuilder {
         });
     }
 
-    private static Parser<byte, IDispatchedCommand> BuiltInSupported() {
-        return WrapSync(Commands.Supported, static (_, res) => res.Text("QNonStop+"u8));
+    /// <summary>
+    /// userHandler が未登録(MapSupportedが呼ばれていない)なら "QNonStop+"
+    /// のみを返す(従来どおり)。登録されていれば、いったんスクラッチ
+    /// バッファへ書かせてから "QNonStop+" トークンの有無を確認し、
+    /// 無ければ末尾へ補ってから応答する(Arcavirt-580)。
+    /// </summary>
+    private static Parser<byte, IDispatchedCommand> BuiltInSupported(ExecutionCoordinator coordinator, Action<SupportedCommand, ResponseWriter<SyncResponse>>? userHandler) {
+        return WrapSync(Commands.Supported, (cmd, res) => {
+            if (userHandler is null) {
+                res.Text("QNonStop+"u8);
+                return;
+            }
+            var scratch = new ArrayBufferWriter<byte>();
+            userHandler(cmd, new ResponseWriter<SyncResponse>(scratch, coordinator.DetailedErrors));
+            ReadOnlySpan<byte> userText = scratch.WrittenSpan;
+            if (userText.Length == 0) {
+                res.Text("QNonStop+"u8);
+                return;
+            }
+            if (ContainsFeatureToken(userText, "QNonStop+"u8)) {
+                res.Text(userText);
+                return;
+            }
+            // userTextが既に ';' で終わっている場合は区切りを重ねない
+            // (例: "multiprocess+;" + "QNonStop+" であって
+            // "multiprocess+;;QNonStop+" にはしない)。
+            bool needsSeparator = userText[^1] != (byte)';';
+            byte[] combined = new byte[userText.Length + (needsSeparator ? 1 : 0) + "QNonStop+"u8.Length];
+            userText.CopyTo(combined);
+            int tail = userText.Length;
+            if (needsSeparator) {
+                combined[tail] = (byte)';';
+                tail += 1;
+            }
+            "QNonStop+"u8.CopyTo(combined.AsSpan(tail));
+            res.Text(combined);
+        });
+    }
+
+    /// <summary>
+    /// ';' 区切りの機能一覧テキストの中に token と完全一致するトークンが
+    /// あるかを判定する(部分文字列一致による誤検出を避ける)。末尾が ';'
+    /// で終わる入力(例: "multiprocess+;")でも空トークンをスキップする
+    /// ため誤って二重の ';' を生成しない。
+    /// </summary>
+    private static bool ContainsFeatureToken(ReadOnlySpan<byte> text, ReadOnlySpan<byte> token) {
+        int start = 0;
+        for (int i = 0; i <= text.Length; i++) {
+            if (i == text.Length || text[i] == (byte)';') {
+                ReadOnlySpan<byte> candidate = text[start..i];
+                if (candidate.Length > 0 && candidate.SequenceEqual(token)) {
+                    return true;
+                }
+                start = i + 1;
+            }
+        }
+        return false;
     }
 
     private static Parser<byte, IDispatchedCommand> BuiltInSetThread(ExecutionCoordinator coordinator) {
