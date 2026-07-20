@@ -14,6 +14,13 @@ services:
     # (claude code・bd の設定/認証情報や bash history 等がコンテナ再作成後も残る)。
     environment:
       HOME: /home/ubuntu
+    # bd(beads)のDoltリモート接続に使う認証情報等、gitに含めたくない秘匿値を
+    # 注入するための任意ファイル。存在しなくてもエラーにしない(required: false)。
+    # ~/.bashrc等のシェル起動ファイルと違い、docker compose exec -T(非対話)
+    # でも確実に環境変数として渡る。作り方は .env.dolt.example を参照。
+    env_file:
+      - path: ./.env.dolt
+        required: false
     # claude code を対話的に使うため常駐させる。docker attach で入り、
     # detach しても中のプロセスは動き続ける(tty/stdin_open が必須)。
     tty: true
