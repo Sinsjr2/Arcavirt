@@ -138,6 +138,7 @@ ARG DEBUGCOMP_DIR=/opt/renesas/DebugComp/RX
 # libgmp10/libmpfr6/libmpc3 は gcc の cc1 が動的リンクするランタイム
 #   （これが無いと cc1 が libmpc.so.3 を読めずコンパイル不可）。
 # libexpat1 は rx-elf-gdb がターゲット XML 記述の解釈に使う。
+# git は beads(bd)がリポジトリ初期化・actor検出等で内部的に呼び出すため必要。
 RUN apt-get update && apt-get install -y --no-install-recommends \
         cmake \
         ninja-build \
@@ -147,6 +148,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libexpat1 \
         curl ca-certificates \
         xz-utils unzip \
+        git \
     && rm -rf /var/lib/apt/lists/*
 
 # .NET 10 SDK: gdb_mi_inspect.cs / gdb_inspect_judge.cs をシェバン
