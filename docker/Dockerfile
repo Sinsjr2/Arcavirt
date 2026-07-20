@@ -229,6 +229,11 @@ COPY gdb_inspect_judge.cs /usr/local/bin/gdb_inspect_judge.cs
 COPY run-inspection.sh  /usr/local/bin/run-inspection.sh
 RUN chmod +x /usr/local/bin/e2-server-gdb.sh /usr/local/bin/run-inspection.sh /usr/local/bin/gdb_inspect_judge.cs /usr/local/bin/gdb_mi_inspect.cs
 
+# beads(bd) — issueトラッカー。root権限で /usr/local/bin へインストールする。
+# bd は claude code と違い自己アップデート機能を持たないため、ホームディレクトリの
+# volume(claude_home)配下に置かず、イメージ再ビルドのたびに最新化されるようにする。
+RUN curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
+
 WORKDIR /work
 
 # デフォルトの実行ユーザーを非 root にする(Ubuntu 24.04 同梱の ubuntu = UID 1000)。
@@ -236,3 +241,9 @@ WORKDIR /work
 # /work は通常バインドマウントで覆われるが、マウント無しでも書けるよう所有者を合わせる。
 RUN chown ubuntu:ubuntu /work
 USER ubuntu
+
+# claude code — インストーラーが $HOME/.local/bin 配下に配置し、実行時に
+# 自己アップデートする。docker-compose.yml で /home/ubuntu をvolume化して
+# ここに含めて永続化するため、ubuntu ユーザーとして実行し正しいオーナーで配置する。
+RUN curl -fsSL https://claude.ai/install.sh | bash
+ENV PATH="/home/ubuntu/.local/bin:${PATH}"
