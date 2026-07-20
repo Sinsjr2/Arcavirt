@@ -64,6 +64,51 @@ sudo udevadm control --reload-rules
 sudo udevadm trigger
 ```
 
+# claude code / beads (bd) をコンテナ内で使う
+
+コンテナは常駐方式(`docker compose up -d`)で動作し、`docker attach` で対話的に
+出入りします。`docker compose run --rm` の使い捨て方式(旧`tool/rx-run.sh`)とは異なり、
+コンテナ内のプロセス(claude codeを含む)はデタッチしても動き続けます。
+
+## 起動・接続
+
+``` bash
+# 初回・以降の起動(既に起動していれば何もしない)
+docker compose up -d dev
+
+# コンテナへ入る(衝突しないdetach-keysを指定する)
+docker attach --detach-keys='ctrl-q,ctrl-q' $(docker compose ps -q dev)
+
+# コンテナ内で
+claude
+```
+
+デタッチするには `Ctrl-Q Ctrl-Q` を押す(標準の `Ctrl-P Ctrl-Q` ではない)。中の
+claude codeプロセスは動き続けるので、後で同じ `docker attach` コマンドで戻れる。
+
+## 外部から一発コマンドを実行する
+
+``` bash
+docker compose exec dev <コマンド>
+```
+
+## claude codeの初回ログイン
+
+認証情報は `claude_home` volume(`/home/ubuntu` 相当)に保存され、コンテナの
+再作成(`docker compose down` → `up`含む)後も保持される。ホストの `~/.claude` とは
+別管理のため、コンテナ内で初回のみ改めてログインが必要:
+
+``` bash
+docker attach --detach-keys='ctrl-q,ctrl-q' $(docker compose ps -q dev)
+claude
+> /login
+```
+
+## .beadsの同時利用について
+
+`.beads` はホストとコンテナで共有している(`/work` の一部)。embedded
+Doltにはサーバー調停がないため、**ホストとコンテナで同時に `bd` を使わないこと**。
+
 # 使用ツール
 - vs code
 - .Net 8.0  

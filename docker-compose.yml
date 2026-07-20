@@ -10,13 +10,24 @@ services:
     # id -u / id -g から注入する(手動で docker compose を使う場合は 1000 固定)。
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     # 任意のホスト UID で実行すると passwd エントリが無く HOME が定まらないため固定する。
+    # claude_home volume を /home/ubuntu にマウントするため、HOME もそこに合わせる
+    # (claude code・bd の設定/認証情報や bash history 等がコンテナ再作成後も残る)。
     environment:
-      HOME: /tmp
+      HOME: /home/ubuntu
+    # claude code を対話的に使うため常駐させる。docker attach で入り、
+    # detach しても中のプロセスは動き続ける(tty/stdin_open が必須)。
+    tty: true
+    stdin_open: true
+    restart: unless-stopped
     # E2 Lite（Renesas VID 0x045B）を USB パススルーする。
     # /dev/bus/usb 全体をマウントし USB メジャー番号 189 を許可することで、
     # エミュレータの抜き差し（再列挙）でノード番号が変わっても追従できる。
     volumes:
       - .:/work
+      - claude_home:/home/ubuntu
       - /dev/bus/usb:/dev/bus/usb
     device_cgroup_rules:
       - 'c 189:* rmw'
+
+volumes:
+  claude_home:
