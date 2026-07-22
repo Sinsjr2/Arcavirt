@@ -54,29 +54,29 @@ public record struct ConnectorModel(
 );
 
 public class DelegateCommand<T> : ICommand {
-    private readonly Action<T> _action;
-    private readonly Func<T, bool>? _condition;
+    readonly Action<T> action;
+    readonly Func<T, bool>? condition;
 
     public event EventHandler? CanExecuteChanged;
 
     public DelegateCommand(Action<T> action, Func<T, bool>? executeCondition = default) {
-        _action = action ?? throw new ArgumentNullException(nameof(action));
-        _condition = executeCondition;
+        this.action = action ?? throw new ArgumentNullException(nameof(action));
+        condition = executeCondition;
     }
 
     public bool CanExecute(object? parameter) {
         if (parameter is T value) {
-            return _condition?.Invoke(value) ?? true;
+            return condition?.Invoke(value) ?? true;
         }
 
-        return _condition?.Invoke(default!) ?? true;
+        return condition?.Invoke(default!) ?? true;
     }
 
     public void Execute(object? parameter) {
         if (parameter is T value) {
-            _action(value);
+            action(value);
         } else {
-            _action(default!);
+            action(default!);
         }
     }
 
@@ -315,7 +315,7 @@ public interface IBindableValue<TState, TBinding> : IReadOnlyBindableValue<TStat
 public class WritableValue<TState, TBinding> : INotifyPropertyChanged, IReadOnlyBindableValue<TState, TBinding> {
     readonly WriteNotify<TBinding> writeNotify;
 
-    readonly static PropertyChangedEventArgs ValueProeprty = new(nameof(Value));
+    readonly static PropertyChangedEventArgs valueProeprty = new(nameof(Value));
 
     readonly Func<TState, TBinding> getBindingValue;
 
@@ -328,13 +328,13 @@ public class WritableValue<TState, TBinding> : INotifyPropertyChanged, IReadOnly
 
     public WritableValue(TBinding initial, Func<TState, TBinding> getBindingValue, IEqualityComparer<TBinding>? comparer = null) {
         writeNotify = new(initial, comparer);
-        writeNotify.PropertyChanged += (_, _) => PropertyChanged?.Invoke(this, ValueProeprty);
+        writeNotify.PropertyChanged += (_, _) => PropertyChanged?.Invoke(this, valueProeprty);
         this.getBindingValue = getBindingValue;
     }
 
     public WritableValue(TBinding initial, Func<TState, TBinding> getBindingValue, Func<TBinding, TBinding, bool> isSame) {
         writeNotify = new(initial, isSame);
-        writeNotify.PropertyChanged += (_, _) => PropertyChanged?.Invoke(this, ValueProeprty);
+        writeNotify.PropertyChanged += (_, _) => PropertyChanged?.Invoke(this, valueProeprty);
         this.getBindingValue = getBindingValue;
     }
 
@@ -358,7 +358,7 @@ public class LambdaDispatcher<T> : IDispatcher<T> {
 public class BindableValue<TState, TBinding> : INotifyPropertyChanged, IRender<TState>, IBindableValue<TState, TBinding> {
     readonly NotifyValue<TBinding> notifyValue;
 
-    readonly static PropertyChangedEventArgs ValueProeprty = new(nameof(Value));
+    readonly static PropertyChangedEventArgs valueProeprty = new(nameof(Value));
 
     readonly Func<TState, TBinding> getBindingValue;
 
@@ -379,7 +379,7 @@ public class BindableValue<TState, TBinding> : INotifyPropertyChanged, IRender<T
         IEqualityComparer<TBinding>? comparer = null) {
         this.getBindingValue = getBindingValue;
         notifyValue = new(initial, comparer);
-        notifyValue.PropertyChanged += (_, _) => PropertyChanged?.Invoke(this, ValueProeprty);
+        notifyValue.PropertyChanged += (_, _) => PropertyChanged?.Invoke(this, valueProeprty);
         notifyValue.Setup(new LambdaDispatcher<TBinding>(onChanged));
     }
 
@@ -389,7 +389,7 @@ public class BindableValue<TState, TBinding> : INotifyPropertyChanged, IRender<T
         Func<TBinding, TBinding, bool> isSame) {
         this.getBindingValue = getBindingValue;
         notifyValue = new(initial, isSame);
-        notifyValue.PropertyChanged += (_, _) => PropertyChanged?.Invoke(this, ValueProeprty);
+        notifyValue.PropertyChanged += (_, _) => PropertyChanged?.Invoke(this, valueProeprty);
         notifyValue.Setup(new LambdaDispatcher<TBinding>(onChanged));
     }
 
