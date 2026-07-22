@@ -94,9 +94,11 @@ docker compose exec dev <コマンド>
 
 ## claude codeの初回ログイン
 
-認証情報は `claude_home` volume(`/home/ubuntu` 相当)に保存され、コンテナの
-再作成(`docker compose down` → `up`含む)後も保持される。ホストの `~/.claude` とは
-別管理のため、コンテナ内で初回のみ改めてログインが必要:
+認証情報は `docker/claude_home`(`/home/ubuntu` 相当にバインドマウント)に保存され、
+コンテナの再作成(`docker compose down` → `up`含む)後も保持される。ホストの
+`~/.claude` とは別管理のため、コンテナ内で初回のみ改めてログインが必要。
+`docker/claude_home` はホスト側から通常のディレクトリとして直接参照でき(git管理外)、
+中身の確認やバックアップもホスト側から可能:
 
 ``` bash
 docker attach --detach-keys='ctrl-q,ctrl-q' $(docker compose ps -q dev)

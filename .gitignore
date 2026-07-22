@@ -4,6 +4,10 @@
 # Dolt接続の秘匿情報(.env.dolt.exampleを元に各自作成する)
 /.env.dolt
 
+# コンテナ内 claude code / bd の HOME(認証情報・bash history等)。
+# docker-compose.yml の claude_home バインドマウント先。
+/docker/claude_home
+
 
 # Created by https://www.toptal.com/developers/gitignore/api/csharp
 # Edit at https://www.toptal.com/developers/gitignore?templates=csharp
