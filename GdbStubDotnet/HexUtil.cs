@@ -3,7 +3,7 @@ using System.Text;
 
 namespace GdbStubDotnet;
 
-internal static class HexUtil {
+static class HexUtil {
     public static int NibbleValue(byte c) {
         return c switch {
             >= (byte)'0' and <= (byte)'9' => c - (byte)'0',

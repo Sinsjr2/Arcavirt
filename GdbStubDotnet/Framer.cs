@@ -18,17 +18,17 @@ public readonly record struct FramerEvent(FramerEventKind Kind, byte[]? Payload 
 /// 検証するためのもの)。
 /// </summary>
 public sealed class Framer {
-    private enum State {
+    enum State {
         Idle,
         InPayload,
         InChecksumHigh,
         InChecksumLow,
     }
 
-    private State _state = State.Idle;
-    private readonly List<byte> _payloadBuffer = [];
-    private byte _computedChecksum;
-    private byte _checksumHighNibble;
+    State state = State.Idle;
+    readonly List<byte> payloadBuffer = [];
+    byte computedChecksum;
+    byte checksumHighNibble;
 
     public void ProcessBytes(ReadOnlySpan<byte> chunk, Action<FramerEvent> onEvent) {
         foreach (byte b in chunk) {
@@ -36,13 +36,13 @@ public sealed class Framer {
         }
     }
 
-    private void ProcessByte(byte b, Action<FramerEvent> onEvent) {
-        switch (_state) {
+    void ProcessByte(byte b, Action<FramerEvent> onEvent) {
+        switch (state) {
             case State.Idle:
                 if (b == (byte)'$' || b == (byte)'%') {
-                    _payloadBuffer.Clear();
-                    _computedChecksum = 0;
-                    _state = State.InPayload;
+                    payloadBuffer.Clear();
+                    computedChecksum = 0;
+                    state = State.InPayload;
                 } else if (b == (byte)'+') {
                     onEvent(new FramerEvent(FramerEventKind.Ack));
                 } else if (b == (byte)'-') {
@@ -53,24 +53,24 @@ public sealed class Framer {
 
             case State.InPayload:
                 if (b == (byte)'#') {
-                    _state = State.InChecksumHigh;
+                    state = State.InChecksumHigh;
                 } else {
-                    _payloadBuffer.Add(b);
-                    unchecked { _computedChecksum += b; }
+                    payloadBuffer.Add(b);
+                    unchecked { computedChecksum += b; }
                 }
                 break;
 
             case State.InChecksumHigh:
-                _checksumHighNibble = b;
-                _state = State.InChecksumLow;
+                checksumHighNibble = b;
+                state = State.InChecksumLow;
                 break;
 
             case State.InChecksumLow:
-                int received = (HexUtil.NibbleValue(_checksumHighNibble) << 4) | HexUtil.NibbleValue(b);
-                onEvent(received == _computedChecksum
-                    ? new FramerEvent(FramerEventKind.Packet, _payloadBuffer.ToArray())
+                int received = (HexUtil.NibbleValue(checksumHighNibble) << 4) | HexUtil.NibbleValue(b);
+                onEvent(received == computedChecksum
+                    ? new FramerEvent(FramerEventKind.Packet, payloadBuffer.ToArray())
                     : new FramerEvent(FramerEventKind.ChecksumMismatch));
-                _state = State.Idle;
+                state = State.Idle;
                 break;
         }
     }
@@ -87,7 +87,7 @@ public sealed class Framer {
         return EncodeFramed((byte)'%', payload);
     }
 
-    private static byte[] EncodeFramed(byte marker, ReadOnlySpan<byte> payload) {
+    static byte[] EncodeFramed(byte marker, ReadOnlySpan<byte> payload) {
         byte checksum = 0;
         foreach (byte b in payload) {
             unchecked { checksum += b; }

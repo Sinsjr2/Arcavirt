@@ -40,25 +40,25 @@ namespace GdbStubDotnet;
 /// DetailedErrors/OnError は §7.2/§7.3(Arcavirt-o3e.18)のエラー処理設定を
 /// 保持する(Build()時に確定する読み取り専用設定)。
 /// </summary>
-internal sealed class ExecutionCoordinator {
-    private readonly ChannelWriter<ExecOutcome> _writer;
-    private readonly NotificationQueue _notificationQueue;
-    private readonly ConcurrentDictionary<(int Token, ThreadId Thread), byte> _reportedThreadsInEpisode = new();
-    private readonly ConcurrentDictionary<int, byte> _activeTokens = new();
-    private int _tokenSeed;
-    private volatile ResumeMode _mode;
-    private ThreadId _currentThread;
+sealed class ExecutionCoordinator {
+    readonly ChannelWriter<ExecOutcome> writer;
+    readonly NotificationQueue notificationQueue;
+    readonly ConcurrentDictionary<(int Token, ThreadId Thread), byte> reportedThreadsInEpisode = new();
+    readonly ConcurrentDictionary<int, byte> activeTokens = new();
+    int tokenSeed;
+    volatile ResumeMode mode;
+    ThreadId currentThread;
 
     internal ExecutionCoordinator(ChannelWriter<ExecOutcome> writer, NotificationQueue notificationQueue, bool detailedErrors, Action<StubFault>? onError) {
-        _writer = writer;
-        _notificationQueue = notificationQueue;
+        this.writer = writer;
+        this.notificationQueue = notificationQueue;
         DetailedErrors = detailedErrors;
         OnError = onError;
     }
 
-    internal ResumeMode Mode => _mode;
+    internal ResumeMode Mode => mode;
 
-    internal ThreadId CurrentThread => _currentThread;
+    internal ThreadId CurrentThread => currentThread;
 
     /// <summary>
     /// §7.3。true でハンドラエラーを E.&lt;text&gt;(人間可読)、false
@@ -76,7 +76,7 @@ internal sealed class ExecutionCoordinator {
     /// QNonStop:1/0 受信時に呼ばれ、以後の OnReportStop の配送先を切り替える。
     /// </summary>
     internal void SetMode(ResumeMode mode) {
-        _mode = mode;
+        this.mode = mode;
     }
 
     /// <summary>
@@ -84,7 +84,7 @@ internal sealed class ExecutionCoordinator {
     /// Thread フィールドへ自動的に充填される現在スレッドを更新する(§6.6)。
     /// </summary>
     internal void SetCurrentThread(ThreadId thread) {
-        _currentThread = thread;
+        currentThread = thread;
     }
 
     /// <summary>
@@ -98,11 +98,11 @@ internal sealed class ExecutionCoordinator {
     /// (Arcavirt-cwm)、クリアせず単純に token を追加する。
     /// </summary>
     internal ExecutionResponder BeginResume() {
-        int token = Interlocked.Increment(ref _tokenSeed);
-        if (_mode != ResumeMode.NonStop) {
-            _activeTokens.Clear();
+        int token = Interlocked.Increment(ref tokenSeed);
+        if (mode != ResumeMode.NonStop) {
+            activeTokens.Clear();
         }
-        _activeTokens.TryAdd(token, 0);
+        activeTokens.TryAdd(token, 0);
         return new ExecutionResponder(this, token);
     }
 
@@ -114,8 +114,8 @@ internal sealed class ExecutionCoordinator {
     /// 共通判定であり、本コンポーネントの不変条件。簡略化・省略しては
     /// ならない。
     /// </summary>
-    private bool TryConsumeToken(int token) {
-        return _activeTokens.TryRemove(token, out _);
+    bool TryConsumeToken(int token) {
+        return activeTokens.TryRemove(token, out _);
     }
 
     /// <summary>
@@ -127,7 +127,7 @@ internal sealed class ExecutionCoordinator {
     /// Reject が起きたかどうかだけを正確に反映する)。
     /// </summary>
     internal bool IsPending(int token) {
-        return _activeTokens.ContainsKey(token);
+        return activeTokens.ContainsKey(token);
     }
 
     /// <summary>
@@ -137,7 +137,7 @@ internal sealed class ExecutionCoordinator {
     /// 安全)。
     /// </summary>
     internal void AbortResume(int token) {
-        _activeTokens.TryRemove(token, out _);
+        activeTokens.TryRemove(token, out _);
     }
 
     /// <summary>
@@ -159,19 +159,19 @@ internal sealed class ExecutionCoordinator {
     /// この窓が存在した)。
     /// </summary>
     internal void OnReportStop(int token, in StopEvent stop) {
-        if (_mode == ResumeMode.NonStop) {
-            if (!_activeTokens.ContainsKey(token)) {
+        if (mode == ResumeMode.NonStop) {
+            if (!activeTokens.ContainsKey(token)) {
                 return;
             }
-            if (_reportedThreadsInEpisode.TryAdd((token, stop.Thread), 0)) {
-                _notificationQueue.Enqueue(new StopNotification(stop));
+            if (reportedThreadsInEpisode.TryAdd((token, stop.Thread), 0)) {
+                notificationQueue.Enqueue(new StopNotification(stop));
             }
             return;
         }
         if (!TryConsumeToken(token)) {
             return;
         }
-        _writer.TryWrite(new ExecOutcome(false, stop, default));
+        writer.TryWrite(new ExecOutcome(false, stop, default));
     }
 
     /// <summary>
@@ -183,6 +183,6 @@ internal sealed class ExecutionCoordinator {
         if (!TryConsumeToken(token)) {
             return;
         }
-        _writer.TryWrite(new ExecOutcome(true, default, error));
+        writer.TryWrite(new ExecOutcome(true, default, error));
     }
 }

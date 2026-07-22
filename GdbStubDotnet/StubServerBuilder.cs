@@ -5,16 +5,16 @@ using Pidgin;
 namespace GdbStubDotnet;
 
 public sealed class StubServerBuilder {
-    private readonly List<Parser<byte, IDispatchedCommand>> _entries = [];
-    private ITransport? _transport;
-    private Action? _onInterrupt;
-    private Action? _onDisconnect;
-    private Action<StubFault>? _onError;
-    private Action<SupportedCommand, ResponseWriter<SyncResponse>>? _supportedHandler;
-    private bool _detailedErrors;
+    readonly List<Parser<byte, IDispatchedCommand>> entries = [];
+    ITransport? transport;
+    Action? onInterrupt;
+    Action? onDisconnect;
+    Action<StubFault>? onError;
+    Action<SupportedCommand, ResponseWriter<SyncResponse>>? supportedHandler;
+    bool detailedErrors;
 
     public StubServerBuilder Map<TCmd>(Parser<byte, TCmd> parser, Action<TCmd, ResponseWriter<SyncResponse>> handler) {
-        _entries.Add(WrapSync(parser, handler));
+        entries.Add(WrapSync(parser, handler));
         return this;
     }
 
@@ -30,12 +30,12 @@ public sealed class StubServerBuilder {
     /// 他のコマンドのような単純な先勝ち上書きにはしない)。
     /// </summary>
     public StubServerBuilder MapSupported(Action<SupportedCommand, ResponseWriter<SyncResponse>> handler) {
-        _supportedHandler = handler;
+        supportedHandler = handler;
         return this;
     }
 
     public StubServerBuilder Map<TCmd>(Parser<byte, TCmd> parser, Action<TCmd, ExecutionResponder> handler) {
-        _entries.Add(Parser.Try(parser.Before(Parser<byte>.End)).Select(cmd => (IDispatchedCommand)new ExecDispatchedCommand<TCmd>(cmd, handler)));
+        entries.Add(Parser.Try(parser.Before(Parser<byte>.End)).Select(cmd => (IDispatchedCommand)new ExecDispatchedCommand<TCmd>(cmd, handler)));
         return this;
     }
 
@@ -45,7 +45,7 @@ public sealed class StubServerBuilder {
     /// stop reply(SIGINT 相当)を返す想定(利用者側の resume 実装が対応する)。
     /// </summary>
     public StubServerBuilder OnInterrupt(Action handler) {
-        _onInterrupt = handler;
+        onInterrupt = handler;
         return this;
     }
 
@@ -54,7 +54,7 @@ public sealed class StubServerBuilder {
     /// D(detach)コマンドとは別の経路。
     /// </summary>
     public StubServerBuilder OnDisconnect(Action handler) {
-        _onDisconnect = handler;
+        onDisconnect = handler;
         return this;
     }
 
@@ -64,7 +64,7 @@ public sealed class StubServerBuilder {
     /// される(ILogger依存なし)。
     /// </summary>
     public StubServerBuilder OnError(Action<StubFault> handler) {
-        _onError = handler;
+        onError = handler;
         return this;
     }
 
@@ -73,23 +73,23 @@ public sealed class StubServerBuilder {
     /// (人間可読)として送出される。既定は false(E NN のみ)。
     /// </summary>
     public StubServerBuilder EnableDetailedErrors(bool on = true) {
-        _detailedErrors = on;
+        detailedErrors = on;
         return this;
     }
 
     public StubServerBuilder UseTransport(ITransport transport) {
-        _transport = transport;
+        this.transport = transport;
         return this;
     }
 
     public StubServer Build() {
-        if (_transport is null) {
+        if (transport is null) {
             throw new InvalidOperationException("UseTransport が呼ばれていません。");
         }
         var execChannel = Channel.CreateBounded<ExecOutcome>(1);
         var notifyChannel = Channel.CreateBounded<INotification>(1);
         var notificationQueue = new NotificationQueue(notifyChannel.Writer);
-        var coordinator = new ExecutionCoordinator(execChannel.Writer, notificationQueue, _detailedErrors, _onError);
+        var coordinator = new ExecutionCoordinator(execChannel.Writer, notificationQueue, detailedErrors, onError);
 
         // 組込み既定コマンド(QNonStop/vStopped/qSupportedへのQNonStop+広告/
         // H(SetThread))は利用者の Map 登録より後ろに追加する。Dispatcher の
@@ -99,14 +99,14 @@ public sealed class StubServerBuilder {
         // QNonStop/vStopped はプロトコル機構そのもの(利用者が独自実装する
         // 対象ではない)であり、上書きされる想定はない。
         List<Parser<byte, IDispatchedCommand>> allEntries = [
-            .. _entries,
+            .. entries,
             BuiltInQNonStop(coordinator),
             BuiltInVStopped(notificationQueue),
-            BuiltInSupported(coordinator, _supportedHandler),
+            BuiltInSupported(coordinator, supportedHandler),
             BuiltInSetThread(coordinator),
         ];
         var dispatcher = new Dispatcher(allEntries, coordinator);
-        return new StubServer(_transport, dispatcher, execChannel.Reader, notifyChannel.Reader, coordinator, _onDisconnect, _onInterrupt);
+        return new StubServer(transport, dispatcher, execChannel.Reader, notifyChannel.Reader, coordinator, onDisconnect, onInterrupt);
     }
 
     /// <summary>
@@ -115,29 +115,29 @@ public sealed class StubServerBuilder {
     /// qSupported/H)の登録が同じ包み方(Try+End+SyncDispatchedCommand化)を
     /// 必要とするため、ここへ一本化している。
     /// </summary>
-    private static Parser<byte, IDispatchedCommand> WrapSync<TCmd>(Parser<byte, TCmd> parser, Action<TCmd, ResponseWriter<SyncResponse>> handler) {
+    static Parser<byte, IDispatchedCommand> WrapSync<TCmd>(Parser<byte, TCmd> parser, Action<TCmd, ResponseWriter<SyncResponse>> handler) {
         return Parser.Try(parser.Before(Parser<byte>.End)).Select(cmd => (IDispatchedCommand)new SyncDispatchedCommand<TCmd>(cmd, handler));
     }
 
-    private readonly record struct QNonStopCommand(bool Enable);
+    readonly record struct QNonStopCommand(bool Enable);
 
-    private static readonly Parser<byte, QNonStopCommand> QNonStopWire =
+    static readonly Parser<byte, QNonStopCommand> qNonStopWire =
         Parser<byte>.Sequence("QNonStop:"u8.ToArray())
             .Then(
                 Parser<byte>.Token((byte)'0').ThenReturn(false)
                     .Or(Parser<byte>.Token((byte)'1').ThenReturn(true)),
                 static (_, enable) => new QNonStopCommand(enable));
 
-    private static Parser<byte, IDispatchedCommand> BuiltInQNonStop(ExecutionCoordinator coordinator) {
-        return WrapSync(QNonStopWire, (c, res) => {
+    static Parser<byte, IDispatchedCommand> BuiltInQNonStop(ExecutionCoordinator coordinator) {
+        return WrapSync(qNonStopWire, (c, res) => {
             coordinator.SetMode(c.Enable ? ResumeMode.NonStop : ResumeMode.AllStop);
             res.Ok();
         });
     }
 
-    private readonly record struct VStoppedCommand;
+    readonly record struct VStoppedCommand;
 
-    private static Parser<byte, IDispatchedCommand> BuiltInVStopped(NotificationQueue notificationQueue) {
+    static Parser<byte, IDispatchedCommand> BuiltInVStopped(NotificationQueue notificationQueue) {
         return WrapSync(Parser<byte>.Sequence("vStopped"u8.ToArray()).ThenReturn(default(VStoppedCommand)), (_, res) => {
             INotification? next = notificationQueue.DrainVStopped();
             if (next is null) {
@@ -156,7 +156,7 @@ public sealed class StubServerBuilder {
     /// バッファへ書かせてから "QNonStop+" トークンの有無を確認し、
     /// 無ければ末尾へ補ってから応答する(Arcavirt-580)。
     /// </summary>
-    private static Parser<byte, IDispatchedCommand> BuiltInSupported(ExecutionCoordinator coordinator, Action<SupportedCommand, ResponseWriter<SyncResponse>>? userHandler) {
+    static Parser<byte, IDispatchedCommand> BuiltInSupported(ExecutionCoordinator coordinator, Action<SupportedCommand, ResponseWriter<SyncResponse>>? userHandler) {
         return WrapSync(Commands.Supported, (cmd, res) => {
             if (userHandler is null) {
                 res.Text("QNonStop+"u8);
@@ -195,7 +195,7 @@ public sealed class StubServerBuilder {
     /// で終わる入力(例: "multiprocess+;")でも空トークンをスキップする
     /// ため誤って二重の ';' を生成しない。
     /// </summary>
-    private static bool ContainsFeatureToken(ReadOnlySpan<byte> text, ReadOnlySpan<byte> token) {
+    static bool ContainsFeatureToken(ReadOnlySpan<byte> text, ReadOnlySpan<byte> token) {
         int start = 0;
         for (int i = 0; i <= text.Length; i++) {
             if (i == text.Length || text[i] == (byte)';') {
@@ -209,7 +209,7 @@ public sealed class StubServerBuilder {
         return false;
     }
 
-    private static Parser<byte, IDispatchedCommand> BuiltInSetThread(ExecutionCoordinator coordinator) {
+    static Parser<byte, IDispatchedCommand> BuiltInSetThread(ExecutionCoordinator coordinator) {
         return WrapSync(Commands.SetThread, (c, res) => {
             coordinator.SetCurrentThread(c.Thread);
             res.Ok();

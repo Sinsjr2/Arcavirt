@@ -1,6 +1,6 @@
 namespace GdbStubDotnet;
 
-internal readonly record struct ExecOutcome(bool IsReject, StopEvent Stop, RspError RejectError);
+readonly record struct ExecOutcome(bool IsReject, StopEvent Stop, RspError RejectError);
 
 /// <summary>
 /// 実行コマンドの長命・スレッドセーフな応答器。ターゲットスレッドから
@@ -9,12 +9,12 @@ internal readonly record struct ExecOutcome(bool IsReject, StopEvent Stop, RspEr
 /// と共有チャネルへの書込は ExecutionCoordinator 側が行う。
 /// </summary>
 public sealed class ExecutionResponder {
-    private readonly ExecutionCoordinator _coordinator;
-    private readonly int _token;
+    readonly ExecutionCoordinator coordinator;
+    readonly int token;
 
     internal ExecutionResponder(ExecutionCoordinator coordinator, int token) {
-        _coordinator = coordinator;
-        _token = token;
+        this.coordinator = coordinator;
+        this.token = token;
     }
 
     /// <summary>
@@ -22,13 +22,13 @@ public sealed class ExecutionResponder {
     /// 例外発生時の resume 中断判定・non-stop即時OK可否判定に用いる
     /// (internal専用、公開APIではない)。
     /// </summary>
-    internal int Token => _token;
+    internal int Token => token;
 
     public void ReportStop(in StopEvent stop) {
-        _coordinator.OnReportStop(_token, in stop);
+        coordinator.OnReportStop(token, in stop);
     }
 
     public void Reject(RspError error) {
-        _coordinator.OnReject(_token, error);
+        coordinator.OnReject(token, error);
     }
 }

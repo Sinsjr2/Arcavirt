@@ -9,7 +9,7 @@ namespace GdbStubDotnet;
 /// 非ジェネリックインタフェースとし、呼び出し側でTCmdへキャストし直す
 /// (TCmdは制約なしのため、自己参照ジェネリック制約は形成できない)。
 /// </summary>
-internal interface IThreadScoped {
+interface IThreadScoped {
     ThreadId Thread { get; }
     object WithThread(ThreadId thread);
 }
@@ -152,17 +152,17 @@ public static class Commands {
     /// 裸の tid のみの形式では Pid=0(未指定)として扱う。SetThread(H)からも
     /// 共用する。
     /// </summary>
-    private static readonly Parser<byte, int> ThreadIdComponent =
+    static readonly Parser<byte, int> threadIdComponent =
         Parser.Try(Parser<byte>.Sequence("-1"u8.ToArray()).ThenReturn(-1))
             .Or(HexParsers.HexULong.Select(static v => (int)v));
 
-    private static readonly Parser<byte, ThreadId> ThreadIdRef =
+    static readonly Parser<byte, ThreadId> threadIdRef =
         Parser.Try(
             Parser<byte>.Token((byte)'p')
-                .Then(ThreadIdComponent)
+                .Then(threadIdComponent)
                 .Before(Parser<byte>.Token((byte)'.'))
-                .Then(ThreadIdComponent, static (pid, tid) => new ThreadId(pid, tid)))
-            .Or(ThreadIdComponent.Select(static tid => new ThreadId(0, tid)));
+                .Then(threadIdComponent, static (pid, tid) => new ThreadId(pid, tid)))
+            .Or(threadIdComponent.Select(static tid => new ThreadId(0, tid)));
 
     /// <summary>
     /// vCont の1アクション分("C" sig 以外は signal は0固定)。
@@ -170,24 +170,24 @@ public static class Commands {
     /// 未対応(仕様確定済みDTOの範囲外)。該当パケットはこのパーサ全体が
     /// 不一致になり、FW既定の空応答(§5.1)にフォールバックする。
     /// </summary>
-    private static readonly Parser<byte, (ActionKind Kind, int Signal)> VContActionSpec =
+    static readonly Parser<byte, (ActionKind Kind, int Signal)> vContActionSpec =
         Parser.OneOf(
             Parser<byte>.Token((byte)'C').Then(HexParsers.HexULong, static (_, sig) => (ActionKind.Signal, (int)sig)),
             Parser<byte>.Token((byte)'c').ThenReturn((ActionKind.Continue, 0)),
             Parser<byte>.Token((byte)'s').ThenReturn((ActionKind.Step, 0)),
             Parser<byte>.Token((byte)'t').ThenReturn((ActionKind.Stop, 0)));
 
-    private static readonly Parser<byte, ResumeAction> VContSegment =
+    static readonly Parser<byte, ResumeAction> vContSegment =
         Parser<byte>.Token((byte)';')
-            .Then(VContActionSpec)
+            .Then(vContActionSpec)
             .Then(
-                Parser<byte>.Token((byte)':').Then(ThreadIdRef).Select(static t => (ThreadId?)t)
+                Parser<byte>.Token((byte)':').Then(threadIdRef).Select(static t => (ThreadId?)t)
                     .Or(Parser<byte>.Return((ThreadId?)null)),
                 static (spec, threadOpt) => new ResumeAction(threadOpt ?? default, spec.Kind, spec.Signal));
 
     public static readonly Parser<byte, VContCommand> VCont =
         Parser<byte>.Sequence("vCont"u8.ToArray())
-            .Then(VContSegment.AtLeastOnce(), static (_, actions) => new VContCommand(actions.ToArray()));
+            .Then(vContSegment.AtLeastOnce(), static (_, actions) => new VContCommand(actions.ToArray()));
 
     public static readonly Parser<byte, VContQueryCommand> VContQuery =
         Parser<byte>.Sequence("vCont?"u8.ToArray()).ThenReturn(new VContQueryCommand());
@@ -201,7 +201,7 @@ public static class Commands {
     public static readonly Parser<byte, SetThreadCommand> SetThread =
         Parser<byte>.Token((byte)'H')
             .Then(Parser<byte>.Token((byte)'g').Or(Parser<byte>.Token((byte)'c')))
-            .Then(ThreadIdRef, static (op, thread) => new SetThreadCommand((char)op, thread));
+            .Then(threadIdRef, static (op, thread) => new SetThreadCommand((char)op, thread));
 
     /// <summary>
     /// X&lt;addr&gt;,&lt;len&gt;:&lt;binary-data&gt; (§6.3)。データ部は
@@ -217,7 +217,7 @@ public static class Commands {
             .Before(Parser<byte>.Token((byte)':'))
             .Then(Parser<byte>.Any.Many(), static (t, raw) => new WriteMemoryCommand(t.addr, (int)t.len, DecodeEscapedBytes(raw), default));
 
-    private static byte[] DecodeEscapedBytes(IEnumerable<byte> raw) {
+    static byte[] DecodeEscapedBytes(IEnumerable<byte> raw) {
         List<byte> result = [];
         bool escapeNext = false;
         foreach (byte b in raw) {
@@ -233,7 +233,7 @@ public static class Commands {
         return result.ToArray();
     }
 
-    private static BpType ParseBpType(ulong value) {
+    static BpType ParseBpType(ulong value) {
         return value switch {
             0 => BpType.Soft,
             1 => BpType.Hard,

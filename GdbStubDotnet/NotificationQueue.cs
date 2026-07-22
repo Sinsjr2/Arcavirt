@@ -9,11 +9,11 @@ namespace GdbStubDotnet;
 /// ("Stop:"等)の付与は呼び出し側(StubServer の即時送出/vStoppedハンドラ)の
 /// 責務であり、WriteTo 自体には含めない。
 /// </summary>
-internal interface INotification {
+interface INotification {
     void WriteTo(IBufferWriter<byte> writer);
 }
 
-internal readonly record struct StopNotification(StopEvent Stop) : INotification {
+readonly record struct StopNotification(StopEvent Stop) : INotification {
     public void WriteTo(IBufferWriter<byte> writer) {
         HexUtil.WriteStopReplyText(writer, Stop.SignalOrExit, Stop.Thread);
     }
@@ -30,14 +30,14 @@ internal readonly record struct StopNotification(StopEvent Stop) : INotification
 /// タイミング依存のすり抜け(Arcavirt-o3e.10.3で既知の限界として
 /// 保留していた極小窓)を構造的に排除する(Arcavirt-o3e.10.4で解消)。
 /// </summary>
-internal sealed class NotificationQueue {
-    private readonly object _gate = new();
-    private readonly Queue<INotification> _pending = new();
-    private readonly ChannelWriter<INotification> _pushWriter;
-    private bool _inFlight;
+sealed class NotificationQueue {
+    readonly object gate = new();
+    readonly Queue<INotification> pending = new();
+    readonly ChannelWriter<INotification> pushWriter;
+    bool inFlight;
 
     internal NotificationQueue(ChannelWriter<INotification> pushWriter) {
-        _pushWriter = pushWriter;
+        this.pushWriter = pushWriter;
     }
 
     /// <summary>
@@ -47,16 +47,16 @@ internal sealed class NotificationQueue {
     /// </summary>
     internal void Enqueue(INotification notification) {
         INotification? toPush = null;
-        lock (_gate) {
-            if (_inFlight) {
-                _pending.Enqueue(notification);
+        lock (gate) {
+            if (inFlight) {
+                pending.Enqueue(notification);
             } else {
-                _inFlight = true;
+                inFlight = true;
                 toPush = notification;
             }
         }
         if (toPush is not null) {
-            _pushWriter.TryWrite(toPush);
+            pushWriter.TryWrite(toPush);
         }
     }
 
@@ -66,11 +66,11 @@ internal sealed class NotificationQueue {
     /// (呼び出し側が OK を書く、§4.5の内容ack完了)。
     /// </summary>
     internal INotification? DrainVStopped() {
-        lock (_gate) {
-            if (_pending.TryDequeue(out INotification? next)) {
+        lock (gate) {
+            if (pending.TryDequeue(out INotification? next)) {
                 return next;
             }
-            _inFlight = false;
+            inFlight = false;
             return null;
         }
     }

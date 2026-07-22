@@ -4,34 +4,34 @@ using System.Threading.Channels;
 namespace GdbStubDotnet;
 
 public sealed class StubServer : IDisposable {
-    private static readonly byte[] AckBytes = [(byte)'+'];
-    private static readonly byte[] NakBytes = [(byte)'-'];
-    private static readonly byte[] VCtrlCPayload = "vCtrlC"u8.ToArray();
-    private const byte InterruptByte = 0x03;
+    static readonly byte[] ackBytes = [(byte)'+'];
+    static readonly byte[] nakBytes = [(byte)'-'];
+    static readonly byte[] vCtrlCPayload = "vCtrlC"u8.ToArray();
+    const byte INTERRUPT_BYTE = 0x03;
 
-    private readonly ITransport _transport;
-    private readonly Dispatcher _dispatcher;
-    private readonly ChannelReader<ExecOutcome> _execReader;
-    private readonly ChannelReader<INotification> _notifyReader;
-    private readonly ExecutionCoordinator _coordinator;
-    private readonly Framer _framer = new();
-    private readonly Action? _onDisconnect;
-    private readonly Action? _onInterrupt;
-    private Task? _loopTask;
-    private volatile bool _stopping;
+    readonly ITransport transport;
+    readonly Dispatcher dispatcher;
+    readonly ChannelReader<ExecOutcome> execReader;
+    readonly ChannelReader<INotification> notifyReader;
+    readonly ExecutionCoordinator coordinator;
+    readonly Framer framer = new();
+    readonly Action? onDisconnect;
+    readonly Action? onInterrupt;
+    Task? loopTask;
+    volatile bool stopping;
 
     internal StubServer(ITransport transport, Dispatcher dispatcher, ChannelReader<ExecOutcome> execReader, ChannelReader<INotification> notifyReader, ExecutionCoordinator coordinator, Action? onDisconnect, Action? onInterrupt) {
-        _transport = transport;
-        _dispatcher = dispatcher;
-        _execReader = execReader;
-        _notifyReader = notifyReader;
-        _coordinator = coordinator;
-        _onDisconnect = onDisconnect;
-        _onInterrupt = onInterrupt;
+        this.transport = transport;
+        this.dispatcher = dispatcher;
+        this.execReader = execReader;
+        this.notifyReader = notifyReader;
+        this.coordinator = coordinator;
+        this.onDisconnect = onDisconnect;
+        this.onInterrupt = onInterrupt;
     }
 
     public void Start() {
-        _loopTask = RunLoopAsync();
+        loopTask = RunLoopAsync();
     }
 
     /// <summary>
@@ -52,16 +52,16 @@ public sealed class StubServer : IDisposable {
     /// 閉じたことによる例外・0バイト読み取りは、リモート切断ではなく
     /// 自発的終了なので _stopping フラグで判別して OnDisconnect を呼ばない。
     /// </summary>
-    private async Task RunLoopAsync() {
+    async Task RunLoopAsync() {
         byte[] buffer = new byte[4096];
         Task<int>? readTask = null;
         Task<ExecOutcome>? execTask = null;
         Task<INotification>? notifyTask = null;
 
         while (true) {
-            readTask ??= _transport.ReadAsync(buffer).AsTask();
-            execTask ??= _execReader.ReadAsync().AsTask();
-            notifyTask ??= _notifyReader.ReadAsync().AsTask();
+            readTask ??= transport.ReadAsync(buffer).AsTask();
+            execTask ??= execReader.ReadAsync().AsTask();
+            notifyTask ??= notifyReader.ReadAsync().AsTask();
 
             await Task.WhenAny(readTask, execTask, notifyTask);
 
@@ -69,9 +69,9 @@ public sealed class StubServer : IDisposable {
                 ExecOutcome outcome = await execTask;
                 execTask = null;
                 byte[] replyPayload = outcome.IsReject
-                    ? HexUtil.EncodeError(outcome.RejectError, _coordinator.DetailedErrors)
+                    ? HexUtil.EncodeError(outcome.RejectError, coordinator.DetailedErrors)
                     : EncodeStopReply(outcome.Stop);
-                await _transport.WriteAsync(Framer.Encode(replyPayload));
+                await transport.WriteAsync(Framer.Encode(replyPayload));
                 continue;
             }
 
@@ -83,7 +83,7 @@ public sealed class StubServer : IDisposable {
                 // プレフィックスを一般化する(Arcavirt-o3e.10.3のスコープ外)。
                 notifyBuffer.Write("Stop:"u8);
                 notification.WriteTo(notifyBuffer);
-                await _transport.WriteAsync(Framer.EncodeNotification(notifyBuffer.WrittenSpan));
+                await transport.WriteAsync(Framer.EncodeNotification(notifyBuffer.WrittenSpan));
                 continue;
             }
 
@@ -94,15 +94,15 @@ public sealed class StubServer : IDisposable {
                 // Stop()/Dispose() が自ら transport を閉じたことで発生した
                 // 例外は、リモート切断ではなく自発的な終了なので
                 // OnDisconnect の対象外とする。
-                if (!_stopping) {
-                    _onDisconnect?.Invoke();
+                if (!stopping) {
+                    onDisconnect?.Invoke();
                 }
                 return;
             }
             readTask = null;
             if (n == 0) {
-                if (!_stopping) {
-                    _onDisconnect?.Invoke();
+                if (!stopping) {
+                    onDisconnect?.Invoke();
                 }
                 return;
             }
@@ -111,7 +111,7 @@ public sealed class StubServer : IDisposable {
             ProcessChunk(buffer.AsSpan(0, n), immediateWrites);
 
             foreach (byte[] write in immediateWrites) {
-                await _transport.WriteAsync(write);
+                await transport.WriteAsync(write);
             }
         }
     }
@@ -121,16 +121,16 @@ public sealed class StubServer : IDisposable {
     /// Framer へ渡す。0x03 はパケットの一部ではないため、チャンク中のどこに
     /// 現れても即座に割込ハンドラを呼ぶ(§4.6)。
     /// </summary>
-    private void ProcessChunk(ReadOnlySpan<byte> chunk, List<byte[]> immediateWrites) {
+    void ProcessChunk(ReadOnlySpan<byte> chunk, List<byte[]> immediateWrites) {
         int start = 0;
         for (int i = 0; i < chunk.Length; i++) {
-            if (chunk[i] != InterruptByte) {
+            if (chunk[i] != INTERRUPT_BYTE) {
                 continue;
             }
             if (i > start) {
                 ProcessFramerChunk(chunk[start..i], immediateWrites);
             }
-            _onInterrupt?.Invoke();
+            onInterrupt?.Invoke();
             start = i + 1;
         }
         if (start < chunk.Length) {
@@ -138,18 +138,18 @@ public sealed class StubServer : IDisposable {
         }
     }
 
-    private void ProcessFramerChunk(ReadOnlySpan<byte> chunk, List<byte[]> immediateWrites) {
-        _framer.ProcessBytes(chunk, evt => {
+    void ProcessFramerChunk(ReadOnlySpan<byte> chunk, List<byte[]> immediateWrites) {
+        framer.ProcessBytes(chunk, evt => {
             switch (evt.Kind) {
                 case FramerEventKind.Packet:
-                    immediateWrites.Add(AckBytes);
-                    if (evt.Payload!.AsSpan().SequenceEqual(VCtrlCPayload)) {
+                    immediateWrites.Add(ackBytes);
+                    if (evt.Payload!.AsSpan().SequenceEqual(vCtrlCPayload)) {
                         // vCtrlC は内部で interrupt 経路へ集約する(§4.6)。
                         // 直接の内容応答は返さない(停止時に exec 側が stop reply を返す)。
-                        _onInterrupt?.Invoke();
+                        onInterrupt?.Invoke();
                         break;
                     }
-                    RouteResult? routed = _dispatcher.Route(evt.Payload!);
+                    RouteResult? routed = dispatcher.Route(evt.Payload!);
                     if (routed is null) {
                         immediateWrites.Add(Framer.Encode(ReadOnlySpan<byte>.Empty));
                     } else if (!routed.Value.ExecStarted) {
@@ -158,21 +158,21 @@ public sealed class StubServer : IDisposable {
                     // ExecStarted の場合は共有チャネル経由で RunLoopAsync が後刻応答する。
                     break;
                 case FramerEventKind.ChecksumMismatch:
-                    immediateWrites.Add(NakBytes);
+                    immediateWrites.Add(nakBytes);
                     break;
             }
         });
     }
 
-    private static byte[] EncodeStopReply(StopEvent stop) {
+    static byte[] EncodeStopReply(StopEvent stop) {
         var buffer = new ArrayBufferWriter<byte>(3);
         HexUtil.WriteStopReplyText(buffer, stop.SignalOrExit, stop.Thread);
         return buffer.WrittenSpan.ToArray();
     }
 
     public void Stop() {
-        _stopping = true;
-        _transport.Close();
+        stopping = true;
+        transport.Close();
     }
 
     public void Dispose() {

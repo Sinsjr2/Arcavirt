@@ -3,7 +3,7 @@ using Pidgin;
 
 namespace GdbStubDotnet;
 
-internal interface IDispatchedCommand {
+interface IDispatchedCommand {
     /// <summary>
     /// 同期コマンドなら output にバイト列を書き込み false を返す。
     /// 実行コマンドなら、all-stop では何も書き込まず true を返す(結果は
@@ -13,7 +13,7 @@ internal interface IDispatchedCommand {
     bool Execute(IBufferWriter<byte> output, ExecutionCoordinator coordinator);
 }
 
-internal sealed class SyncDispatchedCommand<TCmd>(TCmd command, Action<TCmd, ResponseWriter<SyncResponse>> handler) : IDispatchedCommand {
+sealed class SyncDispatchedCommand<TCmd>(TCmd command, Action<TCmd, ResponseWriter<SyncResponse>> handler) : IDispatchedCommand {
     /// <summary>
     /// TCmd が IThreadScoped を実装していれば、ハンドラ呼び出し
     /// 直前に H(SetThread)で選択済みの現在スレッドをThreadフィールドへ
@@ -27,7 +27,7 @@ internal sealed class SyncDispatchedCommand<TCmd>(TCmd command, Action<TCmd, Res
     }
 }
 
-internal sealed class ExecDispatchedCommand<TCmd>(TCmd command, Action<TCmd, ExecutionResponder> handler) : IDispatchedCommand {
+sealed class ExecDispatchedCommand<TCmd>(TCmd command, Action<TCmd, ExecutionResponder> handler) : IDispatchedCommand {
     /// <summary>
     /// ハンドラが例外を投げた場合、resume は開始しなかったものとして扱い
     /// coordinator.AbortResume で token を無効化してから再送出する(呼び出し
@@ -58,15 +58,15 @@ internal sealed class ExecDispatchedCommand<TCmd>(TCmd command, Action<TCmd, Exe
     }
 }
 
-internal readonly record struct RouteResult(byte[]? SyncResponse, bool ExecStarted);
+readonly record struct RouteResult(byte[]? SyncResponse, bool ExecStarted);
 
-internal sealed class Dispatcher {
-    private readonly Parser<byte, IDispatchedCommand> _router;
-    private readonly ExecutionCoordinator _coordinator;
+sealed class Dispatcher {
+    readonly Parser<byte, IDispatchedCommand> router;
+    readonly ExecutionCoordinator coordinator;
 
     public Dispatcher(IReadOnlyList<Parser<byte, IDispatchedCommand>> entries, ExecutionCoordinator coordinator) {
-        _router = Parser.OneOf(entries);
-        _coordinator = coordinator;
+        router = Parser.OneOf(entries);
+        this.coordinator = coordinator;
     }
 
     /// <summary>
@@ -76,21 +76,21 @@ internal sealed class Dispatcher {
     /// 破棄してから同じバッファへ書き直す)。
     /// </summary>
     public RouteResult? Route(ReadOnlySpan<byte> payload) {
-        var result = _router.Parse(payload);
+        var result = router.Parse(payload);
         if (!result.Success) {
             return null;
         }
         var buffer = new ArrayBufferWriter<byte>();
         bool execStarted;
         try {
-            execStarted = result.Value.Execute(buffer, _coordinator);
+            execStarted = result.Value.Execute(buffer, coordinator);
         } catch (Exception ex) {
-            _coordinator.OnError?.Invoke(new StubFault(ex, result.Value.GetType().Name));
+            coordinator.OnError?.Invoke(new StubFault(ex, result.Value.GetType().Name));
             // 部分的に書き込まれていたかもしれないバッファを破棄してから
             // 同じインスタンスを再利用する(Clear()はWrittenCountを0へ
             // 戻すのみで、新規ArrayBufferWriterの割当を避けられる)。
             buffer.Clear();
-            new ResponseWriter<SyncResponse>(buffer, _coordinator.DetailedErrors).Error(new RspError(1, null));
+            new ResponseWriter<SyncResponse>(buffer, coordinator.DetailedErrors).Error(new RspError(1, null));
             return new RouteResult(buffer.WrittenSpan.ToArray(), false);
         }
         return execStarted
