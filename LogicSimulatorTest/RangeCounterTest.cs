@@ -513,7 +513,7 @@ public class RangeCounterTest {
         CheckRangeOutput(sim, testCase.ExpectedRangeFinal);
     }
 
-    private static void InitializeRangeCounter(LogicSimulation sim) {
+    static void InitializeRangeCounter(LogicSimulation sim) {
         sim.SetInput("CLK", 0, LogicSignal.Low);
         sim.SetInput("SET", 0, LogicSignal.Low);
         sim.SetInput("DIR", 0, LogicSignal.Low);
@@ -533,7 +533,7 @@ public class RangeCounterTest {
         sim.Step();
     }
 
-    private static void SetupRangeCounterInputs(LogicSimulation sim, int a, int b, int initial, int max) {
+    static void SetupRangeCounterInputs(LogicSimulation sim, int a, int b, int initial, int max) {
         for (int i = 0; i < 16; i++) {
             sim.SetInput($"INITIAL{i}", 0, ((initial & (1 << i)) != 0).ToSignal());
             sim.SetInput($"A{i}", 0, ((a & (1 << i)) != 0).ToSignal());
@@ -542,14 +542,14 @@ public class RangeCounterTest {
         }
     }
 
-    private static void CheckRangeOutput(LogicSimulation sim, int expectedRange) {
+    static void CheckRangeOutput(LogicSimulation sim, int expectedRange) {
         LogicSignal expected = (expectedRange != 0) ? LogicSignal.High : LogicSignal.Low;
         Assert.That(
             sim.GetOutput("RANGE", "in"),
             Is.EqualTo(expected));
     }
 
-    private static void CheckCounterOutput(LogicSimulation sim, int expectedValue) {
+    static void CheckCounterOutput(LogicSimulation sim, int expectedValue) {
         for (int i = 0; i < 16; i++) {
             LogicSignal expected = ((expectedValue & (1 << i)) != 0) ? LogicSignal.High : LogicSignal.Low;
             Assert.That(
@@ -559,7 +559,7 @@ public class RangeCounterTest {
         }
     }
 
-    private static void SimulateClockPulses(LogicSimulation sim, int count) {
+    static void SimulateClockPulses(LogicSimulation sim, int count) {
         for (int i = 0; i < count; i++) {
             sim.SetInput("CLK", 0, LogicSignal.High);
             sim.Step();

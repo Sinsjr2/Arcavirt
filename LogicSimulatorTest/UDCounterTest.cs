@@ -144,7 +144,7 @@ public class UDCounterTest {
         }
     }
 
-    private static void SetupCountScenario(LogicSimulation simulation, int bitCount,
+    static void SetupCountScenario(LogicSimulation simulation, int bitCount,
         int startValue, bool isUp) {
         for (int j = 0; j < bitCount; j++) {
             simulation.SetInput($"INITIAL{j}", 0, ((startValue & (1 << j)) != 0).ToSignal());
@@ -160,7 +160,7 @@ public class UDCounterTest {
         // この時点でHIが組み合わせ論理として確定
     }
 
-    private static void RunCountScenario(LogicSimulation simulation, int bitCount,
+    static void RunCountScenario(LogicSimulation simulation, int bitCount,
         int maxValue, int modulus, CountScenario scenario) {
         int startValue = scenario.StartValue;
         bool isUp      = scenario.IsUp;
