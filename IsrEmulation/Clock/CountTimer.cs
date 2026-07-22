@@ -230,9 +230,9 @@ public class ClockSelector : IClockFrequency, IDisposable {
         if (sources.Count < 1) {
             throw new IndexOutOfRangeException($"length: {sources.Count} actual: {sourceNo}");
         }
-        this.currentSource = sourceNo;
+        currentSource = sourceNo;
         Name = name;
-        this.inners = sources.Select((src, i) => {
+        inners = sources.Select((src, i) => {
             var inner = new Inner(this, i, src);
             src.OnChangedFrequency += inner.OnChangedSourceFrequency;
             return inner;
@@ -448,10 +448,10 @@ public class CountTimer {
                      TimerUpperLimitTriggerKind upperLimitTrigger,
                      ulong upperLimit,
                      Action? onMatchUpperLimit) {
-        this.clockFreq = clockFrequency;
-        this.clockFreq.OnChangedFrequency += OnChangeFrequency;
+        clockFreq = clockFrequency;
+        clockFreq.OnChangedFrequency += OnChangeFrequency;
         this.clock = clock;
-        this.alarm = clock.CreateAlarm(OnElapsedTime);
+        alarm = clock.CreateAlarm(OnElapsedTime);
         UpperLimitTrigger = upperLimitTrigger;
         foreach (var trigger in triggers) {
             if (UpperLimit < trigger.Trigger.TriggerCount) {
@@ -525,11 +525,11 @@ public class CountTimer {
         // 次に通知する時間とコールバックを抽出する
         for (int i = 0; i < triggers.Length; i++) {
             if (nextMatchCount == triggers[i].Trigger.TriggerCount) {
-                this.notifies.Add(i);
+                notifies.Add(i);
             }
         }
         if (nextMatchCount == upperLimit) {
-            this.notifies.Add(upperLimitTriggerNo);
+            notifies.Add(upperLimitTriggerNo);
         }
         Schedule(nextMatchCount - currentCount);
     }
@@ -540,10 +540,10 @@ public class CountTimer {
         int[]? buf = null;
         try {
             pool = ArrayPool<int>.Shared;
-            buf = pool.Rent(this.notifies.Count);
-            this.notifies.CopyTo(buf);
-            int notifyCount = this.notifies.Count;
-            this.notifies.Clear();
+            buf = pool.Rent(notifies.Count);
+            notifies.CopyTo(buf);
+            int notifyCount = notifies.Count;
+            notifies.Clear();
             foreach (var no in buf.AsSpan(0, notifyCount)) {
                 if (no < 0) {
                     if (no == upperLimitTriggerNo) {

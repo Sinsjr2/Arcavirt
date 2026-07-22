@@ -218,7 +218,7 @@ public class GdbCommunicator {
                 result.Kind = GdbPacketOutputKind.None;
                 return;
             } else {
-                this.checkSum = (byte)(checkSumValue << 4);
+                checkSum = (byte)(checkSumValue << 4);
                 gdbPacketState = GdbPacketState.FoundCheckSum2;
                 result.Kind = GdbPacketOutputKind.None;
                 return;
@@ -230,7 +230,7 @@ public class GdbCommunicator {
                 result.Kind = GdbPacketOutputKind.None;
                 return;
             } else {
-                this.checkSum |= checkSumValue;
+                checkSum |= checkSumValue;
                 if (packetSum != checkSum) {
                     Console.WriteLine("gdbserver: got command packet with incorrect checksum");
                     result.SendMessage.Append('-');
@@ -362,8 +362,8 @@ public class GdbStubStateMachine {
 
 public class GdbPacketAnalizerCStubLike {
 
-    static readonly string STOP_REPLY_SIGINT = "S02";
-    static readonly string STOP_REPLY_TRAP = "S05";
+    const string STOP_REPLY_SIGINT = "S02";
+    const string STOP_REPLY_TRAP = "S05";
 
     readonly StreamWriter streamWriter;
     readonly StreamReader streamReader;
@@ -397,8 +397,8 @@ public class GdbPacketAnalizerCStubLike {
         this.targetStub = targetStub;
         this.logger = logger;
         this.runOn = runOn;
-        this.streamWriter = new StreamWriter(writeStream, Encoding.ASCII);
-        this.streamReader = new StreamReader(readStream, Encoding.ASCII);
+        streamWriter = new StreamWriter(writeStream, Encoding.ASCII);
+        streamReader = new StreamReader(readStream, Encoding.ASCII);
     }
 
     bool TryReadAllRegisters(StringBuilder response, ReadOnlySpan<char> cmd) {
@@ -822,7 +822,7 @@ public class GdbPacketAnalizerCStubLike {
     }
 
     async ValueTask ReadLoop(CancellationToken token) {
-        var reader = this.streamReader;
+        var reader = streamReader;
         var rxBuffer = new char[rxBufferSize];
         var receivedMessageBuilder = new StringBuilder();
         var sendMessageBuilder = new StringBuilder();

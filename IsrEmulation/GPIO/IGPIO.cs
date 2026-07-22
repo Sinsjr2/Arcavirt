@@ -1,7 +1,6 @@
-namespace GPIO {
+namespace GPIO; 
 
-    public interface IGPIO {
-        bool GPIOValue { get; set; }
-        event Action OnChangedGPIOValue;
-    }
+public interface IGPIO {
+    bool GPIOValue { get; set; }
+    event Action OnChangedGPIOValue;
 }

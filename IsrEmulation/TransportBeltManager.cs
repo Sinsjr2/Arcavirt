@@ -133,7 +133,7 @@ public class TransportBeltManager {
     }
 
     public void Update(int motorPosition) {
-        this.motorCurrentPosition = motorPosition;
+        motorCurrentPosition = motorPosition;
 
         removeObjectNumbers.Clear();
 
@@ -141,7 +141,7 @@ public class TransportBeltManager {
         // 右に進むことを想定している
         foreach (var obj in transportObjects.Values) {
             // ベルトの先頭を基準とした物体の先頭と後端の相対座標
-            var objTop = this.motorCurrentPosition - obj.BaseMotorPosition;
+            var objTop = motorCurrentPosition - obj.BaseMotorPosition;
             var objEnd = objTop - obj.Info.Length;
 
             // 物体がベルトの駆動外まで搬送されたことを確認

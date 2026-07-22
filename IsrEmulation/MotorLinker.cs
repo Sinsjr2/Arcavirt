@@ -11,8 +11,8 @@ public class MotorLinker {
     bool[,] linkMatrix;
 
     public MotorLinker(int numOfAxis) {
-        this.links = new bool[numOfAxis, numOfAxis];
-        this.linkMatrix = new bool[numOfAxis, numOfAxis];
+        links = new bool[numOfAxis, numOfAxis];
+        linkMatrix = new bool[numOfAxis, numOfAxis];
     }
 
     /// <summary>

@@ -77,7 +77,7 @@ public class CMT {
         for (int i = 0; i < cmt.Length; i++) {
             cmt[i] = new CMT_N(clock, clkIn);
         }
-        this.CMTn = cmt;
+        CMTn = cmt;
         CMSTR = new(0, onWrite: WriteCMSTR);
     }
 

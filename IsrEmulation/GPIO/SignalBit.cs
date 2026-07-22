@@ -14,19 +14,19 @@ IOを結合した場合は、の動作は以下のとおりになること。
 /// 名前付きの信号を表します。
 /// </summary>
 public interface INamedSignal {
-    public string SignalName { get; }
+    string SignalName { get; }
 }
 
 /// <summary>
 /// 出力値を取得したり、入力場合は他の出力値で反映された結果を取得します。
 /// </summary>
 public interface IOutputableSignal : INamedSignal {
-    public bool OutputSignal { get; }
+    bool OutputSignal { get; }
 
     /// <summary>
     /// 変化する前の値と変化した後の出力の値を通知します。
     /// </summary>
-    public event Action<bool, bool>? OnChangedSignalValue;
+    event Action<bool, bool>? OnChangedSignalValue;
 }
 
 /// <summary>

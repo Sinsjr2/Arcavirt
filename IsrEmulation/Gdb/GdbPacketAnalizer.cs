@@ -135,8 +135,8 @@ public class GdbPacketAnalizer {
         return initialBuf.Length - buf.Length;
     }
 
-    static readonly string STOP_REPLY_SIGINT = "S02";
-    static readonly string STOP_REPLY_TRAP = "S05";
+    const string STOP_REPLY_SIGINT = "S02";
+    const string STOP_REPLY_TRAP = "S05";
 
     bool TryReadAllRegisters(StringBuilder response, ReadOnlySpan<char> cmd, StringBuilder workingBuf) {
         switch (targetStub.ThreadObject) {

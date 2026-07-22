@@ -77,7 +77,7 @@ public class TransportController {
     /// <summary>
     /// キーは搬送JOB番号、タイミング番号
     /// </summary>
-    Dictionary<byte, Dictionary<ushort, TransportParam>> RunningStatus = new();
+    Dictionary<byte, Dictionary<ushort, TransportParam>> runningStatus = new();
 
     public event Action<int>? OnChangedTransportStatus;
 
@@ -117,7 +117,7 @@ public class TransportController {
     int? GetNextStopPosition() {
         // 次に停止する最小の位置を検索する
         int? nextStopPos = null;
-        foreach (var job in RunningStatus.Values) {
+        foreach (var job in runningStatus.Values) {
             foreach (var x in job.Values) {
                 if (x.Mode == TransportMode.Stop) {
                     nextStopPos ??= int.MaxValue;

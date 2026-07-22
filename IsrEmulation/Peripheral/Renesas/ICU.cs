@@ -28,10 +28,10 @@ public class ICU {
 
         public Irq(ICU icu, string name, int irqNr, byte initialIRQCR) {
             this.icu = icu;
-            this.IR = new RegisterValue32<byte>(0, onWrite: WriteIR);
-            this.DTCER = new RegisterValue32<byte>(0, onWrite: WriteDTCER);
-            this.IRQCR = new RegisterValue32<byte>(initialIRQCR, onWrite: WriteIRQCR);
-            this.IrqNr = irqNr;
+            IR = new RegisterValue32<byte>(0, onWrite: WriteIR);
+            DTCER = new RegisterValue32<byte>(0, onWrite: WriteDTCER);
+            IRQCR = new RegisterValue32<byte>(initialIRQCR, onWrite: WriteIRQCR);
+            IrqNr = irqNr;
             SignalIRQ = new SignalBit($"{name}.irq{irqNr}", SigIrqTraceProc);
         }
 
@@ -181,7 +181,7 @@ public class ICU {
         reg.Value = value;
         for (int i = 0; i < 8; i++) {
             if ((diff & (1 << i)) != 0) {
-                Irq irq = this.IRQ[8 * no + i];
+                Irq irq = IRQ[8 * no + i];
                 irq.UpdateInterrupt();
             }
         }
@@ -212,7 +212,7 @@ public class ICU {
             if ((irqNr < 0) || (irqNr > 255)) {
                 throw new Exception("Bug: Bad irqList");
             }
-            Irq irq = this.IRQ[irqNr];
+            Irq irq = IRQ[irqNr];
             Console.Error.WriteLine("IPR write IRQ %u idx %08x", irq.IrqNr, no);
             irq.UpdateLevelInterrupt();
         }
@@ -227,7 +227,7 @@ public class ICU {
             throw new InvalidOperationException("non posted interrupt");
         }
         var irqNo = activeIRQs.First();
-        var irq = this.IRQ[irqNo.IRQNR];
+        var irq = IRQ[irqNo.IRQNR];
         switch ((IRQMD)(irq.IRQCR.Value & IRQCR_IRQMD_MSK)) {
             case IRQMD.N_EDGE:
             case IRQMD.P_EDGE:
@@ -242,30 +242,30 @@ public class ICU {
                IReadOnlyList<short> irqToIpr,
                IReadOnlyList<IRQMD> irqcr,
                int numOfSWINTs) {
-        this.isrNotify = iSRNotify;
+        isrNotify = iSRNotify;
         this.irqToIpr = irqToIpr.ToArray();
 
-        this.iprToIrqNrs = irqToIpr
+        iprToIrqNrs = irqToIpr
             .Select((irqNr, ipr) => (irqNr, ipr: (short)ipr))
             .GroupBy(t => t.ipr)
             .ToDictionary(grouped => grouped.Key,
                           grouped => new ReadOnlyMemory<short>(grouped.Select(t => t.irqNr).ToArray()));
-        this.IRQ = irqcr.Select((x, i) => new Irq(this, name, i, (byte)x))
+        IRQ = irqcr.Select((x, i) => new Irq(this, name, i, (byte)x))
             .ToArray();
-        this.SignalIrqAck = new InputSignalBit($"{name}.irqAck", AckInterrupt);
-        this.signalSWINTs = Enumerable.Range(0, numOfSWINTs)
+        SignalIrqAck = new InputSignalBit($"{name}.irqAck", AckInterrupt);
+        signalSWINTs = Enumerable.Range(0, numOfSWINTs)
             .Select(i => new OutputSignalBit($"{name}.swint{i + 1}"))
             .ToArray();
 
-        this.IER = Enumerable.Range(0, 32)
+        IER = Enumerable.Range(0, 32)
             .Select(i => new RegisterValue32<byte>(0, onWrite: (reg, value) => WriteIER(i, reg, value)))
             .ToArray();
 
-        this.IPR = Enumerable.Range(0, 256)
+        IPR = Enumerable.Range(0, 256)
             .Select(i => new RegisterValue32<byte>(0, onWrite: (reg, value) => WriteIPR(i, reg, value)))
             .ToArray();
 
-        this.DMRSR = Enumerable.Range(0, 8)
+        DMRSR = Enumerable.Range(0, 8)
             .Select(_ => new RegisterValue32<byte>(0))
             .ToArray();
 

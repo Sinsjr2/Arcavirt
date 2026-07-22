@@ -10,5 +10,5 @@ public interface ILeveledISRNotify {
     /// 割り込みがなしの場合は irqNo と priority が 0 になります。
     /// priority は大きいほど優先度が高くなります。
     /// </summary>
-    public void SetInterrupt(int irqNo, int priority);
+    void SetInterrupt(int irqNo, int priority);
 }

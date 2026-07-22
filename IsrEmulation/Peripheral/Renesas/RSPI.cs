@@ -311,9 +311,9 @@ public class RSPI {
     // #endif
 
     void InstrAppend(uint icode) {
-        if (this.instrWp < this.icode.Length) {
-            this.icode[this.instrWp] = icode;
-            this.instrWp++;
+        if (instrWp < this.icode.Length) {
+            this.icode[instrWp] = icode;
+            instrWp++;
         } else {
             Console.Error.WriteLine("RX-RSpi Icode to long");
         }
@@ -767,13 +767,13 @@ public class RSPI {
         // rspi.bdev.UnMap = Rspi_Unmap;
         // rspi.bdev.owner = rspi;
         // rspi.bdev.hw_flags = MEM_FLAG_WRITABLE | MEM_FLAG_READABLE;
-        this.sigMosi = new OutputSignalBit($"{name}.mosi");
-        this.sigMiso = new SignalBit($"{name}.miso", null);
-        this.sigSclk = new OutputSignalBit($"{name}.sclk");
+        sigMosi = new OutputSignalBit($"{name}.mosi");
+        sigMiso = new SignalBit($"{name}.miso", null);
+        sigSclk = new OutputSignalBit($"{name}.sclk");
         //rspi.sigShiftOut = SigNode_New("%s.shiftOut", name);
         //rspi.sigShiftIn = SigNode_New("%s.shiftIn", name);
-        this.clkBase = new SubClock($"{name}.clk_base", clkIn, new Fraction(1, 2 * 256));
-        this.SPBR = new RegisterValue32<byte>(255);
+        clkBase = new SubClock($"{name}.clk_base", clkIn, new Fraction(1, 2 * 256));
+        SPBR = new RegisterValue32<byte>(255);
         // Clock_MakeDerived(rspi.clkBase, rspi.clkIn, 1, 2 * 256);
         // if (!rspi.sigMosi || !rspi.sigMiso || !rspi.sigSclk) {
         //     throw new Exception("Can not create signals for SPI controller");

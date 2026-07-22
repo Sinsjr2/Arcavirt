@@ -3,7 +3,7 @@
 /// チャタリング除去を行います。
 /// </summary>
 public class BitChattering {
-    readonly int[] Data;
+    readonly int[] data;
 
     // チャタリング除去を行う回数を指定して下さい
     // 初期値が必要です。
@@ -11,28 +11,28 @@ public class BitChattering {
         if (maxChatterCount <= 0) {
             throw new ArgumentException($"maxLoopCount: {maxChatterCount}", nameof(maxChatterCount));
         }
-        Data = new int[maxChatterCount];
-        Data.AsSpan().Fill(initialOutput);
+        data = new int[maxChatterCount];
+        data.AsSpan().Fill(initialOutput);
     }
 
     public int Get(int index) {
-        return Data[index];
+        return data[index];
     }
 
     public void Update(int current) {
-        // Data[2] = (current & Data[1]) |
-        //     (Data[1] & Data[2]) |
-        //     (current & Data[2]);
+        // data[2] = (current & data[1]) |
+        //     (data[1] & data[2]) |
+        //     (current & data[2]);
 
-        for (int i = Data.Length - 1; 0 < i; i--) {
-            Data[1] = (current & Data[i - 1]) |
-                (Data[i - 1] & Data[i]) |
-                (current & Data[i]);
+        for (int i = data.Length - 1; 0 < i; i--) {
+            data[1] = (current & data[i - 1]) |
+                (data[i - 1] & data[i]) |
+                (current & data[i]);
         }
-        // Data[1] = (current & Data[0]) |
-        //     (Data[0] & Data[1]) |
-        //     (current & Data[1]);
-        Data[0] = current;
+        // data[1] = (current & data[0]) |
+        //     (data[0] & data[1]) |
+        //     (current & data[1]);
+        data[0] = current;
     }
 }
 
@@ -138,9 +138,9 @@ public class StepperSensorObserver {
 
     bool isFallingLached;
 
-    int LachedRigingPos;
+    int lachedRigingPos;
 
-    int LachedFallingPos;
+    int lachedFallingPos;
 
     bool prevSensorValue;
 
@@ -154,16 +154,16 @@ public class StepperSensorObserver {
 
         if (isFalling) {
             if (!isSingleLatch || !isFallingLached) {
-                LachedFallingPos = motor.GetCurrentPosition();
+                lachedFallingPos = motor.GetCurrentPosition();
                 isFallingLached = true;
-                OnLachedPos?.Invoke((LachedFallingPos, false));
+                OnLachedPos?.Invoke((lachedFallingPos, false));
             }
         }
         else if (isRiging) {
             if (!isSingleLatch || !isFallingLached) {
-                LachedRigingPos = motor.GetCurrentPosition();
+                lachedRigingPos = motor.GetCurrentPosition();
                 isRigingLached = true;
-                OnLachedPos?.Invoke((LachedFallingPos, true));
+                OnLachedPos?.Invoke((lachedFallingPos, true));
             }
         }
     }

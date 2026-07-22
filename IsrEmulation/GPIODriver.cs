@@ -12,7 +12,7 @@ public class GPOutput1BitDriver {
             throw new ArgumentException($"bitPos: {bitPos}");
         }
         this.bitPos = bitPos;
-        this.mask = (uint)1 << bitPos;
+        mask = (uint)1 << bitPos;
         this.gpio = gpio;
         this.addrOffset = addrOffset;
     }
@@ -44,7 +44,7 @@ public class GPInput1BitDriver {
             throw new ArgumentException($"bitPos: {bitPos}");
         }
         this.bitPos = bitPos;
-        this.mask = (uint)1 << bitPos;
+        mask = (uint)1 << bitPos;
         this.gpio = gpio;
         this.addrOffset = addrOffset;
     }

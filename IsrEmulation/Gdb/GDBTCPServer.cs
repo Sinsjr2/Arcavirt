@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 namespace Gdb;
 
 public class GDBTCPServer {
-    private readonly TcpListener socketServer;
+    readonly TcpListener socketServer;
 
     readonly IGdbStub targetStub;
 
@@ -19,7 +19,7 @@ public class GDBTCPServer {
         Action<object?, Func<object?, ValueTask>> runOnLoop, ILogger logger, int port, IGdbStub targetStub) {
         this.runOnLoop = runOnLoop;
         this.Port = port;
-        this.socketServer = new TcpListener(IPAddress.Any, port);
+        socketServer = new TcpListener(IPAddress.Any, port);
         this.logger = logger;
         this.targetStub = targetStub;
     }

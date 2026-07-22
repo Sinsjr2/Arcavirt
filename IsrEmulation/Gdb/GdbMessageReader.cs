@@ -12,7 +12,7 @@ public struct GdbMessageReader {
 
     public GdbMessageReader(ReadOnlyMemory<char> buffer) {
         this.buffer = buffer;
-        this.position = 0;
+        position = 0;
     }
 
     /// <summary>

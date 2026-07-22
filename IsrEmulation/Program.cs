@@ -39,7 +39,7 @@ public class BitLogger {
     static int BoolToInt(bool x) => x ? 1 : 0;
 }
 
-internal class Program {
+class Program {
 
      static void Main(string[] args) {
         if (args.Length != 0) {
@@ -104,7 +104,7 @@ internal class Program {
         plot.SavePng("quickstart.png", 400, 300);
     }
 
-    private static void Main_(string[] args) {
+    static void Main_(string[] args) {
         int tickCount = 0;
 
         var contexts = new[] { new MotorSignalContext() };
@@ -207,10 +207,10 @@ internal class Program {
 
     static string DrawStepperTimingDiagramHelp => "pwmFreq acceleration deceleration minVelocity maxVelocity step";
 
-    static readonly int ParseDrawTimingDiagramArgumentLength = 6;
+    static readonly int parseDrawTimingDiagramArgumentLength = 6;
 
     static DrawTimingDiagramArgument? ParseDrawTimingDiagramArguments(string[] args) {
-        if (args.Length != ParseDrawTimingDiagramArgumentLength) {
+        if (args.Length != parseDrawTimingDiagramArgumentLength) {
             return null;
         }
         return new DrawTimingDiagramArgument(
@@ -271,11 +271,11 @@ internal class Program {
         DrawTimingDiagramArgument StepperSetting, IReadOnlyList<ChangeVelocityCommand> ChangeCommands);
 
     static DrawStepperProfiledSeedTimingDiagramArguments? ParseDrawStepperProfiledSeedTimingDiagramArguments(string[] args) {
-        var stepperSetting = ParseDrawTimingDiagramArguments([.. args.Take(ParseDrawTimingDiagramArgumentLength)]);
+        var stepperSetting = ParseDrawTimingDiagramArguments([.. args.Take(parseDrawTimingDiagramArgumentLength)]);
         if (stepperSetting == null) {
             return null;
         }
-        var remainingArgs = args.Skip(ParseDrawTimingDiagramArgumentLength).ToArray();
+        var remainingArgs = args.Skip(parseDrawTimingDiagramArgumentLength).ToArray();
         var commands = new List<ChangeVelocityCommand>();
         for (int i = 0; i < remainingArgs.Length; i += 2) {
             commands.Add(
@@ -423,7 +423,7 @@ public class PWMTimer2 {
     /// <summary>
     /// システムが起動してからの時間
     /// </summary>
-    static readonly Stopwatch SystemTime = Stopwatch.StartNew();
+    static readonly Stopwatch systemTime = Stopwatch.StartNew();
 
 
     volatile ushort triggerA;
@@ -466,14 +466,14 @@ public class PWMTimer2 {
         // もし前のタイマーが動作中であるとタスクを2重で起動することになるので待機する
         runningTask.Wait();
         if (Interlocked.Exchange(ref isRunning, 1) == 0) {
-            OnStartOrStop?.Invoke(SystemTime.Elapsed, true);
+            OnStartOrStop?.Invoke(systemTime.Elapsed, true);
             runningTask = Task.Run(Do);
         }
     }
 
     public void Stop() {
         if (Interlocked.Exchange(ref isRunning, 0) != 0) {
-            OnStartOrStop?.Invoke(SystemTime.Elapsed, false);
+            OnStartOrStop?.Invoke(systemTime.Elapsed, false);
         }
     }
 

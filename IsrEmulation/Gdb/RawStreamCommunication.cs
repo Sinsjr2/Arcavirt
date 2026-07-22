@@ -9,7 +9,7 @@ public class RawStreamCommunication : IStreamCommunication {
     readonly Stream targetWriteStream;
 
     public RawStreamCommunication(Stream targetStream, Stream targetWriteStream) {
-        this.targetReadStream = targetStream;
+        targetReadStream = targetStream;
         this.targetWriteStream = targetWriteStream;
     }
 

@@ -1,0 +1,7 @@
+# Renesas RX マイコンのハードウェアレジスタ/ビットフィールド名を定義する
+# ディレクトリ。識別子は公式データシートの表記(例: SYSSTS0, SPCR_MODFEN)を
+# そのまま用いるため、リポジトリ共通の private フィールド camelCase 規則を
+# 適用しない(データシートとの対応を優先する)。
+
+[*.cs]
+dotnet_naming_rule.private_fields_should_be_camel_case.severity = none

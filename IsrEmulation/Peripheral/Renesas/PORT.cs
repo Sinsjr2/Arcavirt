@@ -80,13 +80,13 @@ class IoPinInternal {
     public readonly InputSignalBit ASEL;
 
     public IoPinInternal(string name, string portname, int pinNr, Action<bool, bool> onChangedInputSignal) {
-        this.P = new SignalBit($"{name}.P{portname}.{pinNr}", onChangedInputSignal);
-        this.PU = new SignalBit($"{name}.pu{portname}.{pinNr}", onChangedInputSignal);
-        this.PMO = new InputSignalBit($"{name}.pmo{portname}.{pinNr}", onChangedInputSignal);
-        this.PMOE = new InputSignalBit($"{name}.pmoe{portname}.{pinNr}", onChangedInputSignal);
-        this.PMI = new SignalBit($"{name}.pmi{portname}.{pinNr}", onChangedInputSignal);
-        this.ISEL = new InputSignalBit($"{name}.iseli{portname}.{pinNr}", onChangedInputSignal);
-        this.ASEL = new InputSignalBit($"{name}.aseli{portname}.{pinNr}", onChangedInputSignal);
+        P = new SignalBit($"{name}.P{portname}.{pinNr}", onChangedInputSignal);
+        PU = new SignalBit($"{name}.pu{portname}.{pinNr}", onChangedInputSignal);
+        PMO = new InputSignalBit($"{name}.pmo{portname}.{pinNr}", onChangedInputSignal);
+        PMOE = new InputSignalBit($"{name}.pmoe{portname}.{pinNr}", onChangedInputSignal);
+        PMI = new SignalBit($"{name}.pmi{portname}.{pinNr}", onChangedInputSignal);
+        ISEL = new InputSignalBit($"{name}.iseli{portname}.{pinNr}", onChangedInputSignal);
+        ASEL = new InputSignalBit($"{name}.aseli{portname}.{pinNr}", onChangedInputSignal);
     }
 }
 
@@ -137,18 +137,18 @@ public class IoPort {
     }
 
     public IoPort(string name, string pinName) {
-        this.PDR = new RegisterValue32<byte>(0, onWrite: WritePDR);
-        this.PODR = new RegisterValue32<byte>(0, onWrite: WritePODR);
-        this.PIDR = new ReadOnlyRegisterValue<byte>(0);
-        this.PMR = new RegisterValue32<byte>(0, onWrite: WritePMR);
-        this.ODR0 = new RegisterValue32<byte>(0);
-        this.ODR1 = new RegisterValue32<byte>(0);
-        this.PCR = new RegisterValue32<byte>(0, onWrite: WritePCR);
-        this.DSCR = new RegisterValue32<byte>(0);
-        this.pins = Enumerable.Range(0, 8)
+        PDR = new RegisterValue32<byte>(0, onWrite: WritePDR);
+        PODR = new RegisterValue32<byte>(0, onWrite: WritePODR);
+        PIDR = new ReadOnlyRegisterValue<byte>(0);
+        PMR = new RegisterValue32<byte>(0, onWrite: WritePMR);
+        ODR0 = new RegisterValue32<byte>(0);
+        ODR1 = new RegisterValue32<byte>(0);
+        PCR = new RegisterValue32<byte>(0, onWrite: WritePCR);
+        DSCR = new RegisterValue32<byte>(0);
+        pins = Enumerable.Range(0, 8)
             .Select(j => new IoPinInternal(name, pinName, j, (_, _) => Update()))
             .ToArray();
-        this.Pins = this.pins
+        Pins = pins
             .Select(pin => new IoPin(pin.P,
                                      pin.PU,
                                      pin.PMO,

@@ -98,7 +98,7 @@ public interface IRegisterBit32 {
 }
 
 public interface IRegisterBit32<T> : IRegisterBit32 {
-    public T Value { get; set; }
+    T Value { get; set; }
 }
 
 // public class RegisterBit32_Bool {
@@ -136,7 +136,7 @@ public class RegisterBit32<T> : IRegisterBit32<T> where T : struct, IConvertible
         InitialValue = initialValue;
         Value = initialValue;
         BitLength = bitLength;
-        this.mask = NumUtil.FlagFF(BitLength);
+        mask = NumUtil.FlagFF(BitLength);
         this.onWrite = onWrite;
         this.onRead = onRead;
         this.onReset = onReset;
@@ -186,7 +186,7 @@ public class ReadOnlyRegisterBit32<T> : IRegisterBit32<T> where T : struct, ICon
         InitialValue = initialValue;
         Value = initialValue;
         BitLength = bitLength;
-        this.mask = NumUtil.FlagFF(BitLength);
+        mask = NumUtil.FlagFF(BitLength);
         this.onRead = onRead;
         this.onReset = onReset;
     }
