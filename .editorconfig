@@ -19,8 +19,8 @@ csharp_new_line_before_members_in_object_initializers = false
 csharp_new_line_before_members_in_anonymous_types = false
 csharp_new_line_between_query_expression_clauses = false
 
-dotnet_style_require_accessibility_modifiers = always:warning
-dotnet_style_qualification_for_field = true:warning
+dotnet_style_require_accessibility_modifiers = omit_if_default:warning
+dotnet_style_qualification_for_field = false:warning
 csharp_style_namespace_declarations = file_scoped:warning
 
 dotnet_naming_rule.const_fields_should_be_upper_snake.severity = warning
