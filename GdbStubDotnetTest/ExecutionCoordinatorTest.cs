@@ -233,7 +233,7 @@ public class ExecutionCoordinatorTest {
         Assert.That(delivered, Is.False);
     }
 
-    private static NotificationQueue CreateUnusedNotificationQueue() {
+    static NotificationQueue CreateUnusedNotificationQueue() {
         return new NotificationQueue(Channel.CreateBounded<INotification>(1).Writer);
     }
 }

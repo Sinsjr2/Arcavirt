@@ -148,7 +148,7 @@ public class NonStopTest {
     /// received が既に確定していれば以降のPacketイベントは無視し、
     /// 最初の1件だけを返す。
     /// </summary>
-    private static async Task<byte[]?> ReadOnePacket(NetworkStream stream) {
+    static async Task<byte[]?> ReadOnePacket(NetworkStream stream) {
         var framer = new Framer();
         byte[]? received = null;
         byte[] buffer = new byte[256];

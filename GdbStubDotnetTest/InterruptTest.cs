@@ -122,7 +122,7 @@ public class InterruptTest {
         Assert.That(gReply, Is.EqualTo("01"u8.ToArray()));
     }
 
-    private static async Task<byte[]?> ReadOnePacket(NetworkStream stream) {
+    static async Task<byte[]?> ReadOnePacket(NetworkStream stream) {
         var framer = new Framer();
         byte[]? received = null;
         byte[] buffer = new byte[256];

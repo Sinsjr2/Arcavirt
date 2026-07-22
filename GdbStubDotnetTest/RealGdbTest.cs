@@ -71,7 +71,7 @@ public class RealGdbTest {
         });
     }
 
-    private static async Task<string> RunGdbAsync(int port) {
+    static async Task<string> RunGdbAsync(int port) {
         var startInfo = new ProcessStartInfo {
             FileName = "gdb",
             RedirectStandardOutput = true,
