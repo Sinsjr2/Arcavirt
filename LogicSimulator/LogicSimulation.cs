@@ -105,7 +105,7 @@ public class LogicSimulation {
         List<int> initialInputChangedIndexes) {
         this.executorContexts = executorContexts;
         this.logicIdAndPinNameToPinIndex = logicIdAndPinNameToPinIndex;
-        this.inputValueChangedExecutorIndexes.AddRange(initialInputChangedIndexes);
+        inputValueChangedExecutorIndexes.AddRange(initialInputChangedIndexes);
     }
 
     static ExecutorContext BuildSingleExecutorContext(
