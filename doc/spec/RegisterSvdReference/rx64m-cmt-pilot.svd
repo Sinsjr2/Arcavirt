@@ -19,6 +19,8 @@
           <name>CMSTR0</name>
           <addressOffset>0x0</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0x0</resetValue>
           <fields>
             <field>
               <name>STR0</name>
@@ -36,6 +38,8 @@
           <name>CMSTR1</name>
           <addressOffset>0x10</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0x0</resetValue>
           <fields>
             <field>
               <name>STR2</name>
@@ -64,6 +68,9 @@
           <name>CMCR</name>
           <addressOffset>0x0</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0x0</resetValue>
+          <resetMask>0xFF7F</resetMask>
           <fields>
             <field>
               <name>CKS</name>
@@ -81,11 +88,15 @@
           <name>CMCNT</name>
           <addressOffset>0x2</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0x0</resetValue>
         </register>
         <register>
           <name>CMCOR</name>
           <addressOffset>0x4</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0xFFFF</resetValue>
         </register>
       </registers>
     </peripheral>
@@ -102,6 +113,9 @@
           <name>CMCR</name>
           <addressOffset>0x0</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0x0</resetValue>
+          <resetMask>0xFF7F</resetMask>
           <fields>
             <field>
               <name>CKS</name>
@@ -119,11 +133,15 @@
           <name>CMCNT</name>
           <addressOffset>0x2</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0x0</resetValue>
         </register>
         <register>
           <name>CMCOR</name>
           <addressOffset>0x4</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0xFFFF</resetValue>
         </register>
       </registers>
     </peripheral>
@@ -140,6 +158,9 @@
           <name>CMCR</name>
           <addressOffset>0x0</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0x0</resetValue>
+          <resetMask>0xFF7F</resetMask>
           <fields>
             <field>
               <name>CKS</name>
@@ -157,11 +178,15 @@
           <name>CMCNT</name>
           <addressOffset>0x2</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0x0</resetValue>
         </register>
         <register>
           <name>CMCOR</name>
           <addressOffset>0x4</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0xFFFF</resetValue>
         </register>
       </registers>
     </peripheral>
@@ -178,6 +203,9 @@
           <name>CMCR</name>
           <addressOffset>0x0</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0x0</resetValue>
+          <resetMask>0xFF7F</resetMask>
           <fields>
             <field>
               <name>CKS</name>
@@ -195,11 +223,15 @@
           <name>CMCNT</name>
           <addressOffset>0x2</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0x0</resetValue>
         </register>
         <register>
           <name>CMCOR</name>
           <addressOffset>0x4</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0xFFFF</resetValue>
         </register>
       </registers>
     </peripheral>
@@ -216,6 +248,8 @@
           <name>CMWSTR</name>
           <addressOffset>0x0</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0x0</resetValue>
           <fields>
             <field>
               <name>STR</name>
@@ -228,6 +262,8 @@
           <name>CMWCR</name>
           <addressOffset>0x4</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0x0</resetValue>
           <fields>
             <field>
               <name>CKS</name>
@@ -275,6 +311,8 @@
           <name>CMWIOR</name>
           <addressOffset>0x8</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0x0</resetValue>
           <fields>
             <field>
               <name>IC0</name>
@@ -327,31 +365,43 @@
           <name>CMWCNT</name>
           <addressOffset>0x10</addressOffset>
           <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x0</resetValue>
         </register>
         <register>
           <name>CMWCOR</name>
           <addressOffset>0x14</addressOffset>
           <size>32</size>
+          <access>read-write</access>
+          <resetValue>0xFFFFFFFF</resetValue>
         </register>
         <register>
           <name>CMWICR0</name>
           <addressOffset>0x18</addressOffset>
           <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x0</resetValue>
         </register>
         <register>
           <name>CMWICR1</name>
           <addressOffset>0x1C</addressOffset>
           <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x0</resetValue>
         </register>
         <register>
           <name>CMWOCR0</name>
           <addressOffset>0x20</addressOffset>
           <size>32</size>
+          <access>read-write</access>
+          <resetValue>0xFFFFFFFF</resetValue>
         </register>
         <register>
           <name>CMWOCR1</name>
           <addressOffset>0x24</addressOffset>
           <size>32</size>
+          <access>read-write</access>
+          <resetValue>0xFFFFFFFF</resetValue>
         </register>
       </registers>
     </peripheral>
@@ -368,6 +418,8 @@
           <name>CMWSTR</name>
           <addressOffset>0x0</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0x0</resetValue>
           <fields>
             <field>
               <name>STR</name>
@@ -380,6 +432,8 @@
           <name>CMWCR</name>
           <addressOffset>0x4</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0x0</resetValue>
           <fields>
             <field>
               <name>CKS</name>
@@ -427,6 +481,8 @@
           <name>CMWIOR</name>
           <addressOffset>0x8</addressOffset>
           <size>16</size>
+          <access>read-write</access>
+          <resetValue>0x0</resetValue>
           <fields>
             <field>
               <name>IC0</name>
@@ -479,31 +535,43 @@
           <name>CMWCNT</name>
           <addressOffset>0x10</addressOffset>
           <size>32</size>
+          <access>read-write</access>
+          <resetValue>0x0</resetValue>
         </register>
         <register>
           <name>CMWCOR</name>
           <addressOffset>0x14</addressOffset>
           <size>32</size>
+          <access>read-write</access>
+          <resetValue>0xFFFFFFFF</resetValue>
         </register>
         <register>
           <name>CMWICR0</name>
           <addressOffset>0x18</addressOffset>
           <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x0</resetValue>
         </register>
         <register>
           <name>CMWICR1</name>
           <addressOffset>0x1C</addressOffset>
           <size>32</size>
+          <access>read-only</access>
+          <resetValue>0x0</resetValue>
         </register>
         <register>
           <name>CMWOCR0</name>
           <addressOffset>0x20</addressOffset>
           <size>32</size>
+          <access>read-write</access>
+          <resetValue>0xFFFFFFFF</resetValue>
         </register>
         <register>
           <name>CMWOCR1</name>
           <addressOffset>0x24</addressOffset>
           <size>32</size>
+          <access>read-write</access>
+          <resetValue>0xFFFFFFFF</resetValue>
         </register>
       </registers>
     </peripheral>

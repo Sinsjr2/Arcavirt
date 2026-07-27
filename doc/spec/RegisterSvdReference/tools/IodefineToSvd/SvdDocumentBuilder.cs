@@ -7,7 +7,8 @@ public static class SvdDocumentBuilder {
         string deviceName,
         string description,
         IReadOnlyList<PeripheralInstance> instances,
-        IReadOnlyDictionary<string, CStruct> structsByName) {
+        IReadOnlyDictionary<string, CStruct> structsByName,
+        IReadOnlyDictionary<string, RegisterDatasheetMetadata>? datasheetMetadata = null) {
 
         var peripheralsElement = new XElement("peripherals");
         foreach (var instance in instances) {
@@ -17,7 +18,7 @@ public static class SvdDocumentBuilder {
 
             var registersElement = new XElement("registers");
             foreach (var register in registers) {
-                registersElement.Add(BuildRegisterElement(register));
+                registersElement.Add(BuildRegisterElement(register, datasheetMetadata));
             }
 
             var peripheralElement = new XElement("peripheral",
@@ -44,11 +45,21 @@ public static class SvdDocumentBuilder {
         return new XDocument(new XDeclaration("1.0", "UTF-8", null), deviceElement);
     }
 
-    static XElement BuildRegisterElement(ResolvedRegister register) {
+    static XElement BuildRegisterElement(ResolvedRegister register, IReadOnlyDictionary<string, RegisterDatasheetMetadata>? datasheetMetadata) {
         var registerElement = new XElement("register",
             new XElement("name", register.Name),
             new XElement("addressOffset", $"0x{register.AddressOffset:X}"),
             new XElement("size", register.ByteSize * 8));
+
+        if (datasheetMetadata is not null && datasheetMetadata.TryGetValue(register.Name, out var metadata)) {
+            registerElement.Add(new XElement("access", metadata.Access));
+            registerElement.Add(new XElement("resetValue", $"0x{metadata.ResetValue:X}"));
+
+            var fullMask = register.ByteSize * 8 >= 32 ? 0xFFFFFFFFUL : (1UL << (register.ByteSize * 8)) - 1;
+            if (metadata.ResetMask != fullMask) {
+                registerElement.Add(new XElement("resetMask", $"0x{metadata.ResetMask:X}"));
+            }
+        }
 
         if (register.Fields.Count > 0) {
             var fieldsElement = new XElement("fields");
