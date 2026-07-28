@@ -23,6 +23,9 @@ public static class SvdDocumentBuilder {
 
             var peripheralElement = new XElement("peripheral",
                 new XElement("name", instance.Name),
+                instance.AlternatePeripheral is { } alternatePeripheral
+                    ? new XElement("alternatePeripheral", alternatePeripheral)
+                    : null,
                 new XElement("baseAddress", $"0x{instance.BaseAddress:X}"),
                 new XElement("addressBlock",
                     new XElement("offset", "0x0"),

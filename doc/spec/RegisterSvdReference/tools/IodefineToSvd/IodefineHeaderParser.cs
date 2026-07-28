@@ -25,6 +25,10 @@ public static class IodefineHeaderParser {
 
     public static IReadOnlyList<PeripheralInstance> ParseInstances(string source, IReadOnlySet<string> structNames) {
         var instances = new List<PeripheralInstance>();
+        // 同一ベースアドレスに複数の#define(例: SCIn/SMCIn、同一レジスタ群の
+        // 別モード用ビットフィールドを持つ別struct)が現れる場合、先に現れた方を
+        // 本体とみなし、後発をCMSIS-SVDのalternatePeripheralとして関連付ける。
+        var firstNameByAddress = new Dictionary<ulong, string>();
         foreach (Match match in DefineInstancePattern.Matches(source)) {
             var structType = match.Groups["type"].Value;
             if (!structNames.Contains(structType)) {
@@ -32,7 +36,15 @@ public static class IodefineHeaderParser {
             }
             var name = match.Groups["name"].Value;
             var address = Convert.ToUInt64(match.Groups["addr"].Value, 16);
-            instances.Add(new PeripheralInstance(name, structType, address));
+
+            string? alternatePeripheral = null;
+            if (firstNameByAddress.TryGetValue(address, out var existingName)) {
+                alternatePeripheral = existingName;
+            } else {
+                firstNameByAddress[address] = name;
+            }
+
+            instances.Add(new PeripheralInstance(name, structType, address, alternatePeripheral));
         }
         return instances;
     }

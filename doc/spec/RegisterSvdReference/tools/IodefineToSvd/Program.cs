@@ -12,6 +12,7 @@ var deviceName = args[2];
 var datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> {
     ["rx64m-cmt"] = Rx64mCmtDatasheetMetadata.Registers,
     ["rx64m-port"] = Rx64mPortDatasheetMetadata.Registers,
+    ["rx64m-sci"] = Rx64mSciDatasheetMetadata.Registers,
 };
 
 var datasheetOptionPrefix = "--datasheet=";

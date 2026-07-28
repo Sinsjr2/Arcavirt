@@ -67,4 +67,42 @@ public class SvdDocumentBuilderDatasheetTest {
 
         Assert.That(cmcnt.Element("resetMask"), Is.Null);
     }
+
+    static readonly string sci0Fixture = string.Join("\n", new[] {
+        "struct st_sci0 {",
+        "    union {",
+        "        unsigned char BYTE;",
+        "        struct {",
+        "",
+        "#ifdef __RX_LITTLE_ENDIAN__",
+        "            unsigned char IICACKR : 1;",
+        "            unsigned char  : 7;",
+        "#else",
+        "            unsigned char  : 7;",
+        "            unsigned char IICACKR : 1;",
+        "#endif",
+        "        } BIT;",
+        "    } SISR;",
+        "};",
+        "",
+        "#define SCI0 (*(volatile struct st_sci0 *)0x8A000)",
+    });
+
+    /// <summary>
+    /// SISR(一部ビットのリセット値がデータシートで"Undefined"と明記)を
+    /// 与えた場合、resetValue要素自体が出力されず、accessのみ出力されることを
+    /// 確認する(PORTのPIDRと同じnullable ResetValueの経路をSCIのデータで再検証)。
+    /// </summary>
+    [Test]
+    public void Build_SisrWithUndefinedResetValue_OmitsResetValueElement() {
+        var structs = IodefineHeaderParser.ParseStructs(sci0Fixture, new HashSet<string> { "st_sci0" });
+        var instances = IodefineHeaderParser.ParseInstances(sci0Fixture, new HashSet<string> { "st_sci0" });
+
+        var document = SvdDocumentBuilder.Build("Test", "test", instances, structs, Rx64mSciDatasheetMetadata.Registers);
+
+        var sisr = document.Root!.Element("peripherals")!.Elements("peripheral").Single()
+            .Element("registers")!.Elements("register").Single(r => r.Element("name")!.Value == "SISR");
+
+        Assert.That((sisr.Element("access")!.Value, sisr.Element("resetValue")), Is.EqualTo(("read-write", (XElement?)null)));
+    }
 }

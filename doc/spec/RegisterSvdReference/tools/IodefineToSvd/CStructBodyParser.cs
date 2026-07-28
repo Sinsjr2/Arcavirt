@@ -30,7 +30,7 @@ public static class CStructBodyParser {
         Expect(tokens, ref pos, "{");
         var fields = ParseBitFieldList(tokens, ref pos);
         Expect(tokens, ref pos, "}");
-        Expect(tokens, ref pos, "BIT");
+        ExpectIdentifier(tokens, ref pos);
         Expect(tokens, ref pos, ";");
 
         Expect(tokens, ref pos, "}");
@@ -59,6 +59,10 @@ public static class CStructBodyParser {
         return new CStructMember(memberName, totalSize, isPadding, Fields: null);
     }
 
+    // RX64Mのst_sci0/st_sci12ではTDRHL/RDRHLのように、ビットフィールドではなく
+    // バイト単位のサブメンバー(例: "unsigned char TDRH;")を持つ内部struct
+    // ("} BYTE;"で終わる)が現れる。これはSVD上は1レジスタとして扱うだけでよいため、
+    // コロンが無いメンバーはフィールドとして記録せず読み飛ばす。
     static IReadOnlyList<CBitField> ParseBitFieldList(IReadOnlyList<CToken> tokens, ref int pos) {
         var fields = new List<CBitField>();
         var bitOffset = 0;
@@ -68,14 +72,19 @@ public static class CStructBodyParser {
             if (tokens[pos].Kind == CTokenKind.Identifier) {
                 name = ExpectIdentifier(tokens, ref pos);
             }
-            Expect(tokens, ref pos, ":");
-            var width = ExpectNumber(tokens, ref pos);
-            Expect(tokens, ref pos, ";");
 
-            if (name is not null) {
-                fields.Add(new CBitField(name, bitOffset, width));
+            if (tokens[pos].Text == ":") {
+                Expect(tokens, ref pos, ":");
+                var width = ExpectNumber(tokens, ref pos);
+                Expect(tokens, ref pos, ";");
+
+                if (name is not null) {
+                    fields.Add(new CBitField(name, bitOffset, width));
+                }
+                bitOffset += width;
+            } else {
+                Expect(tokens, ref pos, ";");
             }
-            bitOffset += width;
         }
         return fields;
     }

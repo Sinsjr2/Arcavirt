@@ -10,4 +10,4 @@ public record CStructMember(
 
 public record CStruct(string Name, IReadOnlyList<CStructMember> Members);
 
-public record PeripheralInstance(string Name, string StructTypeName, ulong BaseAddress);
+public record PeripheralInstance(string Name, string StructTypeName, ulong BaseAddress, string? AlternatePeripheral = null);
