@@ -49,8 +49,16 @@ public static class SvdDocumentBuilder {
     }
 
     static XElement BuildRegisterElement(ResolvedRegister register, IReadOnlyDictionary<string, RegisterDatasheetMetadata>? datasheetMetadata) {
+        // CMSIS-SVDのregisterType内では、dim/dimIncrementはname要素より前に
+        // 置く必要がある(dimElementGroupがシーケンスの先頭)。
         var registerElement = new XElement("register",
-            new XElement("name", register.Name),
+            register.ArrayCount is { } arrayCount
+                ? new XElement("dim", arrayCount)
+                : null,
+            register.ArrayCount is not null
+                ? new XElement("dimIncrement", $"0x{register.ByteSize:X}")
+                : null,
+            new XElement("name", register.ArrayCount is not null ? $"{register.Name}%s" : register.Name),
             new XElement("addressOffset", $"0x{register.AddressOffset:X}"),
             new XElement("size", register.ByteSize * 8));
 

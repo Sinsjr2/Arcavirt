@@ -24,6 +24,12 @@ public static class CTokenizer {
                 }
                 continue;
             }
+            if (c == '/' && i + 1 < text.Length && text[i + 1] == '/') {
+                while (i < text.Length && text[i] != '\n') {
+                    i++;
+                }
+                continue;
+            }
             if (char.IsLetter(c) || c == '_') {
                 var start = i;
                 while (i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] == '_')) {

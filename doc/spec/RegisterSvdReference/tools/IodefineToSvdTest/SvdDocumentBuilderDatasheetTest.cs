@@ -108,4 +108,48 @@ public class SvdDocumentBuilderDatasheetTest {
             (sisr.Element("access")!.Value, sisr.Element("resetValue")!.Value, sisr.Element("resetMask")!.Value),
             Is.EqualTo(("read-write", "0x0", "0xCB")));
     }
+
+    static readonly string icuFixture = string.Join("\n", new[] {
+        "struct st_icu {",
+        "    union {",
+        "        unsigned char BYTE;",
+        "        struct {",
+        "",
+        "#ifdef __RX_LITTLE_ENDIAN__",
+        "            unsigned char IR : 1;",
+        "            unsigned char  : 7;",
+        "#else",
+        "            unsigned char  : 7;",
+        "            unsigned char IR : 1;",
+        "#endif",
+        "        } BIT;",
+        "    } IR[4];",
+        "};",
+        "",
+        "#define ICU (*(volatile struct st_icu *)0x87000)",
+    });
+
+    /// <summary>
+    /// union内配列メンバー(IR[4])は、CMSIS-SVDのdimElementGroupがname要素より
+    /// 前に位置する必要があるという制約(XSDのregisterType定義)通りに、
+    /// dim/dimIncrement/nameの順で出力され、nameには"%s"サフィックスが
+    /// 付与されることを確認する。
+    /// </summary>
+    [Test]
+    public void Build_UnionArrayMember_EmitsDimAndDimIncrementBeforeNameWithPercentSSuffix() {
+        var structs = IodefineHeaderParser.ParseStructs(icuFixture, new HashSet<string> { "st_icu" });
+        var instances = IodefineHeaderParser.ParseInstances(icuFixture, new HashSet<string> { "st_icu" });
+
+        var document = SvdDocumentBuilder.Build("Test", "test", instances, structs);
+
+        var ir = document.Root!.Element("peripherals")!.Elements("peripheral").Single()
+            .Element("registers")!.Elements("register").Single();
+
+        Assert.That(
+            ir.Elements().Select(e => e.Name.LocalName).Take(3),
+            Is.EqualTo(new[] { "dim", "dimIncrement", "name" }));
+        Assert.That(
+            (ir.Element("dim")!.Value, ir.Element("dimIncrement")!.Value, ir.Element("name")!.Value),
+            Is.EqualTo(("4", "0x1", "IR%s")));
+    }
 }

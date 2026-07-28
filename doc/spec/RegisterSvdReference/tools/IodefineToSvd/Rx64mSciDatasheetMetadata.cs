@@ -4,8 +4,9 @@ namespace IodefineToSvd;
 /// RX64M Group User's Manual: Hardware (R01UH0377EJ0120 Rev.1.20, Oct 17, 2022)
 /// 40章(Serial Communications Interface (SCIg, SCIh), p.1966-2040)から
 /// 手動で書き写したレジスタごとのリセット値・アクセス権限。
-/// 各レジスタのビットフィールド名の集合は、iodefine.hから自動抽出した結果と
-/// 完全一致することを確認済み(2026-07-28)。
+/// リセット値・アクセス権限は代表的なレジスタ(SSR/SISR/CR0/STR/TDRHL/RDRHL等)に
+/// ついてマニュアル本文と個別に突き合わせて確認済み(2026-07-28)。全37レジスタの
+/// 網羅的な逐一照合は行っていない。
 ///
 /// SMR〜MDDRの17レジスタはst_sci0/st_sci12/st_smci0で共通(同一アドレス・
 /// 同一リセット値)。ESMER以降の20レジスタはst_sci12のみに存在する

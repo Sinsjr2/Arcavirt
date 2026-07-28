@@ -1,6 +1,7 @@
 namespace IodefineToSvd;
 
-public record ResolvedRegister(string Name, int AddressOffset, int ByteSize, IReadOnlyList<CBitField> Fields);
+// ByteSizeは1要素分のサイズ(dim付きレジスタでも配列全体ではなく1要素分)。
+public record ResolvedRegister(string Name, int AddressOffset, int ByteSize, IReadOnlyList<CBitField> Fields, int? ArrayCount = null);
 
 public static class RegisterLayoutBuilder {
     public static IReadOnlyList<ResolvedRegister> Resolve(CStruct structDef) {
@@ -8,14 +9,14 @@ public static class RegisterLayoutBuilder {
         var offset = 0;
         foreach (var member in structDef.Members) {
             if (!member.IsPadding) {
-                registers.Add(new ResolvedRegister(member.Name, offset, member.ByteSize, member.Fields ?? []));
+                registers.Add(new ResolvedRegister(member.Name, offset, member.ByteSize, member.Fields ?? [], member.ArrayCount));
             }
-            offset += member.ByteSize;
+            offset += member.ByteSize * (member.ArrayCount ?? 1);
         }
         return registers;
     }
 
     public static int TotalByteSize(CStruct structDef) {
-        return structDef.Members.Sum(m => m.ByteSize);
+        return structDef.Members.Sum(m => m.ByteSize * (m.ArrayCount ?? 1));
     }
 }

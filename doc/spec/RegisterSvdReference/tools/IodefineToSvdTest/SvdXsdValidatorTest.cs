@@ -60,4 +60,21 @@ public class SvdXsdValidatorTest {
 
         Assert.That(errors, Is.Empty);
     }
+
+    /// <summary>
+    /// Arcavirt-c0i.11で生成したICUパイロット出力(rx64m-icu-pilot.svd)が、
+    /// CMSIS-SVD公式XSD(v1.3.9)に構造的に適合することを確認する。
+    /// IR[256]等のdim/dimIncrement付きレジスタ(このプロジェクト初のdim使用例)が
+    /// 混在していてもXSD検証が通ることを確認する意味も持つ。
+    /// </summary>
+    [Test]
+    public void Validate_Rx64mIcuPilotSvd_PassesCmsisSvdXsd() {
+        var xsdPath = GetRepoPath("doc/spec/RegisterSvdReference/CMSIS-SVD.xsd");
+        var svdPath = GetRepoPath("doc/spec/RegisterSvdReference/rx64m-icu-pilot.svd");
+
+        var document = XDocument.Load(svdPath);
+        var errors = SvdXsdValidator.Validate(document, xsdPath);
+
+        Assert.That(errors, Is.Empty);
+    }
 }

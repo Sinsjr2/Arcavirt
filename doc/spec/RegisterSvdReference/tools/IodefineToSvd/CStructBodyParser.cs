@@ -26,18 +26,36 @@ public static class CStructBodyParser {
         ExpectIdentifier(tokens, ref pos);
         Expect(tokens, ref pos, ";");
 
-        Expect(tokens, ref pos, "struct");
-        Expect(tokens, ref pos, "{");
-        var fields = ParseBitFieldList(tokens, ref pos);
-        Expect(tokens, ref pos, "}");
-        ExpectIdentifier(tokens, ref pos);
-        Expect(tokens, ref pos, ";");
+        // RX64MのICU(st_icu)のPIBR0等では、ビットフィールドを説明するstruct部分が
+        // 丸ごとコメントアウトされており(該当機能が未実装のため)、
+        // "union { unsigned char BYTE; } PIBR0;"のようにstruct自体が存在しない。
+        // この場合はフィールド無しのレジスタとして扱う。
+        IReadOnlyList<CBitField> fields = [];
+        if (tokens[pos].Text == "struct") {
+            Expect(tokens, ref pos, "struct");
+            Expect(tokens, ref pos, "{");
+            fields = ParseBitFieldList(tokens, ref pos);
+            Expect(tokens, ref pos, "}");
+            ExpectIdentifier(tokens, ref pos);
+            Expect(tokens, ref pos, ";");
+        }
 
         Expect(tokens, ref pos, "}");
         var registerName = ExpectIdentifier(tokens, ref pos);
+
+        // RX64MのICU(st_icu)ではIR[256]/DTCER[256]/IER[32]のように、union全体が
+        // 配列になっているレジスタ群がある。全要素が同一のビットフィールド構成を
+        // 持つ、完全に均一なレジスタ配列であるため、SVDの<dim>で表現する
+        // (RegisterLayoutBuilder/SvdDocumentBuilder側で処理)。
+        int? arrayCount = null;
+        if (tokens[pos].Text == "[") {
+            Expect(tokens, ref pos, "[");
+            arrayCount = ExpectNumber(tokens, ref pos);
+            Expect(tokens, ref pos, "]");
+        }
         Expect(tokens, ref pos, ";");
 
-        return new CStructMember(registerName, BaseTypeByteSize(sizeType), IsPadding: false, fields);
+        return new CStructMember(registerName, BaseTypeByteSize(sizeType), IsPadding: false, fields, arrayCount);
     }
 
     static CStructMember ParsePlainMember(IReadOnlyList<CToken> tokens, ref int pos) {
