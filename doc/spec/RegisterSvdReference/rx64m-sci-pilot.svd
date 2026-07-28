@@ -347,6 +347,8 @@
           <addressOffset>0xC</addressOffset>
           <size>8</size>
           <access>read-write</access>
+          <resetValue>0x0</resetValue>
+          <resetMask>0xCB</resetMask>
           <fields>
             <field>
               <name>IICACKR</name>
@@ -758,6 +760,8 @@
           <addressOffset>0xC</addressOffset>
           <size>8</size>
           <access>read-write</access>
+          <resetValue>0x0</resetValue>
+          <resetMask>0xCB</resetMask>
           <fields>
             <field>
               <name>IICACKR</name>
@@ -1169,6 +1173,8 @@
           <addressOffset>0xC</addressOffset>
           <size>8</size>
           <access>read-write</access>
+          <resetValue>0x0</resetValue>
+          <resetMask>0xCB</resetMask>
           <fields>
             <field>
               <name>IICACKR</name>
@@ -1580,6 +1586,8 @@
           <addressOffset>0xC</addressOffset>
           <size>8</size>
           <access>read-write</access>
+          <resetValue>0x0</resetValue>
+          <resetMask>0xCB</resetMask>
           <fields>
             <field>
               <name>IICACKR</name>
@@ -1991,6 +1999,8 @@
           <addressOffset>0xC</addressOffset>
           <size>8</size>
           <access>read-write</access>
+          <resetValue>0x0</resetValue>
+          <resetMask>0xCB</resetMask>
           <fields>
             <field>
               <name>IICACKR</name>
@@ -2402,6 +2412,8 @@
           <addressOffset>0xC</addressOffset>
           <size>8</size>
           <access>read-write</access>
+          <resetValue>0x0</resetValue>
+          <resetMask>0xCB</resetMask>
           <fields>
             <field>
               <name>IICACKR</name>
@@ -2813,6 +2825,8 @@
           <addressOffset>0xC</addressOffset>
           <size>8</size>
           <access>read-write</access>
+          <resetValue>0x0</resetValue>
+          <resetMask>0xCB</resetMask>
           <fields>
             <field>
               <name>IICACKR</name>
@@ -3224,6 +3238,8 @@
           <addressOffset>0xC</addressOffset>
           <size>8</size>
           <access>read-write</access>
+          <resetValue>0x0</resetValue>
+          <resetMask>0xCB</resetMask>
           <fields>
             <field>
               <name>IICACKR</name>
@@ -3635,6 +3651,8 @@
           <addressOffset>0xC</addressOffset>
           <size>8</size>
           <access>read-write</access>
+          <resetValue>0x0</resetValue>
+          <resetMask>0xCB</resetMask>
           <fields>
             <field>
               <name>IICACKR</name>

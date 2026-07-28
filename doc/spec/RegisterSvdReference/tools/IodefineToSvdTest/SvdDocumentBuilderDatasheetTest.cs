@@ -89,12 +89,13 @@ public class SvdDocumentBuilderDatasheetTest {
     });
 
     /// <summary>
-    /// SISR(一部ビットのリセット値がデータシートで"Undefined"と明記)を
-    /// 与えた場合、resetValue要素自体が出力されず、accessのみ出力されることを
-    /// 確認する(PORTのPIDRと同じnullable ResetValueの経路をSCIのデータで再検証)。
+    /// SISR(b2/b4/b5のみリセット値がデータシートで"Undefined"と明記、
+    /// 残りのb0/b1/b3/b6/b7は0が明記)を与えた場合、CMCRと同様に
+    /// access/resetValueに加えて、定義済みビットのみを1とするresetMaskが
+    /// 出力されることを確認する。
     /// </summary>
     [Test]
-    public void Build_SisrWithUndefinedResetValue_OmitsResetValueElement() {
+    public void Build_SisrWithPartiallyUndefinedResetValue_EmitsAccessResetValueAndResetMask() {
         var structs = IodefineHeaderParser.ParseStructs(sci0Fixture, new HashSet<string> { "st_sci0" });
         var instances = IodefineHeaderParser.ParseInstances(sci0Fixture, new HashSet<string> { "st_sci0" });
 
@@ -103,6 +104,8 @@ public class SvdDocumentBuilderDatasheetTest {
         var sisr = document.Root!.Element("peripherals")!.Elements("peripheral").Single()
             .Element("registers")!.Elements("register").Single(r => r.Element("name")!.Value == "SISR");
 
-        Assert.That((sisr.Element("access")!.Value, sisr.Element("resetValue")), Is.EqualTo(("read-write", (XElement?)null)));
+        Assert.That(
+            (sisr.Element("access")!.Value, sisr.Element("resetValue")!.Value, sisr.Element("resetMask")!.Value),
+            Is.EqualTo(("read-write", "0x0", "0xCB")));
     }
 }

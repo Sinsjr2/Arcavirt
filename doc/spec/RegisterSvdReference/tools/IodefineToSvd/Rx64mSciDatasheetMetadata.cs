@@ -31,8 +31,9 @@ public static class Rx64mSciDatasheetMetadata {
         ["SIMR1"] = new RegisterDatasheetMetadata(0x00, 0xFF, "read-write"),
         ["SIMR2"] = new RegisterDatasheetMetadata(0x00, 0xFF, "read-write"),
         ["SIMR3"] = new RegisterDatasheetMetadata(0x00, 0xFF, "read-write"),
-        // b2/b4/b5はリセット値未定義(データシートに"Undefined"と明記)
-        ["SISR"] = new RegisterDatasheetMetadata(null, 0xCB, "read-write"),
+        // b2/b4/b5はリセット値未定義(データシートに"Undefined"と明記)、
+        // 残りのb0/b1/b3/b6/b7は全て0が明記されているためResetMask=0xCB
+        ["SISR"] = new RegisterDatasheetMetadata(0x00, 0xCB, "read-write"),
         ["SPMR"] = new RegisterDatasheetMetadata(0x00, 0xFF, "read-write"),
         ["TDRHL"] = new RegisterDatasheetMetadata(0xFFFF, 0xFFFF, "read-write"),
         ["RDRHL"] = new RegisterDatasheetMetadata(0x0000, 0xFFFF, "read-only"),
