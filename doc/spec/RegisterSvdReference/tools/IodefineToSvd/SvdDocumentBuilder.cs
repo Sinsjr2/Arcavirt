@@ -53,11 +53,14 @@ public static class SvdDocumentBuilder {
 
         if (datasheetMetadata is not null && datasheetMetadata.TryGetValue(register.Name, out var metadata)) {
             registerElement.Add(new XElement("access", metadata.Access));
-            registerElement.Add(new XElement("resetValue", $"0x{metadata.ResetValue:X}"));
 
-            var fullMask = register.ByteSize * 8 >= 32 ? 0xFFFFFFFFUL : (1UL << (register.ByteSize * 8)) - 1;
-            if (metadata.ResetMask != fullMask) {
-                registerElement.Add(new XElement("resetMask", $"0x{metadata.ResetMask:X}"));
+            if (metadata.ResetValue is { } resetValue) {
+                registerElement.Add(new XElement("resetValue", $"0x{resetValue:X}"));
+
+                var fullMask = register.ByteSize * 8 >= 32 ? 0xFFFFFFFFUL : (1UL << (register.ByteSize * 8)) - 1;
+                if (metadata.ResetMask != fullMask) {
+                    registerElement.Add(new XElement("resetMask", $"0x{metadata.ResetMask:X}"));
+                }
             }
         }
 
