@@ -63,18 +63,22 @@ public static class CStructBodyParser {
         var memberName = ExpectIdentifier(tokens, ref pos);
 
         var elementSize = BaseTypeByteSize(typeName);
-        var totalSize = elementSize;
         var isPadding = typeName == "char";
 
+        // RX64MのSYSTEM(st_system)のDPSBKR[32]のように、ビットフィールドを
+        // 持たない素の配列メンバーが、各要素が独立した1byteレジスタである
+        // ケースがある。ByteSizeは常に1要素分のサイズとし、配列の場合は
+        // ArrayCountを設定する(union内配列と同じ表現、
+        // RegisterLayoutBuilder/SvdDocumentBuilder側で共通処理される)。
+        int? arrayCount = null;
         if (tokens[pos].Text == "[") {
             Expect(tokens, ref pos, "[");
-            var count = ExpectNumber(tokens, ref pos);
+            arrayCount = ExpectNumber(tokens, ref pos);
             Expect(tokens, ref pos, "]");
-            totalSize = elementSize * count;
         }
         Expect(tokens, ref pos, ";");
 
-        return new CStructMember(memberName, totalSize, isPadding, Fields: null);
+        return new CStructMember(memberName, elementSize, isPadding, Fields: null, arrayCount);
     }
 
     // RX64Mのst_sci0/st_sci12ではTDRHL/RDRHLのように、ビットフィールドではなく

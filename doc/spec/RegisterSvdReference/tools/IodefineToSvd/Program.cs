@@ -14,6 +14,7 @@ var datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, Regi
     ["rx64m-port"] = Rx64mPortDatasheetMetadata.Registers,
     ["rx64m-sci"] = Rx64mSciDatasheetMetadata.Registers,
     ["rx64m-icu"] = Rx64mIcuDatasheetMetadata.Registers,
+    ["rx64m-system"] = Rx64mSystemDatasheetMetadata.Registers,
 };
 
 var datasheetOptionPrefix = "--datasheet=";

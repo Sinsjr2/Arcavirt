@@ -21,6 +21,9 @@ public static class Rx64mSciDatasheetMetadata {
     public static IReadOnlyDictionary<string, RegisterDatasheetMetadata> Registers => new Dictionary<string, RegisterDatasheetMetadata> {
         // st_sci0 / st_sci12 / st_smci0 共通(同一物理レジスタ)
         ["SMR"] = new RegisterDatasheetMetadata(0x00, 0xFF, "read-write"),
+        // BRR/MDDRはビット単位のR/W表がなく、"TE=0かつRE=0のときのみ書込み可"と
+        // いう本文の条件文からアクセス権限をread-writeと推定した(明示的な
+        // R/W表による確認ではない)
         ["BRR"] = new RegisterDatasheetMetadata(0xFF, 0xFF, "read-write"),
         ["SCR"] = new RegisterDatasheetMetadata(0x00, 0xFF, "read-write"),
         ["TDR"] = new RegisterDatasheetMetadata(0xFF, 0xFF, "read-write"),
