@@ -35,6 +35,8 @@ public class RegenerateAllSvdTest {
         new("RX64M_DA_Pilot", "rx64m-da", "rx64m-da-pilot.svd", new HashSet<string> { "st_da" }),
         new("RX64M_DOC_Pilot", "rx64m-doc", "rx64m-doc-pilot.svd", new HashSet<string> { "st_doc" }),
         new("RX64M_TEMPS_Pilot", "rx64m-temps", "rx64m-temps-pilot.svd", new HashSet<string> { "st_temps" }),
+        new("RX64M_WDT_Pilot", "rx64m-wdt", "rx64m-wdt-pilot.svd", new HashSet<string> { "st_wdt" }),
+        new("RX64M_IWDT_Pilot", "rx64m-iwdt", "rx64m-iwdt-pilot.svd", new HashSet<string> { "st_iwdt" }),
     ];
 
     static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> {
@@ -49,6 +51,8 @@ public class RegenerateAllSvdTest {
         ["rx64m-da"] = Rx64mDaDatasheetMetadata.Registers,
         ["rx64m-doc"] = Rx64mDocDatasheetMetadata.Registers,
         ["rx64m-temps"] = Rx64mTempsDatasheetMetadata.Registers,
+        ["rx64m-wdt"] = Rx64mWdtDatasheetMetadata.Registers,
+        ["rx64m-iwdt"] = Rx64mIwdtDatasheetMetadata.Registers,
     };
 
     static string GetRepoPath(string relativePath, [CallerFilePath] string sourceFilePath = "") {

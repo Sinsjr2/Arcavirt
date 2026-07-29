@@ -21,6 +21,8 @@ var datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, Regi
     ["rx64m-da"] = Rx64mDaDatasheetMetadata.Registers,
     ["rx64m-doc"] = Rx64mDocDatasheetMetadata.Registers,
     ["rx64m-temps"] = Rx64mTempsDatasheetMetadata.Registers,
+    ["rx64m-wdt"] = Rx64mWdtDatasheetMetadata.Registers,
+    ["rx64m-iwdt"] = Rx64mIwdtDatasheetMetadata.Registers,
 };
 
 var datasheetOptionPrefix = "--datasheet=";
