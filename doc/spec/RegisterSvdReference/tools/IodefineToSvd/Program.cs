@@ -16,6 +16,7 @@ var datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, Regi
     ["rx64m-icu"] = Rx64mIcuDatasheetMetadata.Registers,
     ["rx64m-system"] = Rx64mSystemDatasheetMetadata.Registers,
     ["rx64m-scifa"] = Rx64mScifaDatasheetMetadata.Registers,
+    ["rx64m-cac"] = Rx64mCacDatasheetMetadata.Registers,
 };
 
 var datasheetOptionPrefix = "--datasheet=";

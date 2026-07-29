@@ -111,4 +111,19 @@ public class SvdXsdValidatorTest {
 
         Assert.That(errors, Is.Empty);
     }
+
+    /// <summary>
+    /// Arcavirt-c0i.13で生成したCACパイロット出力(rx64m-cac-pilot.svd)が、
+    /// CMSIS-SVD公式XSD(v1.3.9)に構造的に適合することを確認する。
+    /// </summary>
+    [Test]
+    public void Validate_Rx64mCacPilotSvd_PassesCmsisSvdXsd() {
+        var xsdPath = GetRepoPath("doc/spec/RegisterSvdReference/CMSIS-SVD.xsd");
+        var svdPath = GetRepoPath("doc/spec/RegisterSvdReference/rx64m-cac-pilot.svd");
+
+        var document = XDocument.Load(svdPath);
+        var errors = SvdXsdValidator.Validate(document, xsdPath);
+
+        Assert.That(errors, Is.Empty);
+    }
 }
