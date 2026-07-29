@@ -47,6 +47,8 @@ public class RegenerateAllSvdTest {
         new("RX64M_PPG_Pilot", "rx64m-ppg", "rx64m-ppg-pilot.svd", new HashSet<string> { "st_ppg0", "st_ppg1" }),
         new("RX64M_GPT_Pilot", "rx64m-gpt", "rx64m-gpt-pilot.svd", new HashSet<string> { "st_gpt", "st_gpt0" }),
         new("RX64M_RIIC_Pilot", "rx64m-riic", "rx64m-riic-pilot.svd", new HashSet<string> { "st_riic" }),
+        new("RX64M_ETHERC_Pilot", "rx64m-etherc", "rx64m-etherc-pilot.svd", new HashSet<string> { "st_etherc" }),
+        new("RX64M_MMCIF_Pilot", "rx64m-mmcif", "rx64m-mmcif-pilot.svd", new HashSet<string> { "st_mmcif" }),
     ];
 
     static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> {
@@ -73,6 +75,8 @@ public class RegenerateAllSvdTest {
         ["rx64m-ppg"] = Rx64mPpgDatasheetMetadata.Registers,
         ["rx64m-gpt"] = Rx64mGptDatasheetMetadata.Registers,
         ["rx64m-riic"] = Rx64mRiicDatasheetMetadata.Registers,
+        ["rx64m-etherc"] = Rx64mEthercDatasheetMetadata.Registers,
+        ["rx64m-mmcif"] = Rx64mMmcifDatasheetMetadata.Registers,
     };
 
     static string GetRepoPath(string relativePath, [CallerFilePath] string sourceFilePath = "") {
