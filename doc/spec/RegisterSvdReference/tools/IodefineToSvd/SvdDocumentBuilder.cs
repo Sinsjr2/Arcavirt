@@ -59,6 +59,9 @@ public static class SvdDocumentBuilder {
                 ? new XElement("dimIncrement", $"0x{register.ByteSize:X}")
                 : null,
             new XElement("name", register.ArrayCount is not null ? $"{register.Name}%s" : register.Name),
+            register.AlternateRegister is { } alternateRegister
+                ? new XElement("alternateRegister", alternateRegister)
+                : null,
             new XElement("addressOffset", $"0x{register.AddressOffset:X}"),
             new XElement("size", register.ByteSize * 8));
 

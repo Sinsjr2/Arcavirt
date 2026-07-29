@@ -23,7 +23,7 @@ public static class CStructBodyParser {
         Expect(tokens, ref pos, "{");
 
         var sizeType = ParseTypeName(tokens, ref pos);
-        ExpectIdentifier(tokens, ref pos);
+        var firstMemberName = ExpectIdentifier(tokens, ref pos);
         Expect(tokens, ref pos, ";");
 
         // RX64MのICU(st_icu)のPIBR0等では、ビットフィールドを説明するstruct部分が
@@ -31,6 +31,7 @@ public static class CStructBodyParser {
         // "union { unsigned char BYTE; } PIBR0;"のようにstruct自体が存在しない。
         // この場合はフィールド無しのレジスタとして扱う。
         IReadOnlyList<CBitField> fields = [];
+        var plainAliasNames = new List<string>();
         if (tokens[pos].Text == "struct") {
             Expect(tokens, ref pos, "struct");
             Expect(tokens, ref pos, "{");
@@ -38,9 +39,29 @@ public static class CStructBodyParser {
             Expect(tokens, ref pos, "}");
             ExpectIdentifier(tokens, ref pos);
             Expect(tokens, ref pos, ";");
+        } else {
+            // RX64MのSCIFA(st_scifa)のBRR/MDDRのように、ビットフィールドを持たない
+            // プレーンなメンバーが複数並ぶ無名unionのケース(同一オフセットの別名レジスタ)。
+            // struct部分が無く、かつ後続にさらに"型 識別子;"が続く場合はここに来る。
+            while (tokens[pos].Text != "}") {
+                var aliasType = ParseTypeName(tokens, ref pos);
+                if (aliasType != sizeType) {
+                    throw new InvalidOperationException($"エイリアスunionのメンバー型が不一致です: {sizeType} と {aliasType}");
+                }
+                var aliasName = ExpectIdentifier(tokens, ref pos);
+                Expect(tokens, ref pos, ";");
+                plainAliasNames.Add(aliasName);
+            }
         }
 
         Expect(tokens, ref pos, "}");
+
+        if (plainAliasNames.Count > 0) {
+            // 無名union(エイリアス表現)は閉じ括弧の直後にレジスタ名を持たない。
+            Expect(tokens, ref pos, ";");
+            return new CStructMember(firstMemberName, BaseTypeByteSize(sizeType), IsPadding: false, Fields: [], ArrayCount: null, AliasNames: plainAliasNames);
+        }
+
         var registerName = ExpectIdentifier(tokens, ref pos);
 
         // RX64MのICU(st_icu)ではIR[256]/DTCER[256]/IER[32]のように、union全体が

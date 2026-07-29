@@ -94,4 +94,21 @@ public class SvdXsdValidatorTest {
 
         Assert.That(errors, Is.Empty);
     }
+
+    /// <summary>
+    /// Arcavirt-c0i.10で生成したSCIFAパイロット出力(rx64m-scifa-pilot.svd)が、
+    /// CMSIS-SVD公式XSD(v1.3.9)に構造的に適合することを確認する。
+    /// BRR/MDDR(同一アドレスのalternateRegister、このプロジェクト初のレジスタ単位
+    /// エイリアス表現)が混在していてもXSD検証が通ることを確認する意味も持つ。
+    /// </summary>
+    [Test]
+    public void Validate_Rx64mScifaPilotSvd_PassesCmsisSvdXsd() {
+        var xsdPath = GetRepoPath("doc/spec/RegisterSvdReference/CMSIS-SVD.xsd");
+        var svdPath = GetRepoPath("doc/spec/RegisterSvdReference/rx64m-scifa-pilot.svd");
+
+        var document = XDocument.Load(svdPath);
+        var errors = SvdXsdValidator.Validate(document, xsdPath);
+
+        Assert.That(errors, Is.Empty);
+    }
 }
