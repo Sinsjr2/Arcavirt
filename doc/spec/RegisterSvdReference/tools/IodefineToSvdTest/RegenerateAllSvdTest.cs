@@ -45,6 +45,8 @@ public class RegenerateAllSvdTest {
         new("RX64M_SSI_Pilot", "rx64m-ssi", "rx64m-ssi-pilot.svd", new HashSet<string> { "st_ssi" }),
         new("RX64M_SRC_Pilot", "rx64m-src", "rx64m-src-pilot.svd", new HashSet<string> { "st_src" }),
         new("RX64M_PPG_Pilot", "rx64m-ppg", "rx64m-ppg-pilot.svd", new HashSet<string> { "st_ppg0", "st_ppg1" }),
+        new("RX64M_GPT_Pilot", "rx64m-gpt", "rx64m-gpt-pilot.svd", new HashSet<string> { "st_gpt", "st_gpt0" }),
+        new("RX64M_RIIC_Pilot", "rx64m-riic", "rx64m-riic-pilot.svd", new HashSet<string> { "st_riic" }),
     ];
 
     static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> {
@@ -69,6 +71,8 @@ public class RegenerateAllSvdTest {
         ["rx64m-ssi"] = Rx64mSsiDatasheetMetadata.Registers,
         ["rx64m-src"] = Rx64mSrcDatasheetMetadata.Registers,
         ["rx64m-ppg"] = Rx64mPpgDatasheetMetadata.Registers,
+        ["rx64m-gpt"] = Rx64mGptDatasheetMetadata.Registers,
+        ["rx64m-riic"] = Rx64mRiicDatasheetMetadata.Registers,
     };
 
     static string GetRepoPath(string relativePath, [CallerFilePath] string sourceFilePath = "") {
