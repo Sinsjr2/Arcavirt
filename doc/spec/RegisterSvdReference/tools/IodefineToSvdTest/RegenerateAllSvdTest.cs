@@ -41,6 +41,10 @@ public class RegenerateAllSvdTest {
         new("RX64M_ECCRAM_Pilot", "rx64m-eccram", "rx64m-eccram-pilot.svd", new HashSet<string> { "st_eccram" }),
         new("RX64M_ELC_Pilot", "rx64m-elc", "rx64m-elc-pilot.svd", new HashSet<string> { "st_elc" }),
         new("RX64M_BSC_Pilot", "rx64m-bsc", "rx64m-bsc-pilot.svd", new HashSet<string> { "st_bsc" }),
+        new("RX64M_PDC_Pilot", "rx64m-pdc", "rx64m-pdc-pilot.svd", new HashSet<string> { "st_pdc" }),
+        new("RX64M_SSI_Pilot", "rx64m-ssi", "rx64m-ssi-pilot.svd", new HashSet<string> { "st_ssi" }),
+        new("RX64M_SRC_Pilot", "rx64m-src", "rx64m-src-pilot.svd", new HashSet<string> { "st_src" }),
+        new("RX64M_PPG_Pilot", "rx64m-ppg", "rx64m-ppg-pilot.svd", new HashSet<string> { "st_ppg0", "st_ppg1" }),
     ];
 
     static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> {
@@ -61,6 +65,10 @@ public class RegenerateAllSvdTest {
         ["rx64m-eccram"] = Rx64mEccramDatasheetMetadata.Registers,
         ["rx64m-elc"] = Rx64mElcDatasheetMetadata.Registers,
         ["rx64m-bsc"] = Rx64mBscDatasheetMetadata.Registers,
+        ["rx64m-pdc"] = Rx64mPdcDatasheetMetadata.Registers,
+        ["rx64m-ssi"] = Rx64mSsiDatasheetMetadata.Registers,
+        ["rx64m-src"] = Rx64mSrcDatasheetMetadata.Registers,
+        ["rx64m-ppg"] = Rx64mPpgDatasheetMetadata.Registers,
     };
 
     static string GetRepoPath(string relativePath, [CallerFilePath] string sourceFilePath = "") {
