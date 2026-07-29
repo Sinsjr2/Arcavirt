@@ -31,6 +31,10 @@ public class RegenerateAllSvdTest {
         new("RX64M_SYSTEM_Pilot", "rx64m-system", "rx64m-system-pilot.svd", new HashSet<string> { "st_system" }),
         new("RX64M_SCIFA_Pilot", "rx64m-scifa", "rx64m-scifa-pilot.svd", new HashSet<string> { "st_scifa" }),
         new("RX64M_CAC_Pilot", "rx64m-cac", "rx64m-cac-pilot.svd", new HashSet<string> { "st_cac" }),
+        new("RX64M_CRC_Pilot", "rx64m-crc", "rx64m-crc-pilot.svd", new HashSet<string> { "st_crc" }),
+        new("RX64M_DA_Pilot", "rx64m-da", "rx64m-da-pilot.svd", new HashSet<string> { "st_da" }),
+        new("RX64M_DOC_Pilot", "rx64m-doc", "rx64m-doc-pilot.svd", new HashSet<string> { "st_doc" }),
+        new("RX64M_TEMPS_Pilot", "rx64m-temps", "rx64m-temps-pilot.svd", new HashSet<string> { "st_temps" }),
     ];
 
     static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> {
@@ -41,6 +45,10 @@ public class RegenerateAllSvdTest {
         ["rx64m-system"] = Rx64mSystemDatasheetMetadata.Registers,
         ["rx64m-scifa"] = Rx64mScifaDatasheetMetadata.Registers,
         ["rx64m-cac"] = Rx64mCacDatasheetMetadata.Registers,
+        ["rx64m-crc"] = Rx64mCrcDatasheetMetadata.Registers,
+        ["rx64m-da"] = Rx64mDaDatasheetMetadata.Registers,
+        ["rx64m-doc"] = Rx64mDocDatasheetMetadata.Registers,
+        ["rx64m-temps"] = Rx64mTempsDatasheetMetadata.Registers,
     };
 
     static string GetRepoPath(string relativePath, [CallerFilePath] string sourceFilePath = "") {
