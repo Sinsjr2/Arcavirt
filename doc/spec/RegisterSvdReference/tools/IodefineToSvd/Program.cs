@@ -37,6 +37,10 @@ var datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, Regi
     ["rx64m-mmcif"] = Rx64mMmcifDatasheetMetadata.Registers,
     ["rx64m-rspi"] = Rx64mRspiDatasheetMetadata.Registers,
     ["rx64m-sdhi"] = Rx64mSdhiDatasheetMetadata.Registers,
+    ["rx64m-dmac"] = Rx64mDmacDatasheetMetadata.Registers,
+    ["rx64m-exdmac"] = Rx64mExdmacDatasheetMetadata.Registers,
+    ["rx64m-poe"] = Rx64mPoeDatasheetMetadata.Registers,
+    ["rx64m-ptpedmac"] = Rx64mPtpedmacDatasheetMetadata.Registers,
 };
 
 var datasheetOptionPrefix = "--datasheet=";
