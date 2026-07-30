@@ -55,6 +55,9 @@ public class RegenerateAllSvdTest {
         new("RX64M_EXDMAC_Pilot", "rx64m-exdmac", "rx64m-exdmac-pilot.svd", new HashSet<string> { "st_exdmac" }),
         new("RX64M_POE_Pilot", "rx64m-poe", "rx64m-poe-pilot.svd", new HashSet<string> { "st_poe" }),
         new("RX64M_PTPEDMAC_Pilot", "rx64m-ptpedmac", "rx64m-ptpedmac-pilot.svd", new HashSet<string> { "st_ptpedmac" }),
+        new("RX64M_TMR0_Pilot", "rx64m-tmr0", "rx64m-tmr0-pilot.svd", new HashSet<string> { "st_tmr0" }),
+        new("RX64M_TMR01_Pilot", "rx64m-tmr01", "rx64m-tmr01-pilot.svd", new HashSet<string> { "st_tmr01" }),
+        new("RX64M_TMR1_Pilot", "rx64m-tmr1", "rx64m-tmr1-pilot.svd", new HashSet<string> { "st_tmr1" }),
     ];
 
     static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> {
@@ -89,6 +92,9 @@ public class RegenerateAllSvdTest {
         ["rx64m-exdmac"] = Rx64mExdmacDatasheetMetadata.Registers,
         ["rx64m-poe"] = Rx64mPoeDatasheetMetadata.Registers,
         ["rx64m-ptpedmac"] = Rx64mPtpedmacDatasheetMetadata.Registers,
+        ["rx64m-tmr0"] = Rx64mTmr0DatasheetMetadata.Registers,
+        ["rx64m-tmr01"] = Rx64mTmr01DatasheetMetadata.Registers,
+        ["rx64m-tmr1"] = Rx64mTmr1DatasheetMetadata.Registers,
     };
 
     static string GetRepoPath(string relativePath, [CallerFilePath] string sourceFilePath = "") {

@@ -488,4 +488,49 @@ public class SvdXsdValidatorTest {
 
         Assert.That(errors, Is.Empty);
     }
+
+    /// <summary>
+    /// Arcavirt-c0i.39で生成したTMR0パイロット出力(rx64m-tmr0-pilot.svd)が、
+    /// CMSIS-SVD公式XSD(v1.3.9)に構造的に適合することを確認する。
+    /// </summary>
+    [Test]
+    public void Validate_Rx64mTmr0PilotSvd_PassesCmsisSvdXsd() {
+        var xsdPath = GetRepoPath("doc/spec/RegisterSvdReference/CMSIS-SVD.xsd");
+        var svdPath = GetRepoPath("doc/spec/RegisterSvdReference/rx64m-tmr0-pilot.svd");
+
+        var document = XDocument.Load(svdPath);
+        var errors = SvdXsdValidator.Validate(document, xsdPath);
+
+        Assert.That(errors, Is.Empty);
+    }
+
+    /// <summary>
+    /// Arcavirt-c0i.39で生成したTMR01パイロット出力(rx64m-tmr01-pilot.svd)が、
+    /// CMSIS-SVD公式XSD(v1.3.9)に構造的に適合することを確認する。
+    /// </summary>
+    [Test]
+    public void Validate_Rx64mTmr01PilotSvd_PassesCmsisSvdXsd() {
+        var xsdPath = GetRepoPath("doc/spec/RegisterSvdReference/CMSIS-SVD.xsd");
+        var svdPath = GetRepoPath("doc/spec/RegisterSvdReference/rx64m-tmr01-pilot.svd");
+
+        var document = XDocument.Load(svdPath);
+        var errors = SvdXsdValidator.Validate(document, xsdPath);
+
+        Assert.That(errors, Is.Empty);
+    }
+
+    /// <summary>
+    /// Arcavirt-c0i.39で生成したTMR1パイロット出力(rx64m-tmr1-pilot.svd)が、
+    /// CMSIS-SVD公式XSD(v1.3.9)に構造的に適合することを確認する。
+    /// </summary>
+    [Test]
+    public void Validate_Rx64mTmr1PilotSvd_PassesCmsisSvdXsd() {
+        var xsdPath = GetRepoPath("doc/spec/RegisterSvdReference/CMSIS-SVD.xsd");
+        var svdPath = GetRepoPath("doc/spec/RegisterSvdReference/rx64m-tmr1-pilot.svd");
+
+        var document = XDocument.Load(svdPath);
+        var errors = SvdXsdValidator.Validate(document, xsdPath);
+
+        Assert.That(errors, Is.Empty);
+    }
 }
