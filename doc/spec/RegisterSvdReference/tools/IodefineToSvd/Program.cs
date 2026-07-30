@@ -35,6 +35,8 @@ var datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, Regi
     ["rx64m-riic"] = Rx64mRiicDatasheetMetadata.Registers,
     ["rx64m-etherc"] = Rx64mEthercDatasheetMetadata.Registers,
     ["rx64m-mmcif"] = Rx64mMmcifDatasheetMetadata.Registers,
+    ["rx64m-rspi"] = Rx64mRspiDatasheetMetadata.Registers,
+    ["rx64m-sdhi"] = Rx64mSdhiDatasheetMetadata.Registers,
 };
 
 var datasheetOptionPrefix = "--datasheet=";

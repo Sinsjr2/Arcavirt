@@ -22,9 +22,9 @@ import re
 import sys
 
 SECTION_RE = re.compile(r'^\s*(\d+\.\d+\.\d+)\s+(.+\S)\s*$')
-ADDRESS_RE = re.compile(r'^\s*Address\(es\):\s*(.+)$')
+ADDRESS_RE = re.compile(r'^\s*Address(?:\(es\))?:?\s*(\S.*)$')
 BIT_HEADER_RE = re.compile(r'\bb(\d+)\b')
-RESET_ROW_RE = re.compile(r'^\s*Value after reset:\s*(.*)$')
+RESET_ROW_RE = re.compile(r'^\s*Value after reset:?\s*(.*)$')
 BIT_ROW_RE = re.compile(r'^\s*b(\d+)(?:\s+to\s+b(\d+))?\s+(.*)$')
 ACCESS_TOKEN_RE = re.compile(r'^R\(?/?\(?W?\)?\d*$|^W\(?/?\(?R?\)?\d*$|^R$|^W$')
 
