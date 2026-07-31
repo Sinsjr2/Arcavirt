@@ -1,7 +1,10 @@
 namespace IodefineToSvd;
 
 public static class CStructBodyParser {
-    static readonly HashSet<string> TypeKeywords = ["unsigned", "char", "short", "long", "int"];
+    static readonly HashSet<string> TypeKeywords = ["unsigned", "char", "short", "long", "int", "void"];
+
+    // RXは32bitアーキテクチャのため、ポインタ型メンバーは指す先の型によらず常に4byte。
+    const int PointerByteSize = 4;
 
     public static IReadOnlyList<CStructMember> Parse(IReadOnlyList<CToken> tokens) {
         var members = new List<CStructMember>();
@@ -81,10 +84,21 @@ public static class CStructBodyParser {
 
     static CStructMember ParsePlainMember(IReadOnlyList<CToken> tokens, ref int pos) {
         var typeName = ParseTypeName(tokens, ref pos);
+
+        // RX64MのDMAC0/DTC/EDMAC/EXDMAC0/EXDMAC1(DMSAR/DTCVBR/TDLAR/EDMSAR等)では、
+        // 転送元・転送先アドレスを保持するレジスタが"void *NAME;"というポインタ型
+        // メンバーとして宣言されている。ポインタはRX(32bitアーキテクチャ)では常に
+        // 4byte固定であり、指す先の型(void)のサイズとは無関係のため、素の型サイズ
+        // ではなくポインタとして扱う。
+        var isPointer = tokens[pos].Text == "*";
+        if (isPointer) {
+            Expect(tokens, ref pos, "*");
+        }
+
         var memberName = ExpectIdentifier(tokens, ref pos);
 
-        var elementSize = BaseTypeByteSize(typeName);
-        var isPadding = typeName == "char";
+        var elementSize = isPointer ? PointerByteSize : BaseTypeByteSize(typeName);
+        var isPadding = typeName == "char" && !isPointer;
 
         // RX64MのSYSTEM(st_system)のDPSBKR[32]のように、ビットフィールドを
         // 持たない素の配列メンバーが、各要素が独立した1byteレジスタである
