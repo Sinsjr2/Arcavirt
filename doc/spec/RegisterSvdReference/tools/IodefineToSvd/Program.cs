@@ -46,6 +46,7 @@ var datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, Regi
     ["rx64m-tmr1"] = Rx64mTmr1DatasheetMetadata.Registers,
     ["rx64m-usb"] = Rx64mUsbDatasheetMetadata.Registers,
     ["rx64m-usb0"] = Rx64mUsb0DatasheetMetadata.Registers,
+    ["rx64m-mpc"] = Rx64mMpcDatasheetMetadata.Registers,
 };
 
 var datasheetOptionPrefix = "--datasheet=";
