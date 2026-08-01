@@ -53,6 +53,7 @@ var datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, Regi
     ["rx64m-edmac"] = Rx64mEdmacDatasheetMetadata.Registers,
     ["rx64m-exdmac0"] = Rx64mExdmac0DatasheetMetadata.Registers,
     ["rx64m-exdmac1"] = Rx64mExdmac1DatasheetMetadata.Registers,
+    ["rx64m-rtc"] = Rx64mRtcDatasheetMetadata.Registers,
 };
 
 var datasheetOptionPrefix = "--datasheet=";
