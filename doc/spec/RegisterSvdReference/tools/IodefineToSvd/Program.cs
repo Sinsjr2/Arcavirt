@@ -47,6 +47,12 @@ var datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, Regi
     ["rx64m-usb"] = Rx64mUsbDatasheetMetadata.Registers,
     ["rx64m-usb0"] = Rx64mUsb0DatasheetMetadata.Registers,
     ["rx64m-mpc"] = Rx64mMpcDatasheetMetadata.Registers,
+    ["rx64m-dmac0"] = Rx64mDmac0DatasheetMetadata.Registers,
+    ["rx64m-dmac1"] = Rx64mDmac1DatasheetMetadata.Registers,
+    ["rx64m-dtc"] = Rx64mDtcDatasheetMetadata.Registers,
+    ["rx64m-edmac"] = Rx64mEdmacDatasheetMetadata.Registers,
+    ["rx64m-exdmac0"] = Rx64mExdmac0DatasheetMetadata.Registers,
+    ["rx64m-exdmac1"] = Rx64mExdmac1DatasheetMetadata.Registers,
 };
 
 var datasheetOptionPrefix = "--datasheet=";

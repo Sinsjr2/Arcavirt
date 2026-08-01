@@ -61,6 +61,12 @@ public class RegenerateAllSvdTest {
         new("RX64M_USB_Pilot", "rx64m-usb", "rx64m-usb-pilot.svd", new HashSet<string> { "st_usb" }),
         new("RX64M_USB0_Pilot", "rx64m-usb0", "rx64m-usb0-pilot.svd", new HashSet<string> { "st_usb0" }),
         new("RX64M_MPC_Pilot", "rx64m-mpc", "rx64m-mpc-pilot.svd", new HashSet<string> { "st_mpc" }),
+        new("RX64M_DMAC0_Pilot", "rx64m-dmac0", "rx64m-dmac0-pilot.svd", new HashSet<string> { "st_dmac0" }),
+        new("RX64M_DMAC1_Pilot", "rx64m-dmac1", "rx64m-dmac1-pilot.svd", new HashSet<string> { "st_dmac1" }),
+        new("RX64M_DTC_Pilot", "rx64m-dtc", "rx64m-dtc-pilot.svd", new HashSet<string> { "st_dtc" }),
+        new("RX64M_EDMAC_Pilot", "rx64m-edmac", "rx64m-edmac-pilot.svd", new HashSet<string> { "st_edmac" }),
+        new("RX64M_EXDMAC0_Pilot", "rx64m-exdmac0", "rx64m-exdmac0-pilot.svd", new HashSet<string> { "st_exdmac0" }),
+        new("RX64M_EXDMAC1_Pilot", "rx64m-exdmac1", "rx64m-exdmac1-pilot.svd", new HashSet<string> { "st_exdmac1" }),
     ];
 
     static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> {
@@ -101,6 +107,12 @@ public class RegenerateAllSvdTest {
         ["rx64m-usb"] = Rx64mUsbDatasheetMetadata.Registers,
         ["rx64m-usb0"] = Rx64mUsb0DatasheetMetadata.Registers,
         ["rx64m-mpc"] = Rx64mMpcDatasheetMetadata.Registers,
+        ["rx64m-dmac0"] = Rx64mDmac0DatasheetMetadata.Registers,
+        ["rx64m-dmac1"] = Rx64mDmac1DatasheetMetadata.Registers,
+        ["rx64m-dtc"] = Rx64mDtcDatasheetMetadata.Registers,
+        ["rx64m-edmac"] = Rx64mEdmacDatasheetMetadata.Registers,
+        ["rx64m-exdmac0"] = Rx64mExdmac0DatasheetMetadata.Registers,
+        ["rx64m-exdmac1"] = Rx64mExdmac1DatasheetMetadata.Registers,
     };
 
     static string GetRepoPath(string relativePath, [CallerFilePath] string sourceFilePath = "") {
