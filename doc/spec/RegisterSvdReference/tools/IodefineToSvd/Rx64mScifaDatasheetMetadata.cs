@@ -6,7 +6,7 @@ namespace IodefineToSvd;
 /// 手動で書き写したレジスタごとのリセット値・アクセス権限。全13レジスタについて
 /// マニュアル本文の個別レジスタ節(41.2.1〜41.2.15)と突き合わせて確認済み(2026-07-29)。
 ///
-/// BRR/MDDRはst_scifaの無名union(CStructBodyParserのAliasNames対応、SVD上は
+/// BRR/MDDRはst_scifaの無名union(CStructBodyParserのAliases対応、SVD上は
 /// alternateRegisterで表現)で同一アドレスを共有する別名レジスタ。SEMR.MDDRSビットで
 /// どちらがアクセスされるか選択する。SCI(c0i.9)のBRR/MDDRと同じ0xFF/read-writeの扱い。
 ///

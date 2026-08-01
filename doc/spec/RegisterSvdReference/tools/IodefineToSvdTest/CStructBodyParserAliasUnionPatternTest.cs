@@ -31,7 +31,7 @@ public class CStructBodyParserAliasUnionPatternTest {
     }
 
     /// <summary>
-    /// 無名エイリアスunionの最初のメンバー(BRR)がAliasNamesに2番目以降のメンバー名
+    /// 無名エイリアスunionの最初のメンバー(BRR)がAliasesに2番目以降のメンバー名
     /// (MDDR)を保持した実体として解決され、RegisterLayoutBuilder.Resolveで
     /// BRRとMDDRの両方が同一アドレスオフセットのレジスタとして生成され、
     /// MDDR側にAlternateRegister="BRR"が設定されることを確認する。

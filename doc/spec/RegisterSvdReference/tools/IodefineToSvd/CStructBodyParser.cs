@@ -25,6 +25,23 @@ public static class CStructBodyParser {
         Expect(tokens, ref pos, "union");
         Expect(tokens, ref pos, "{");
 
+        // RX64MのRTC(st_rtc)のRSECCNT/BCNT0のように、無名union直下のメンバーが
+        // プレーンな値ではなく、それ自体がビットフィールドを持つ名前付き入れ子union
+        // (BCD時刻カウンタ/バイナリカウンタという2つの解釈を同一アドレスに持つ)
+        // であるケース。各入れ子unionはそれ自体1つの"union { ... } NAME;"として
+        // 再帰的にパースできるため、ParseUnionMemberを再帰呼び出しする。
+        if (tokens[pos].Text == "union") {
+            var views = new List<CStructMember>();
+            while (tokens[pos].Text == "union") {
+                views.Add(ParseUnionMember(tokens, ref pos));
+            }
+            Expect(tokens, ref pos, "}");
+            // 無名union(エイリアス表現)は閉じ括弧の直後にレジスタ名を持たない。
+            Expect(tokens, ref pos, ";");
+            var primaryView = views[0];
+            return primaryView with { Aliases = views.Skip(1).ToList() };
+        }
+
         var sizeType = ParseTypeName(tokens, ref pos);
         var firstMemberName = ExpectIdentifier(tokens, ref pos);
         Expect(tokens, ref pos, ";");
@@ -36,9 +53,25 @@ public static class CStructBodyParser {
         IReadOnlyList<CBitField> fields = [];
         var plainAliasNames = new List<string>();
         if (tokens[pos].Text == "struct") {
-            Expect(tokens, ref pos, "struct");
+            // RX64MのQSPI(st_qspi)のSPDR等では、1つのunion内に"BIT"(ビットフィールド)
+            // 以外にも"WORD"/"BYTE"のような、ビットフィールドを持たない別視点の
+            // struct(unsigned short H;やunsigned char HH;等、コロン無しの単なる
+            // 別名メンバー1個だけを持つ)が複数並ぶことがある。CANのID等でも同様に
+            // WORD/BYTE/BIT の3視点が並ぶ。ParseBitFieldListはコロン無しメンバーを
+            // 読み飛ばして空リストを返すため、ビットフィールドを持たない視点を
+            // 処理しても安全。実際にビットフィールド(コロン付き)を持つのは
+            // 通常1つの視点(BIT)だけという前提で、空でない結果が出た視点を採用する。
+            fields = ParseStructViewList(tokens, ref pos);
+        } else if (tokens[pos].Text == "union") {
+            // RX64MのS12AD(st_s12ad)のADRD等では、"BIT"視点自体がさらに入れ子の
+            // unionになっており、その中に"RIGHT"/"LEFT"(右詰め/左詰め)のような、
+            // 同一データを異なるビット割り当てで解釈する複数のstructが並ぶ
+            // ("union { unsigned short WORD; union { struct{...} RIGHT; struct{...}
+            // LEFT; } BIT; } ADRD;")。これらは別名レジスタではなく同一データの
+            // 別解釈にすぎないため、struct視点と同様に空でない結果を採用するだけでよい。
+            Expect(tokens, ref pos, "union");
             Expect(tokens, ref pos, "{");
-            fields = ParseBitFieldList(tokens, ref pos);
+            fields = ParseStructViewList(tokens, ref pos);
             Expect(tokens, ref pos, "}");
             ExpectIdentifier(tokens, ref pos);
             Expect(tokens, ref pos, ";");
@@ -62,7 +95,10 @@ public static class CStructBodyParser {
         if (plainAliasNames.Count > 0) {
             // 無名union(エイリアス表現)は閉じ括弧の直後にレジスタ名を持たない。
             Expect(tokens, ref pos, ";");
-            return new CStructMember(firstMemberName, BaseTypeByteSize(sizeType), IsPadding: false, Fields: [], ArrayCount: null, AliasNames: plainAliasNames);
+            var plainAliases = plainAliasNames
+                .Select(name => new CStructMember(name, BaseTypeByteSize(sizeType), IsPadding: false, Fields: []))
+                .ToList();
+            return new CStructMember(firstMemberName, BaseTypeByteSize(sizeType), IsPadding: false, Fields: [], ArrayCount: null, Aliases: plainAliases);
         }
 
         var registerName = ExpectIdentifier(tokens, ref pos);
@@ -80,6 +116,24 @@ public static class CStructBodyParser {
         Expect(tokens, ref pos, ";");
 
         return new CStructMember(registerName, BaseTypeByteSize(sizeType), IsPadding: false, fields, arrayCount);
+    }
+
+    // "struct { ... } NAME;"を連続して読み、空でないビットフィールド結果を採用する
+    // (複数視点のうち実際にビットフィールド(コロン付き)を持つ視点だけを拾う)。
+    static IReadOnlyList<CBitField> ParseStructViewList(IReadOnlyList<CToken> tokens, ref int pos) {
+        IReadOnlyList<CBitField> fields = [];
+        while (tokens[pos].Text == "struct") {
+            Expect(tokens, ref pos, "struct");
+            Expect(tokens, ref pos, "{");
+            var viewFields = ParseBitFieldList(tokens, ref pos);
+            Expect(tokens, ref pos, "}");
+            ExpectIdentifier(tokens, ref pos);
+            Expect(tokens, ref pos, ";");
+            if (viewFields.Count > 0) {
+                fields = viewFields;
+            }
+        }
+        return fields;
     }
 
     static CStructMember ParsePlainMember(IReadOnlyList<CToken> tokens, ref int pos) {

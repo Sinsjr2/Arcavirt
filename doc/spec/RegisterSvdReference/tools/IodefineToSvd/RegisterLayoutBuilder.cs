@@ -12,8 +12,8 @@ public static class RegisterLayoutBuilder {
         foreach (var member in structDef.Members) {
             if (!member.IsPadding) {
                 registers.Add(new ResolvedRegister(member.Name, offset, member.ByteSize, member.Fields ?? [], member.ArrayCount));
-                foreach (var aliasName in member.AliasNames ?? []) {
-                    registers.Add(new ResolvedRegister(aliasName, offset, member.ByteSize, [], AlternateRegister: member.Name));
+                foreach (var alias in member.Aliases ?? []) {
+                    registers.Add(new ResolvedRegister(alias.Name, offset, alias.ByteSize, alias.Fields ?? [], AlternateRegister: member.Name));
                 }
             }
             offset += member.ByteSize * (member.ArrayCount ?? 1);
