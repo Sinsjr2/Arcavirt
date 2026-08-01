@@ -796,4 +796,22 @@ public class SvdXsdValidatorTest {
 
         Assert.That(errors, Is.Empty);
     }
+
+    /// <summary>
+    /// Arcavirt-c0i.3で生成したFLASHパイロット出力(rx64m-flash-pilot.svd)が、
+    /// CMSIS-SVD公式XSD(v1.3.9)に構造的に適合することを確認する。RX64M Group
+    /// User's Manual: Hardwareには記載が無く、別途Flash Memory User's Manual:
+    /// Hardware Interfaceから転記したメタデータが混在していてもXSD検証が通ることを
+    /// 確認する意味も持つ。
+    /// </summary>
+    [Test]
+    public void Validate_Rx64mFlashPilotSvd_PassesCmsisSvdXsd() {
+        var xsdPath = GetRepoPath("doc/spec/RegisterSvdReference/CMSIS-SVD.xsd");
+        var svdPath = GetRepoPath("doc/spec/RegisterSvdReference/rx64m-flash-pilot.svd");
+
+        var document = XDocument.Load(svdPath);
+        var errors = SvdXsdValidator.Validate(document, xsdPath);
+
+        Assert.That(errors, Is.Empty);
+    }
 }
