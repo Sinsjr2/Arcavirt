@@ -71,6 +71,11 @@ public class RegenerateAllSvdTest {
         new("RX64M_QSPI_Pilot", "rx64m-qspi", "rx64m-qspi-pilot.svd", new HashSet<string> { "st_qspi" }),
         new("RX64M_S12AD_Pilot", "rx64m-s12ad", "rx64m-s12ad-pilot.svd", new HashSet<string> { "st_s12ad", "st_s12ad1" }),
         new("RX64M_USBA_Pilot", "rx64m-usba", "rx64m-usba-pilot.svd", new HashSet<string> { "st_usba" }),
+        new("RX64M_TPU_Pilot", "rx64m-tpu", "rx64m-tpu-pilot.svd", new HashSet<string> { "st_tpu0", "st_tpu1", "st_tpu2", "st_tpu3", "st_tpu4", "st_tpu5", "st_tpua" }),
+        new("RX64M_MTU_Pilot", "rx64m-mtu", "rx64m-mtu-pilot.svd", new HashSet<string> {
+            "st_mtu", "st_mtu0", "st_mtu1", "st_mtu2", "st_mtu3", "st_mtu4", "st_mtu5", "st_mtu6", "st_mtu7",
+        }),
+        new("RX64M_MTU8_Pilot", "rx64m-mtu8", "rx64m-mtu8-pilot.svd", new HashSet<string> { "st_mtu8" }),
     ];
 
     static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> {
@@ -121,6 +126,9 @@ public class RegenerateAllSvdTest {
         ["rx64m-qspi"] = Rx64mQspiDatasheetMetadata.Registers,
         ["rx64m-s12ad"] = Rx64mS12adDatasheetMetadata.Registers,
         ["rx64m-usba"] = Rx64mUsbaDatasheetMetadata.Registers,
+        ["rx64m-tpu"] = Rx64mTpuDatasheetMetadata.Registers,
+        ["rx64m-mtu"] = Rx64mMtuDatasheetMetadata.Registers,
+        ["rx64m-mtu8"] = Rx64mMtu8DatasheetMetadata.Registers,
     };
 
     static string GetRepoPath(string relativePath, [CallerFilePath] string sourceFilePath = "") {

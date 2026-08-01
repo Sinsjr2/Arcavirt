@@ -57,6 +57,9 @@ var datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, Regi
     ["rx64m-rtc"] = Rx64mRtcDatasheetMetadata.Registers,
     ["rx64m-qspi"] = Rx64mQspiDatasheetMetadata.Registers,
     ["rx64m-s12ad"] = Rx64mS12adDatasheetMetadata.Registers,
+    ["rx64m-tpu"] = Rx64mTpuDatasheetMetadata.Registers,
+    ["rx64m-mtu"] = Rx64mMtuDatasheetMetadata.Registers,
+    ["rx64m-mtu8"] = Rx64mMtu8DatasheetMetadata.Registers,
 };
 
 var datasheetOptionPrefix = "--datasheet=";
