@@ -67,6 +67,10 @@ public class RegenerateAllSvdTest {
         new("RX64M_EDMAC_Pilot", "rx64m-edmac", "rx64m-edmac-pilot.svd", new HashSet<string> { "st_edmac" }),
         new("RX64M_EXDMAC0_Pilot", "rx64m-exdmac0", "rx64m-exdmac0-pilot.svd", new HashSet<string> { "st_exdmac0" }),
         new("RX64M_EXDMAC1_Pilot", "rx64m-exdmac1", "rx64m-exdmac1-pilot.svd", new HashSet<string> { "st_exdmac1" }),
+        new("RX64M_RTC_Pilot", "rx64m-rtc", "rx64m-rtc-pilot.svd", new HashSet<string> { "st_rtc" }),
+        new("RX64M_QSPI_Pilot", "rx64m-qspi", "rx64m-qspi-pilot.svd", new HashSet<string> { "st_qspi" }),
+        new("RX64M_S12AD_Pilot", "rx64m-s12ad", "rx64m-s12ad-pilot.svd", new HashSet<string> { "st_s12ad", "st_s12ad1" }),
+        new("RX64M_USBA_Pilot", "rx64m-usba", "rx64m-usba-pilot.svd", new HashSet<string> { "st_usba" }),
     ];
 
     static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> {
@@ -113,6 +117,10 @@ public class RegenerateAllSvdTest {
         ["rx64m-edmac"] = Rx64mEdmacDatasheetMetadata.Registers,
         ["rx64m-exdmac0"] = Rx64mExdmac0DatasheetMetadata.Registers,
         ["rx64m-exdmac1"] = Rx64mExdmac1DatasheetMetadata.Registers,
+        ["rx64m-rtc"] = Rx64mRtcDatasheetMetadata.Registers,
+        ["rx64m-qspi"] = Rx64mQspiDatasheetMetadata.Registers,
+        ["rx64m-s12ad"] = Rx64mS12adDatasheetMetadata.Registers,
+        ["rx64m-usba"] = Rx64mUsbaDatasheetMetadata.Registers,
     };
 
     static string GetRepoPath(string relativePath, [CallerFilePath] string sourceFilePath = "") {

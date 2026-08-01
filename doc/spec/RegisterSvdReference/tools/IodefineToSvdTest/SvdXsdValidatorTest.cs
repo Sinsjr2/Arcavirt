@@ -668,4 +668,68 @@ public class SvdXsdValidatorTest {
 
         Assert.That(errors, Is.Empty);
     }
+
+    /// <summary>
+    /// Arcavirt-c0i.3で生成したRTCパイロット出力(rx64m-rtc-pilot.svd)が、
+    /// CMSIS-SVD公式XSD(v1.3.9)に構造的に適合することを確認する。
+    /// RSECCNT/BCNT0等、入れ子union由来のalternateRegister(エイリアスが固有の
+    /// フィールドを持つケース)が混在していてもXSD検証が通ることを確認する意味も持つ。
+    /// </summary>
+    [Test]
+    public void Validate_Rx64mRtcPilotSvd_PassesCmsisSvdXsd() {
+        var xsdPath = GetRepoPath("doc/spec/RegisterSvdReference/CMSIS-SVD.xsd");
+        var svdPath = GetRepoPath("doc/spec/RegisterSvdReference/rx64m-rtc-pilot.svd");
+
+        var document = XDocument.Load(svdPath);
+        var errors = SvdXsdValidator.Validate(document, xsdPath);
+
+        Assert.That(errors, Is.Empty);
+    }
+
+    /// <summary>
+    /// Arcavirt-c0i.3で生成したQSPIパイロット出力(rx64m-qspi-pilot.svd)が、
+    /// CMSIS-SVD公式XSD(v1.3.9)に構造的に適合することを確認する。
+    /// </summary>
+    [Test]
+    public void Validate_Rx64mQspiPilotSvd_PassesCmsisSvdXsd() {
+        var xsdPath = GetRepoPath("doc/spec/RegisterSvdReference/CMSIS-SVD.xsd");
+        var svdPath = GetRepoPath("doc/spec/RegisterSvdReference/rx64m-qspi-pilot.svd");
+
+        var document = XDocument.Load(svdPath);
+        var errors = SvdXsdValidator.Validate(document, xsdPath);
+
+        Assert.That(errors, Is.Empty);
+    }
+
+    /// <summary>
+    /// Arcavirt-c0i.3で生成したS12AD/S12AD1パイロット出力(rx64m-s12ad-pilot.svd)が、
+    /// CMSIS-SVD公式XSD(v1.3.9)に構造的に適合することを確認する。
+    /// ADRDのRIGHT/LEFT入れ子union(同一データの別解釈を1レジスタに統合)が
+    /// 混在していてもXSD検証が通ることを確認する意味も持つ。
+    /// </summary>
+    [Test]
+    public void Validate_Rx64mS12adPilotSvd_PassesCmsisSvdXsd() {
+        var xsdPath = GetRepoPath("doc/spec/RegisterSvdReference/CMSIS-SVD.xsd");
+        var svdPath = GetRepoPath("doc/spec/RegisterSvdReference/rx64m-s12ad-pilot.svd");
+
+        var document = XDocument.Load(svdPath);
+        var errors = SvdXsdValidator.Validate(document, xsdPath);
+
+        Assert.That(errors, Is.Empty);
+    }
+
+    /// <summary>
+    /// Arcavirt-c0i.3で生成したUSBAパイロット出力(rx64m-usba-pilot.svd)が、
+    /// CMSIS-SVD公式XSD(v1.3.9)に構造的に適合することを確認する。
+    /// </summary>
+    [Test]
+    public void Validate_Rx64mUsbaPilotSvd_PassesCmsisSvdXsd() {
+        var xsdPath = GetRepoPath("doc/spec/RegisterSvdReference/CMSIS-SVD.xsd");
+        var svdPath = GetRepoPath("doc/spec/RegisterSvdReference/rx64m-usba-pilot.svd");
+
+        var document = XDocument.Load(svdPath);
+        var errors = SvdXsdValidator.Validate(document, xsdPath);
+
+        Assert.That(errors, Is.Empty);
+    }
 }
