@@ -814,4 +814,21 @@ public class SvdXsdValidatorTest {
 
         Assert.That(errors, Is.Empty);
     }
+
+    /// <summary>
+    /// Arcavirt-c0i.3で生成したCANパイロット出力(rx64m-can-pilot.svd)が、
+    /// CMSIS-SVD公式XSD(v1.3.9)に構造的に適合することを確認する。MB[32]が
+    /// このプロジェクト初の&lt;cluster dim&gt;(無名構造体の配列)として出力される
+    /// 構成が混在していてもXSD検証が通ることを確認する意味も持つ。
+    /// </summary>
+    [Test]
+    public void Validate_Rx64mCanPilotSvd_PassesCmsisSvdXsd() {
+        var xsdPath = GetRepoPath("doc/spec/RegisterSvdReference/CMSIS-SVD.xsd");
+        var svdPath = GetRepoPath("doc/spec/RegisterSvdReference/rx64m-can-pilot.svd");
+
+        var document = XDocument.Load(svdPath);
+        var errors = SvdXsdValidator.Validate(document, xsdPath);
+
+        Assert.That(errors, Is.Empty);
+    }
 }

@@ -16,9 +16,37 @@ public static class CStructBodyParser {
     }
 
     static CStructMember ParseMember(IReadOnlyList<CToken> tokens, ref int pos) {
-        return tokens[pos].Text == "union"
-            ? ParseUnionMember(tokens, ref pos)
+        if (tokens[pos].Text == "union") {
+            return ParseUnionMember(tokens, ref pos);
+        }
+        // RX64MのCAN(st_can)のMB[32]のように、union(複数視点のエイリアス)ではなく
+        // 単一のstructがそのまま配列宣言されているケース(無名構造体の配列)。
+        // union視点による別名表現ではなく、CMSIS-SVDの<cluster dim>で表現する
+        // (RegisterLayoutBuilder/SvdDocumentBuilder側で処理)。
+        return tokens[pos].Text == "struct"
+            ? ParseClusterMember(tokens, ref pos)
             : ParsePlainMember(tokens, ref pos);
+    }
+
+    static CStructMember ParseClusterMember(IReadOnlyList<CToken> tokens, ref int pos) {
+        Expect(tokens, ref pos, "struct");
+        Expect(tokens, ref pos, "{");
+
+        var clusterMembers = new List<CStructMember>();
+        while (tokens[pos].Text != "}") {
+            clusterMembers.Add(ParseMember(tokens, ref pos));
+        }
+        Expect(tokens, ref pos, "}");
+
+        var clusterName = ExpectIdentifier(tokens, ref pos);
+        Expect(tokens, ref pos, "[");
+        var arrayCount = ExpectNumber(tokens, ref pos);
+        Expect(tokens, ref pos, "]");
+        Expect(tokens, ref pos, ";");
+
+        var elementByteSize = clusterMembers.Sum(m => m.ByteSize * (m.ArrayCount ?? 1));
+
+        return new CStructMember(clusterName, elementByteSize, IsPadding: false, Fields: null, arrayCount, Cluster: clusterMembers);
     }
 
     static CStructMember ParseUnionMember(IReadOnlyList<CToken> tokens, ref int pos) {

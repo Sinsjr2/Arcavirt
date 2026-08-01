@@ -14,11 +14,15 @@ public static class SvdDocumentBuilder {
         foreach (var instance in instances) {
             var structDef = structsByName[instance.StructTypeName];
             var registers = RegisterLayoutBuilder.Resolve(structDef);
+            var clusters = RegisterLayoutBuilder.ResolveClusters(structDef);
             var totalSize = RegisterLayoutBuilder.TotalByteSize(structDef);
 
             var registersElement = new XElement("registers");
             foreach (var register in registers) {
                 registersElement.Add(BuildRegisterElement(register, datasheetMetadata));
+            }
+            foreach (var cluster in clusters) {
+                registersElement.Add(BuildClusterElement(cluster, datasheetMetadata));
             }
 
             var peripheralElement = new XElement("peripheral",
@@ -90,5 +94,23 @@ public static class SvdDocumentBuilder {
         }
 
         return registerElement;
+    }
+
+    static XElement BuildClusterElement(ResolvedCluster cluster, IReadOnlyDictionary<string, RegisterDatasheetMetadata>? datasheetMetadata) {
+        // CMSIS-SVDのclusterTypeもregisterTypeと同様、dim/dimIncrementはname要素より
+        // 前に置く必要がある。dim付きレジスタ名の"%s"付与規約(BuildRegisterElement)を
+        // クラスター名にもそのまま適用する。
+        var clusterElement = new XElement("cluster",
+            new XElement("dim", cluster.ArrayCount),
+            new XElement("dimIncrement", $"0x{cluster.ByteSize:X}"),
+            new XElement("name", $"{cluster.Name}%s"),
+            new XElement("description", $"{cluster.Name} register cluster, {cluster.ArrayCount} elements."),
+            new XElement("addressOffset", $"0x{cluster.AddressOffset:X}"));
+
+        foreach (var register in cluster.Registers) {
+            clusterElement.Add(BuildRegisterElement(register, datasheetMetadata));
+        }
+
+        return clusterElement;
     }
 }
