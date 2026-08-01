@@ -76,6 +76,7 @@ public class RegenerateAllSvdTest {
             "st_mtu", "st_mtu0", "st_mtu1", "st_mtu2", "st_mtu3", "st_mtu4", "st_mtu5", "st_mtu6", "st_mtu7",
         }),
         new("RX64M_MTU8_Pilot", "rx64m-mtu8", "rx64m-mtu8-pilot.svd", new HashSet<string> { "st_mtu8" }),
+        new("RX64M_EPTPC_Pilot", "rx64m-eptpc", "rx64m-eptpc-pilot.svd", new HashSet<string> { "st_eptpc", "st_eptpc0" }),
     ];
 
     static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> datasheetProviders = new Dictionary<string, IReadOnlyDictionary<string, RegisterDatasheetMetadata>> {
@@ -129,6 +130,7 @@ public class RegenerateAllSvdTest {
         ["rx64m-tpu"] = Rx64mTpuDatasheetMetadata.Registers,
         ["rx64m-mtu"] = Rx64mMtuDatasheetMetadata.Registers,
         ["rx64m-mtu8"] = Rx64mMtu8DatasheetMetadata.Registers,
+        ["rx64m-eptpc"] = Rx64mEptpcDatasheetMetadata.Registers,
     };
 
     static string GetRepoPath(string relativePath, [CallerFilePath] string sourceFilePath = "") {
