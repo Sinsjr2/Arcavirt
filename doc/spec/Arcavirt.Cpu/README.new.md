@@ -24,11 +24,14 @@
 - **実装者**: この JSON をロード・解釈する C# コードを実装・保守する人。
   各フィールドの解決規則・検証内容を調べる。
 
-この2種類の読者を文書の前半/後半で分けることはしない。各フィールドの説明は
-「書式」「意味」に加え、該当する場合のみ「解決規則・既定値」「例」を持つ。
-1つの項目を引けば、利用者・実装者の両方が必要な情報にたどり着ける。
+この2種類の読者を文書の前半/後半で分けることはしない。各フィールドの説明は「意味」に
+加え、該当する場合のみ「書式」「解決規則・既定値」「例」を持つ。1つの項目を引けば、
+利用者・実装者の両方が必要な情報にたどり着ける。
 
-- **書式**・**意味**: すべての項目に必ず記載する。
+- **意味**: すべての項目に必ず記載する。
+- **書式**: 型そのものは「全体構造」のクラス図が示すため、繰り返さない。クラス図
+  だけでは分からない追加情報(文字列内の記法・列挙可能なリテラル値・必須/任意・
+  スカラー値の既定値)がある項目にのみ記載する。
 - **解決規則・既定値**: 省略可能で既定動作がある、複数の入力源(`includes`間・
   `extends`チェーン・`registerOverrides`)がマージ/上書きされる、文字列がパターンとして
   解釈される、のいずれかに該当する項目にのみ記載する。
@@ -310,22 +313,18 @@ flowchart TD
 
 ## `memoryRegions`
 
-**書式**: `MemoryRegion`の配列(`MemoryRegion[]`)。
-
 **意味**: アドレス空間上の区画(RAM/ROM/未使用領域等)を宣言する。各フィールドの詳細は
 `MemoryRegion`を参照。
 
 ## `peripherals`
 
 **書式**: インスタンス名をキーとする`PeripheralDefinition`の辞書
-(`Map<string, PeripheralDefinition>`)。
+(`Dictionary<string, PeripheralDefinition>`)。
 
 **意味**: 周辺モジュールのインスタンスを宣言する。実体化・削除の規則、名前重複の
 禁止は`PeripheralDefinition`を参照。
 
 ## `cores`
-
-**書式**: `Core`の配列(`Core[]`)。
 
 **意味**: CPUコアを宣言する。多くはシングルコア構成だが、マルチコアSoCへの拡張を
 見据えて配列で持つ。各フィールドの詳細は`Core`を参照。
@@ -333,8 +332,8 @@ flowchart TD
 ## 配線の共通規約
 
 `pinConnections`と`clockConnections`はどちらも同じ形の宣言的なマップ
-(`Map<toPath, fromPath | null>`。キー=配線先、値=配線元)で表現し、以下の規則を
-共有する。
+(`Dictionary<string, string?>`。キー=配線先(`to`)、値=配線元(`from`)、値`null`は
+未接続)で表現し、以下の規則を共有する。
 
 - `to`/`from`のパスは、実体化された`peripherals`のインスタンス名、または
   `cores[].name`から名前解決される。パス末尾のピン/引数名は、対象の`kind`を実装する
@@ -358,7 +357,7 @@ flowchart TD
 
 ## `pinConnections`
 
-**書式**: `Map<toPinPath, fromPinPath | null>`。
+**書式**: `Dictionary<string, string?>`(キー=`toPinPath`、値=`fromPinPath`)。
 
 ```
 pinPath := "<instanceName>.<pinKey>"
@@ -404,7 +403,7 @@ pinKey  := <pinName> | "<channelName>.<pinName>"
 
 ## `clockConnections`
 
-**書式**: `Map<toPath, fromPath | null>`。
+**書式**: `Dictionary<string, string?>`(キー=`toPath`、値=`fromPath`)。
 
 ```
 toPath     := "<consumerName>.<pinKey>"   // pinKeyは消費側のコンストラクタ引数名
@@ -442,7 +441,8 @@ C#実装にしても汎用性は失われない。マップの一般的な構造
 
 ## `clockSources`
 
-**書式**: `Map<namespace, Map<sourceName, uint>>`。
+**書式**: `Dictionary<string, Dictionary<string, uint>>`(外側のキー=`namespace`、
+内側のキー=クロック源名)。
 
 ```jsonc
 { "clockSources": {
@@ -492,7 +492,7 @@ C#実装にしても汎用性は失われない。マップの一般的な構造
 ## `registerOverrides`
 
 **書式**: ドット区切りパスをキー、マージする差分オブジェクトを値とする辞書
-(`Map<string, object>`)。
+(`Dictionary<string, object>`)。
 
 ```
 {instanceName}.{channelName}                                          … チャネル全体
@@ -559,7 +559,7 @@ C#実装にしても汎用性は失われない。マップの一般的な構造
 
 ## `registerLog`
 
-**書式**: パスをキー、`LogSetting`を値とする辞書(`Map<string, LogSetting>`)。
+**書式**: パスをキー、`LogSetting`を値とする辞書(`Dictionary<string, LogSetting>`)。
 
 **意味**: **デバッグオーバーレイ専用**で、標準MCUのJSONには一切登場しない
 (「呼び出し側によるオーバーレイ」の典型的な使用例)。どのレジスタ/フィールドの
@@ -611,8 +611,6 @@ C#オブジェクトを持たず、`begin`〜`end`の範囲情報として`BusMa
 
 ## `name`
 
-**書式**: string。
-
 **意味**: 区画名。
 
 ## `begin`
@@ -630,8 +628,6 @@ C#オブジェクトを持たず、`begin`〜`end`の範囲情報として`BusMa
 **解決規則**: `begin > end`となる範囲マッピングはロード時エラーとする。
 
 ## `kind`
-
-**書式**: string。
 
 **意味**: 区画の種別(RAM/ROM/未使用領域等)。値の解釈はローダー実装に委ねる。
 
@@ -687,8 +683,6 @@ C#オブジェクトを持たず、`begin`〜`end`の範囲情報として`BusMa
 
 ## `kind`
 
-**書式**: string。
-
 **意味**: C#で実装された`Peripheral`派生クラスとの対応名(例: `"Timer"`)。同じ`kind`を
 持つ複数のエントリを作れば、同じC#クラスの複数インスタンスになる。
 
@@ -722,7 +716,7 @@ C#オブジェクトを持たず、`begin`〜`end`の範囲情報として`BusMa
 
 ## `registers`
 
-**書式**: レジスタ名をキーとする辞書(`Map<string, RegisterDefinition>`、**必須**)。
+**書式**: レジスタ名をキーとする辞書(`Dictionary<string, RegisterDefinition>`、**必須**)。
 
 **意味**: このインスタンスが持つレジスタの集合。各要素の詳細は`RegisterDefinition`を
 参照。
@@ -799,8 +793,6 @@ C#オブジェクトを持たず、`begin`〜`end`の範囲情報として`BusMa
 
 ## `sizeBits`
 
-**書式**: int。
-
 **意味**: レジスタのビット幅(8/16/32)。
 
 ## `fields`
@@ -822,20 +814,14 @@ C#オブジェクトを持たず、`begin`〜`end`の範囲情報として`BusMa
 
 ## `name`
 
-**書式**: string。
-
 **意味**: データシートのフィールド名(例: `"EN"`)。予約ビットは`"Reserved"`。
 
 ## `bitOffset`
-
-**書式**: int。
 
 **意味**: レジスタ内のビット位置。デバイスごとに変わりうるため単一情報源として
 JSONにのみ持たせる。
 
 ## `bitWidth`
-
-**書式**: int。
 
 **意味**: フィールドの幅(ビット数)。
 
@@ -955,7 +941,7 @@ JSONにのみ持たせる。
 
 | フィールド | 型 | 説明 |
 | --- | --- | --- |
-| `enumeratedValues` | `Map<string, string>`(任意) | 値(16進文字列、キー)→名前(値)の辞書。全品種の和集合を`peripherals`側で定義する。 |
+| `enumeratedValues` | `Dictionary<string, string>`(任意) | 値(16進文字列、キー)→名前(値)の辞書。全品種の和集合を`peripherals`側で定義する。 |
 | `enumeratedValuesOnly` | `string[]`(任意、`registerOverrides`用) | `enumeratedValues`のキーのうち、このデバイスで有効な値の許可リスト。 |
 | `enumeratedValuesExclude` | `string[]`(任意、`registerOverrides`用) | `enumeratedValues`のキーのうち、このデバイスで無効な値の除外リスト。両方同時指定は不可。 |
 
@@ -991,13 +977,9 @@ CPUコアは`name`/`kind`/`params`を持つが、バスにマップされない�
 
 ## `name`
 
-**書式**: string。
-
 **意味**: インスタンス名。`pinConnections`/`clockConnections`から参照される。
 
 ## `kind`
-
-**書式**: string。
 
 **意味**: コア実装(命令実行エンジン)の選択(例: `"core-v1"`, `"core-v2"`)。
 
