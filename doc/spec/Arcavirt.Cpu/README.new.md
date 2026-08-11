@@ -116,7 +116,7 @@ classDiagram
         +int bitOffset
         +int bitWidth
         +string access
-        +uint resetValue
+        +string resetValue
         +bool mapped
         +int dim
         +int dimIncrement
@@ -157,11 +157,25 @@ classDiagram
 | マップのキー削除 | `peripherals`/`pinConnections`/`clockConnections`/`clockSources`/`registerOverrides`のような「マップ」として扱うフィールド全般。複数ファイルのマージ時、高優先度側の値が`null`ならそのキー自体を削除する | [マージ規則](#merge-rules)を参照 |
 | 構造的な永久欠番 | `channels`配列内の要素としての`null`。位置だけ消費しレジスタを生成しない(マップのキー削除とは別の意味) | [`peripherals`](#deviceconfig-peripherals)を参照 |
 
+<a id="numeric-width"></a>
 ## 数値リテラルの記法
 
 16進で読みたい値(アドレス・オフセット)は文字列(`"0x0008C000"`)、10進で十分な値
 (幅・個数)は素の数値(`8`)で書く。負の値は符号を前置する(`"-0x1F"`)。
 10進表記(`"-31"`のような文字列)は許容しない。
+
+**表現できる幅**: 16進文字列で書く値は、CPUコアが64ビットの場合でも表現できるよう
+上限を統一する。パース後の型は次の通り。
+
+| 対象 | 該当フィールド | パース後の型 |
+| --- | --- | --- |
+| アドレス | `MemoryRegion.begin`/`end`、`PeripheralDefinition.baseAddress` | `ulong` |
+| 相対オフセット | `RegisterDefinition.offset` | `long`(符号付き。手前のレジスタへの負のオフセットを許容するため) |
+| レジスタ値 | `BitField.resetValue` | `ulong`(実際に使う範囲は所属する`RegisterDefinition.sizeBits`/`BitField.bitWidth`までに絞られる) |
+
+CPUコアやレジスタが実際に使うビット幅は8〜64ビットの間で様々であり、常に64ビットとは
+限らない。JSON側の書式・パース後の型は上限を64ビットに統一し、実際に使う幅は
+[`sizeBits`](#registerdefinition-sizebits)のような各フィールドで個別に絞り込む。
 
 # DeviceConfig
 
@@ -766,8 +780,10 @@ C#オブジェクトを持たず、`begin`〜`end`の範囲情報として`BusMa
 
 ## レジスタキーの構成規則
 
-周辺モジュールクラスは`IReadOnlyDictionary<string, IRegisterValue32> Registers`を
-公開する。キーの合成規則:
+周辺モジュールクラスは、レジスタ名をキーとする辞書を公開する。辞書の値の型は
+バス幅に対応するインターフェースで、例えば32ビットバスでは
+`IReadOnlyDictionary<string, IRegisterValue32> Registers`になる
+([数値の表現幅](#numeric-width)を参照)。キーの合成規則:
 
 - 単一レジスタ: `"CTRL"`
 - チャネルを持つレジスタ: `"{channelName}.{registerName}"`(例: `"0.DIR"`)
@@ -805,9 +821,11 @@ C#オブジェクトを持たず、`begin`〜`end`の範囲情報として`BusMa
 間隔が一定でない繰り返しには使えない(その場合は各回を別々の`peripherals`
 エントリにする)。
 
+<a id="registerdefinition-sizebits"></a>
 ## `sizeBits`
 
-**意味**: レジスタのビット幅(8/16/32)。
+**意味**: レジスタのビット幅(8/16/32/64のいずれか)。[数値の表現幅](#numeric-width)の
+「レジスタ値」の上限を、このレジスタが実際に使う幅まで絞り込む。
 
 ## `fields`
 
@@ -864,14 +882,18 @@ JSONにのみ持たせる。
 
 ## `resetValue`
 
-**書式**: uint(**必須**)。
+**書式**: 文字列(16進、**必須**)。[数値の表現幅](#numeric-width)の
+「レジスタ値」を参照。
 
 **意味**: リセット直後の値、または`mapped:false`時の恒久的な読み出し値。役割は
 `mapped`/`access`で変わる: `mapped:true`かつ`access`が`r`/`rw`では「リセット直後の
 初期値」(以降は書き込み・周辺内部ロジックが値を決める)、`mapped:true`かつ
 `access:"w"`では「常に返す固定読み出し値」、`mapped:false`では「恒久的な読み出し値」。
-「読み出し値が不定」とデータシートが明記している場合は、著者が`resetValue: 0`と
+「読み出し値が不定」とデータシートが明記している場合は、著者が`resetValue: "0x0"`と
 書く(チェッカーボードパターン等の特別な慣習値は導入しない)。
+
+**解決規則**: 値が所属する`BitField`の`bitWidth`に収まっているか(`bitWidth`ビットで
+表現可能な範囲を超えていないか)をロード時に検証する。
 
 <a id="bitfield-mapped"></a>
 ## `mapped`
@@ -890,7 +912,7 @@ JSONにのみ持たせる。
 
 **解決規則**: `registers`内の`fields`は明示的に列挙したビットのみを対象とし、
 **列挙されていないビット範囲はローダーが自動的に`mapped: false`
-(`resetValue: 0`)として補完する**(著者が1個ずつパディング用の`BitField`を書く
+(`resetValue: "0x0"`)として補完する**(著者が1個ずつパディング用の`BitField`を書く
 必要をなくす。著者が意図的に名前を付けたい予約ビットは、明示的に宣言した上で
 `mapped: false`を指定すればよい)。レジスタが`fields`で隙間なく覆われるという検証
 原則は、「著者の記述＋自動補完」で満たされる。
@@ -918,9 +940,9 @@ JSONにのみ持たせる。
 
 | 分類 | `BitField`での表現 |
 | --- | --- |
-| 予約ビットに0/1を書け(値が変われば`registerLog`のログ対象にしたい) | `access:"rw"`, `mapped:false`, `resetValue:0`(または`1`) |
+| 予約ビットに0/1を書け(値が変われば`registerLog`のログ対象にしたい) | `access:"rw"`, `mapped:false`, `resetValue:"0x0"`(または`"0x1"`) |
 | 読み出し専用 | `access:"r"`, `mapped:true` |
-| 読み値不定(データシートが不定と明記) | `resetValue:0`, `mapped:true` |
+| 読み値不定(データシートが不定と明記) | `resetValue:"0x0"`, `mapped:true` |
 | 通常の機能フィールド | `access:"rw"`, `mapped:true`(既定) |
 
 <a id="bitfield-array-expression"></a>
@@ -945,7 +967,7 @@ JSONにのみ持たせる。
 **例**:
 
 ```jsonc
-{ "name": "B%s", "bitOffset": 0, "bitWidth": 1, "access": "rw", "resetValue": 0,
+{ "name": "B%s", "bitOffset": 0, "bitWidth": 1, "access": "rw", "resetValue": "0x0",
   "dim": 8, "dimIncrement": 1 }
 ```
 
@@ -977,7 +999,7 @@ JSONにのみ持たせる。
 
 ```jsonc
 // peripheral-kinds/pinmux.json(すべてのデバイスの種類で共通)
-{ "name": "SEL", "bitOffset": 0, "bitWidth": 6, "access": "rw", "resetValue": 0,
+{ "name": "SEL", "bitOffset": 0, "bitWidth": 6, "access": "rw", "resetValue": "0x0",
   "enumeratedValues": { "0x00": "GPIO", "0x0A": "UART_TX", "0x0D": "SPI_MOSI" } }
 
 // devices/variant-b.json(UART_TXが配線されていないデバイスの種類)
