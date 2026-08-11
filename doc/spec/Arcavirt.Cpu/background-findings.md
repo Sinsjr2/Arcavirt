@@ -29,7 +29,8 @@ public RegisterBitField32(IEnumerable<(int bitPos, IRegisterBit32 value)> fields
 ```
 
 **`bitPos` は最初からコンストラクタの外部引数として設計されている**。
-README「BitField」節および「ビットフィールドの並び替えにも対応する」節の「フィールドのビット位置を JSON から供給する」設計は、
+README「BitField」節、および「registerOverrides」節の「ビットフィールドの並び替え」の例が示す
+「フィールドのビット位置を JSON から供給する」設計は、
 この既存インフラをそのまま利用できる（新規に何かを発明する必要はない。
 JSON ローダーが `(bitPos, value)` のタプル列を組み立てて渡すだけで済む）。
 `onWrite`/`onRead`はビット位置ではなく`fields["MODE"]`のように名前で参照する形に書き直す必要がある。
@@ -68,7 +69,8 @@ JSON のアドレス→オブジェクト対応では原理的に表現できな
 ## 3. 予約ビット文言のタクソノミ（RX64M マニュアル全文、約1,100行を機械抽出）
 
 > 表中の `rw-must-be-zero` 等の分類名は、当時の検討過程での呼称（現在のスキーマには`reservedPolicy` という列挙は存在しない）。
-> 現在は README「BitField」節の`state`4値表のとおり `BitField.access`/`resetValue`/`state` の組み合わせに対応する。
+> 現在は README「BitField」の`mapped`節にある分類表のとおり
+> `BitField.access`/`resetValue`/`mapped`の組み合わせに対応する（`state`という概念は消滅済み）。
 
 | 件数 | 文言（原文） | R/W | reservedPolicy |
 | --- | --- | --- | --- |
@@ -105,7 +107,8 @@ pat = re.compile(r'(?<![A-Za-z0-9_])P([0-9A-J])([0-7])(?![0-9A-Za-z_])')
 | PORTJ | 0x28 | 0x28 | 0x08 | 0x28 |
 
 **iodefine.h のマスクは各パッケージの OR（和集合）と一致する**（PORT3 を除く）。
-→ README「差分圧縮方式」類型4（既定値は和集合、パッケージ別に不要なビットを`reserved`にする）の裏付け。
+→ README「違いをどう書くか（索引）」の「ビット実装/未実装が違う」（既定値は和集合、
+パッケージ別に不要なビットは`registerOverrides`の`mapped: false`にする）の裏付け。
 
 レジスタごとの実装マスクの差（ポート単位ではないことの実例、RX64M）:
 
@@ -142,7 +145,8 @@ DSCR を持つポート: **m = 0, 2, 5, 9, A-E, G**（マニュアル §22.3.8 �
 
 `MPC` は RX111=0x8C11F、RX64M=0x8C100 で一見差があるが、共通レジスタ `PWPR` は両者とも0x8C11F。
 RX64M に `PFCSE` 等が前置されているだけ。
-→ README「差分圧縮方式」類型2（`baseAddress`はアンカーレジスタの絶対アドレスで定義する）の根拠。
+→ README「違いをどう書くか（索引）」の「ベースアドレスだけ違う」
+（`baseAddress`はアンカーレジスタの絶対アドレスで定義する）の根拠。
 `PFCSE`はアンカー`PWPR`より`0x1F`手前に位置するため、`RegisterDefinition.offset`は負値`"-0x1F"`になる
 （README「RegisterDefinition」節の負オフセット例の根拠）。
 
@@ -157,9 +161,10 @@ RX64M/RX66N 比較 APN（R01AN4820JJ0100 表2.34, p.47）より:
 | `GTPR` | 16 ビット | **32 ビット** |
 
 → `implementedMask`（ビット単位マスク）では表現できない差分（マスクの対象自体が変わるため）。
-`overrides` を `RegisterDefinition` の全フィールド（`sizeBits` を含む）に対象を広げる根拠（README「overrides のパス文法」節）。
+`registerOverrides` を `RegisterDefinition` の全フィールド（`sizeBits` を含む）に対象を
+広げる根拠（README「`registerOverrides`」節の対象パスごとの有効プロパティ表を参照）。
 
-## 6. 実機のバスエラー機構の詳細（README「実機準拠の既定動作」の根拠一次資料）
+## 6. 実機のバスエラー機構の詳細（README「`registerLog`」の設計判断の根拠一次資料）
 
 一次資料: RX64M ユーザーズマニュアル R01UH0377EJ0120/JJ0120 Rev.1.20、RXv2 命令セットアーキテクチャ編 R01US0071JJ0100。
 
@@ -168,11 +173,13 @@ RX64M/RX66N 比較 APN（R01AN4820JJ0100 表2.34, p.47）より:
 - `BEREN`（不正アドレス検出許可）はリセット値 `0`（既定無効）（§16.3.20）
 - 主要 SFR が住む「内部周辺バス1」（0008 0000h-0008 7FFFh）は**表16.21 でバスエラー対象外**
 - BERSR1/2 は**一度記録したらクリアされるまで次を記録しない**（§16.7.3）。
-  「常に警告ログを出す」という README の既定動作は、実機のこのラッチ機構とは別物
+  README の`registerLog`は既定で何も出力せず、有効にした場合はフィールド単位で
+  違反の都度記録する設計であり、実機のこのラッチ機構（1回記録したら次を待つ）とは
+  動作原理が異なる点に注意。
 
 ## 7. 割込み配線・スコープ境界の実装状況（RX適用における未了点）
 
-README「実装状況の既知の未了点」参照。
+README「責務とスコープ境界」の「担わないこと（別issue）」参照。
 
 ### 割込みモデルの違い（グループ割込み・選択型割込）
 
@@ -198,12 +205,13 @@ JSONマッピング適用はC#側の実装完成が前提。
 | CMT: 7 レジスタオブジェクト → 実アドレス 3 個（同種の衝突バグ） | `CMT.cs:103` |
 | `BusManager.AddMapping` は重複登録を検出せず後勝ちで黙って上書きする | `RegisterValues.cs:335-337` |
 
-→ README「ロード時検証」の検証項目1（同一アドレスへの重複登録を検出しエラーにする）の根拠。
+→ README「PeripheralDefinition」の`baseAddress`節（「同一デバイス内で複数エントリの
+`baseAddress`が一致することはロード時エラーとする」）の根拠。
 
 ### 割込み検出方式（edge/level）の固定化
 
 `ICU.WriteIR`・内部割込み判定ロジック（`ICU.cs`）を調査した結果、外部端子割込み（IRQ/NMI）は`IRQCRn.IRQMD`レジスタで実行時に検出方式を切り替え可能だが、
 内部割込み（`CMI0`等）は常にエッジ型に固定されており、外部端子用と内部割込み用でコード上の分岐は存在しない。
-→ README「信号配線（`pinConnections`）」のJSONスキーマに検出方式（エッジ/レベル）のフィールドを一切持たせていない判断の根拠。
+→ README「`pinConnections`」のJSONスキーマに検出方式（エッジ/レベル）のフィールドを一切持たせていない判断の根拠。
 内部割込みの検出方式はコントローラー実装のC#クラスに固定で書く。
 外部端子の検出方式は検出モード用`BitField`の`resetValue`で表現できる。
