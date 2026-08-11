@@ -72,71 +72,71 @@
 
 ## 全体構造
 
-1つの JSON ファイルが持つ静的なフィールド構成を、対応する C# 型として示す
-(実際のローダー実装の型と一致している必要はなく、構造を示すための表記)。
+1つの JSON ファイルが持つ静的なフィールド構成を示す。
 
-```csharp
-public sealed class DeviceConfig {
-    public string[] Includes { get; init; }
-    public MemoryRegion[] MemoryRegions { get; init; }
-    public Dictionary<string, PeripheralDefinition> Peripherals { get; init; }
-    public Core[] Cores { get; init; }
-    public Dictionary<string, string?> PinConnections { get; init; }
-    public Dictionary<string, string?> ClockConnections { get; init; }
-    public Dictionary<string, object> RegisterOverrides { get; init; }
-    public Dictionary<string, Dictionary<string, uint>> ClockSources { get; init; }
-    public Dictionary<string, LogSetting> RegisterLog { get; init; }
-}
-
-public sealed class MemoryRegion {
-    public string Name { get; init; }
-    public string Begin { get; init; }
-    public string End { get; init; }
-    public string Kind { get; init; }
-}
-
-public sealed class PeripheralDefinition {
-    public string[]? Extends { get; init; }
-    public string Kind { get; init; }
-    public string? BaseAddress { get; init; }
-    public string?[]? Channels { get; init; }
-    public Dictionary<string, RegisterDefinition> Registers { get; init; }
-    public object? Params { get; init; }
-}
-
-public sealed class RegisterDefinition {
-    public string Name { get; init; }
-    public string Offset { get; init; }
-    public uint Stride { get; init; }
-    public int SizeBits { get; init; }
-    public BitField[] Fields { get; init; }
-}
-
-public sealed class BitField {
-    public string Name { get; init; }
-    public int BitOffset { get; init; }
-    public int BitWidth { get; init; }
-    public string Access { get; init; }
-    public uint ResetValue { get; init; }
-    public bool Mapped { get; init; } = true;
-    public int? Dim { get; init; }
-    public int? DimIncrement { get; init; }
-    public string[]? DimIndex { get; init; }
-    public Dictionary<string, string>? EnumeratedValues { get; init; }
-}
-
-public sealed class Core {
-    public string Name { get; init; }
-    public string Kind { get; init; }
-    public object? Params { get; init; }
-}
-
-public sealed class LogSetting {
-    public bool ReadTrace { get; init; }
-    public bool WriteTrace { get; init; }
-    public bool ReadViolation { get; init; }
-    public bool WriteViolation { get; init; }
-}
+```mermaid
+classDiagram
+    class DeviceConfig {
+        +string[] includes
+        +MemoryRegion[] memoryRegions
+        +Dictionary~string, PeripheralDefinition~ peripherals
+        +Core[] cores
+        +Dictionary~string, string~ pinConnections
+        +Dictionary~string, string~ clockConnections
+        +Dictionary~string, object~ registerOverrides
+        +Dictionary~string, Dictionary~string, uint~~ clockSources
+        +Dictionary~string, LogSetting~ registerLog
+    }
+    class MemoryRegion {
+        +string name
+        +string begin
+        +string end
+        +string kind
+    }
+    class PeripheralDefinition {
+        +string[] extends
+        +string kind
+        +string baseAddress
+        +string?[] channels
+        +Dictionary~string, RegisterDefinition~ registers
+        +object params
+    }
+    class RegisterDefinition {
+        +string name
+        +string offset
+        +uint stride
+        +int sizeBits
+        +BitField[] fields
+    }
+    class BitField {
+        +string name
+        +int bitOffset
+        +int bitWidth
+        +string access
+        +uint resetValue
+        +bool mapped
+        +int dim
+        +int dimIncrement
+        +string[] dimIndex
+        +Dictionary~string, string~ enumeratedValues
+    }
+    class Core {
+        +string name
+        +string kind
+        +object params
+    }
+    class LogSetting {
+        +bool readTrace
+        +bool writeTrace
+        +bool readViolation
+        +bool writeViolation
+    }
+    DeviceConfig --> MemoryRegion
+    DeviceConfig --> PeripheralDefinition : peripherals
+    DeviceConfig --> Core
+    DeviceConfig --> LogSetting : registerLog
+    PeripheralDefinition --> RegisterDefinition
+    RegisterDefinition --> BitField : fields
 ```
 
 `DeviceConfig`は1つのJSONファイルのトップレベル型。`includes`/`extends`解決・
