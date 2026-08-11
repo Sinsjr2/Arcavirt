@@ -18,9 +18,9 @@
 
 この仕様書は2種類の読者を想定する。
 
-- **設定ファイルの作成者**: 新しいデバイス・品種を Arcavirt でエミュレートするために、
-  この JSON を新規に書く人。データシートを見ながら、各フィールドの意味・書式・
-  既定値を調べる。
+- **設定ファイルの作成者**: 新しいデバイスや、既存デバイスの新しい種類を Arcavirt で
+  エミュレートするために、この JSON を新規に書く人。データシートを見ながら、
+  各フィールドの意味・書式・既定値を調べる。
 - **実装者**: この JSON をロード・解釈する C# コードを実装・保守する人。
   各フィールドの解決規則・検証内容を調べる。
 
@@ -144,7 +144,7 @@ classDiagram
 
 `DeviceConfig`は1つのJSONファイルのトップレベル型。`includes`/`extends`解決・
 呼び出し側による上書き・`registerOverrides`適用を経て得られる実効`DeviceConfig`が、
-1台のデバイス(1品種)の定義になる(解決手順は[合成と上書きの解決](#merge-and-override)を参照)。
+1つのデバイスの種類の定義になる(解決手順は[合成と上書きの解決](#merge-and-override)を参照)。
 
 <a id="null-meanings"></a>
 ## `null`の2つの意味
@@ -215,7 +215,7 @@ JSONファイルのトップレベル型。フィールドの型は「全体構�
 - 同一チップのパッケージ差分(176pin/145pin/100pinなど)を、共通部分を1本の
   ベースファイルにまとめ、パッケージごとの差分だけを別ファイルに書きたい。
 - 近縁チップ間(RX64M/RX621など)で共通する周辺モジュール定義をベースにしつつ、
-  品種固有の追加レジスタだけを差分ファイルに書きたい。
+  デバイスの種類ごとの追加レジスタだけを差分ファイルに書きたい。
 - テスト/CI専用の設定を、本番用のdevice定義には決して混ざらない形で、実行のときだけ
   追加したい(`registerLog`によるデバッグ用ログ設定はこの典型例)。
 - 同じC#クラス(`kind`)を使う複数のインスタンス(`TIMER0`/`TIMER1`等)を、
@@ -299,22 +299,23 @@ flowchart TD
 `registerOverrides`が絡み合った結果が意図通りかを、実装を介さず目視確認するために
 必須とする。具体的な提供形式(CLI引数・API等)は実装時に決定する。
 
-### 差分圧縮方式(品種・パッケージ差の早見表)
+<a id="how-to-express-differences"></a>
+### 違いをどう書くか(索引)
 
-複数品種・複数パッケージにまたがる周辺モジュールの差分を実データで調査し、8類型に
-分類した。類型ごとに最小記述量になる圧縮方式が異なる。「自分が今表現したい差分が
-どの型か」から使う仕組みへたどり着くための索引として使う。
+デバイスの種類・パッケージにまたがる周辺モジュールの違いは、内容によって最小記述量に
+なる書き方が異なる。「自分が今表現したい違いがどの類型か」から使う仕組みへ
+たどり着くための索引として使う。
 
-| # | 類型 | 実例 | 圧縮方式 |
-| --- | --- | --- | --- |
-| 1 | インスタンス数だけ違う | 同種のタイマーが品種によって2チャネル→4チャネルに増える | `baseAddress`を持たないテンプレート1本 + 各インスタンスがそれを`extends`する |
-| 2 | ベースアドレスだけ違う | 同じ周辺が品種によって配置アドレスだけ変わる | `baseAddress`はアンカーレジスタの絶対アドレスで定義 |
-| 3 | レジスタの有無が違う | パッケージによって特定のポート群が丸ごと存在しない | チャネル単位は`registerOverrides`で`{"mapped": false}`。インスタンス単位は、新規に`includes`する側では`baseAddress`を書かない(テンプレートのまま実体化しない)。`includes`元で既に`baseAddress`を持つ場合は、そのキーを`null`にしてエントリごと削除する(配線が絡む場合は`pinConnections`/`clockConnections`側の該当`to`キーも`null`にする) |
-| 4 | ビット実装/未実装が違う | 同じレジスタでもピン数の少ないパッケージでは上位ビットが未実装 | `registerOverrides`の`mapped`(`false`)を使う |
-| 5 | リセット値が違う | 実測では稀 | `registerOverrides`の`resetValue`を使う |
-| 6 | レジスタ名が違う | 同じ機能のレジスタが品種によって別名になる | `extends`で共有せず、別の`peripherals`エントリとして独立に定義する |
-| 7 | ベクタ番号だけ違う | 割込みベクタ番号の対応が品種ごとに異なる | ベクタ表は品種ごと丸ごと別ファイル |
-| 8 | 列挙値だけが違う | ピン機能選択の列挙値がパッケージで変わる | `registerOverrides`の`enumeratedValuesOnly`/`enumeratedValuesExclude`を使う |
+| 類型 | 実例 | 書き方 |
+| --- | --- | --- |
+| インスタンス数だけ違う | 同種のタイマーがデバイスの種類によって2チャネル→4チャネルに増える | `baseAddress`を持たないテンプレート1本 + 各インスタンスがそれを`extends`する |
+| ベースアドレスだけ違う | 同じ周辺がデバイスの種類によって配置アドレスだけ変わる | `baseAddress`はアンカーレジスタの絶対アドレスで定義 |
+| レジスタの有無が違う | パッケージによって特定のポート群が丸ごと存在しない | チャネル単位は`registerOverrides`で`{"mapped": false}`。インスタンス単位は、新規に`includes`する側では`baseAddress`を書かない(テンプレートのまま実体化しない)。`includes`元で既に`baseAddress`を持つ場合は、そのキーを`null`にしてエントリごと削除する(配線が絡む場合は`pinConnections`/`clockConnections`側の該当`to`キーも`null`にする) |
+| ビット実装/未実装が違う | 同じレジスタでもピン数の少ないパッケージでは上位ビットが未実装 | `registerOverrides`の`mapped`(`false`)を使う |
+| リセット値が違う | (発生頻度は低い) | `registerOverrides`の`resetValue`を使う |
+| レジスタ名が違う | 同じ機能のレジスタがデバイスの種類によって別名になる | `extends`で共有せず、別の`peripherals`エントリとして独立に定義する |
+| ベクタ番号だけ違う | 割込みベクタ番号の対応がデバイスの種類ごとに異なる | ベクタ表はデバイスの種類ごと丸ごと別ファイル |
+| 列挙値だけが違う | ピン機能選択の列挙値がパッケージで変わる | `registerOverrides`の`enumeratedValuesOnly`/`enumeratedValuesExclude`を使う |
 
 ## `memoryRegions`
 
@@ -404,7 +405,7 @@ pinKey  := <pinName> | "<channelName>.<pinName>"
 ```
 
 この例だけで、周辺→コントローラー→CPUコア、周辺→周辺という2種類の経路が、どちらも
-同じ`pinConnections`だけで表現できることが分かる。継承した配線を品種差分で
+同じ`pinConnections`だけで表現できることが分かる。継承した配線をデバイスの種類ごとに
 無効化したい場合(モジュール丸ごと不在のパッケージ等)は、`peripherals`の該当エントリと
 `pinConnections`の該当`to`キーの両方を`null`にする。
 
@@ -486,7 +487,7 @@ C#実装にしても汎用性は失われない。マップの一般的な構造
 ```
 
 ```jsonc
-// devices/board-variant-d.json(MAINの実測値だけ品種で違う。SUBは共通のまま)
+// devices/board-variant-d.json(MAINの実測値だけデバイスの種類で違う。SUBは共通のまま)
 {
   "includes": ["../peripheral-kinds/board-base.json"],
   "clockSources": { "osc": { "MAIN": 16000000 } }
@@ -518,8 +519,10 @@ C#実装にしても汎用性は失われない。マップの一般的な構造
 | `"PORT.5.DIR.B4"` | インスタンス`PORT`のチャネル`5`の`DIR`レジスタの`B4`フィールド |
 | `"IRQC.PRI[28]"` | インスタンス`IRQC`の`PRI[28]`(配列レジスタの1要素) |
 
-**意味**: 品種・パッケージごとのビット単位の差分を、種別定義を書き換えずに表現する
-ための仕組み(差分圧縮方式の型4・5・8、`enumeratedValues`の許可/除外リスト等)。
+**意味**: デバイスの種類・パッケージごとのビット単位の差分を、テンプレートを
+書き換えずに表現するための仕組み([違いをどう書くか](#how-to-express-differences)の
+「ビット実装/未実装が違う」「リセット値が違う」「列挙値だけが違う」、
+`enumeratedValues`の許可/除外リスト等)。
 
 **解決規則**:
 
@@ -537,19 +540,19 @@ C#実装にしても汎用性は失われない。マップの一般的な構造
 | `{instance}[.{channel}].{register}.{field}` | `bitOffset`/`bitWidth`/`access`/`resetValue`/`mapped`、および`enumeratedValuesOnly`/`enumeratedValuesExclude`(`BitField`の[`enumeratedValues`](#bitfield-enumeratedvalues)を参照) |
 | インスタンス単位(`peripherals`の`kind`/`baseAddress`/`channels`/`params`) | 対象外。これらを変えるには`includes`/`extends`や呼び出し側の`peripherals`定義そのものを操作する |
 
-マージは**部分適用**(指定したプロパティだけが置き換わる)。ただし種別定義に
+マージは**部分適用**(指定したプロパティだけが置き換わる)。ただしテンプレートに
 存在しない要素を新設する場合は既存値が無いため、その型の必須プロパティをすべて
 指定する。レジスタ単位で`fields`プロパティ自体を指定した場合は配列を丸ごと置き換える
 (個々のフィールドだけを直す場合は`.{fieldName}`パスを使う)。レジスタのオフセットや
-幅が全品種で不変である保証は無く、実際に反例がある(あるレジスタの幅が品種間で
-16ビットと32ビットのように変わる実例が確認されている)。
+幅が全デバイスの種類で不変である保証は無く、実際に反例がある(あるレジスタの幅が
+デバイスの種類の間で16ビットと32ビットのように変わる実例が確認されている)。
 
 適用タイミングとパスの先頭セグメントの扱いは「合成と上書きの解決」の「解決フロー」を
 参照。新設・移動した`BitField`が、そのデバイスでの実効`sizeBits`を超えていないかも
 ロード時に検証する。
 
 **例**(ビットフィールドの並び替え。同一レジスタ内でフィールドのビット位置自体が
-品種間で入れ替わる場合):
+デバイスの種類の間で入れ替わる場合):
 
 ```jsonc
 { "registerOverrides": {
@@ -877,7 +880,7 @@ JSONにのみ持たせる。
 
 **意味**: 周辺モジュールの実装に接続されているか。`mapped:false`は、そのビットが
 周辺モジュールの実装に接続されていない(don't-care)ことを表す。データシート上の
-予約ビット、品種差でこのビット/レジスタに対応する実体が無い場合に使う。書き込みは
+予約ビット、デバイスの種類による差でこのビット/レジスタに対応する実体が無い場合に使う。書き込みは
 常に捨てられ、読み込みは常に`resetValue`を返す。
 
 **「無視」と「違反」は別軸**: `mapped:false`への書き込みは機能的には常に無視される
@@ -955,7 +958,7 @@ JSONにのみ持たせる。
 
 | フィールド | 型 | 説明 |
 | --- | --- | --- |
-| `enumeratedValues` | `Dictionary<string, string>`(任意) | 値(16進文字列、キー)→名前(値)の辞書。全品種の和集合を`peripherals`側で定義する。 |
+| `enumeratedValues` | `Dictionary<string, string>`(任意) | 値(16進文字列、キー)→名前(値)の辞書。すべてのデバイスの種類の和集合を`peripherals`側で定義する。 |
 | `enumeratedValuesOnly` | `string[]`(任意、`registerOverrides`用) | `enumeratedValues`のキーのうち、このデバイスで有効な値の許可リスト。 |
 | `enumeratedValuesExclude` | `string[]`(任意、`registerOverrides`用) | `enumeratedValues`のキーのうち、このデバイスで無効な値の除外リスト。両方同時指定は不可。 |
 
@@ -973,11 +976,11 @@ JSONにのみ持たせる。
 **例**:
 
 ```jsonc
-// peripheral-kinds/pinmux.json(全品種共通)
+// peripheral-kinds/pinmux.json(すべてのデバイスの種類で共通)
 { "name": "SEL", "bitOffset": 0, "bitWidth": 6, "access": "rw", "resetValue": 0,
   "enumeratedValues": { "0x00": "GPIO", "0x0A": "UART_TX", "0x0D": "SPI_MOSI" } }
 
-// devices/variant-b.json(UART_TXが配線されていない品種)
+// devices/variant-b.json(UART_TXが配線されていないデバイスの種類)
 { "registerOverrides": { "PINMUX.P00.SEL": { "enumeratedValuesExclude": ["0x0A"] } } }
 ```
 
