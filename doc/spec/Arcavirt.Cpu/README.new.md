@@ -71,7 +71,7 @@
   (`baseAddress`を持たないエントリはテンプレートとして扱う)。同じC#クラスの
   複数インスタンスは`extends`、近縁チップ間で共通する定義は`includes`による
   テンプレート共有で重複させずに済む(詳細は`DeviceConfig`章の
-  「合成と上書きの解決」を参照)。
+  [合成と上書きの解決](#merge-and-override)を参照)。
 
 ## 全体構造
 
@@ -144,8 +144,9 @@ classDiagram
 
 `DeviceConfig`は1つのJSONファイルのトップレベル型。`includes`/`extends`解決・
 呼び出し側による上書き・`registerOverrides`適用を経て得られる実効`DeviceConfig`が、
-1台のデバイス(1品種)の定義になる(解決手順は「合成と上書きの解決」を参照)。
+1台のデバイス(1品種)の定義になる(解決手順は[合成と上書きの解決](#merge-and-override)を参照)。
 
+<a id="null-meanings"></a>
 ## `null`の2つの意味
 
 この仕様書全体で繰り返し登場するため、ここで一度だけ定義する。個別の章では
@@ -153,8 +154,8 @@ classDiagram
 
 | 意味 | 対象 | 詳細 |
 | --- | --- | --- |
-| マップのキー削除 | `peripherals`/`pinConnections`/`clockConnections`/`clockSources`/`registerOverrides`のような「マップ」として扱うフィールド全般。複数ファイルのマージ時、高優先度側の値が`null`ならそのキー自体を削除する | 「合成と上書きの解決」のマージ規則を参照 |
-| 構造的な永久欠番 | `channels`配列内の要素としての`null`。位置だけ消費しレジスタを生成しない(マップのキー削除とは別の意味) | `peripherals`を参照 |
+| マップのキー削除 | `peripherals`/`pinConnections`/`clockConnections`/`clockSources`/`registerOverrides`のような「マップ」として扱うフィールド全般。複数ファイルのマージ時、高優先度側の値が`null`ならそのキー自体を削除する | [マージ規則](#merge-rules)を参照 |
+| 構造的な永久欠番 | `channels`配列内の要素としての`null`。位置だけ消費しレジスタを生成しない(マップのキー削除とは別の意味) | [`peripherals`](#deviceconfig-peripherals)を参照 |
 
 ## 数値リテラルの記法
 
@@ -174,7 +175,7 @@ JSONファイルのトップレベル型。フィールドの型は「全体構�
 **意味**: 近縁チップ間で共通する定義や、パッケージ間の共通部分を、複数ファイルに
 またがって恒久的に再利用するための仕組み。実行のたびに変わらない、コミットされる
 系譜を表す(実行のたびに呼び出し側が指定する一時的な追加層とは区別する。後者は
-「呼び出し側による上書き」を参照)。
+[呼び出し側による上書き](#caller-override)を参照)。
 
 **解決規則**:
 1. 配列の先頭から順にマージする(後の要素が優先)。
@@ -182,10 +183,10 @@ JSONファイルのトップレベル型。フィールドの型は「全体構�
 3. 親チェーンをすべてマージした結果の上に、自分自身の内容(`registerOverrides`を
    含む)を最後に重ねる。
 4. 循環参照はロード時エラーとする。
-5. マージの詳細な規則は「合成と上書きの解決」の「マージ規則」を参照。
+5. マージの詳細な規則は[マージ規則](#merge-rules)を参照。
 
 ファイル単位の`includes`と同じマージアルゴリズムを、`peripherals`の1エントリ単位では
-`extends`という別名で使える(`peripherals`の`extends`を参照)。
+`extends`という別名で使える([`peripherals`の`extends`](#peripheraldefinition-extends)を参照)。
 
 **例**:
 
@@ -205,6 +206,7 @@ JSONファイルのトップレベル型。フィールドの型は「全体構�
 }
 ```
 
+<a id="merge-and-override"></a>
 ## 合成と上書きの解決
 
 複数ファイル・複数層にまたがる内容が、どの順序で1つの実効`DeviceConfig`に
@@ -225,6 +227,7 @@ JSONファイルのトップレベル型。フィールドの型は「全体構�
 追加層**であるべきで、device定義ファイル自身に書き込むと本番実行にも意図せず
 混ざる事故のもとになる(呼び出し側による上書きが担う)。
 
+<a id="resolution-flow"></a>
 ### 解決フロー
 
 ```mermaid
@@ -255,6 +258,7 @@ flowchart TD
 狙う場合、パスの先頭セグメントは継承元テンプレート名ではなく**実体化された
 インスタンス名**を使う(`registerLog`のパスも同じ規則に従う)。
 
+<a id="merge-rules"></a>
 ### マージ規則
 
 `includes`・`peripherals`の`extends`・`registerOverrides`・呼び出し側による上書きの
@@ -264,18 +268,19 @@ flowchart TD
 | --- | --- |
 | オブジェクトの各キー | 双方に存在し両方ともオブジェクトなら再帰的にマージ。片方が配列/スカラーなら後勝ちで丸ごと置き換え |
 | 片方にしか無いキー | そのまま採用 |
-| 高優先度側の値が`null` | そのキー自体を削除する(「`null`の2つの意味」を参照) |
+| 高優先度側の値が`null` | そのキー自体を削除する([`null`の2つの意味](#null-meanings)を参照) |
 | `registerOverrides`辞書同士 | パス文字列をキーとみなし、上記と同じ規則でマージする(同じパスの差分同士も部分マージされる) |
 
 `peripherals`の同名エントリが複数ファイルから読み込まれた場合も、この規則に従って
 単純に後勝ちでマージされる(特別な衝突検出は行わない)。`registers`内の`fields`
 (`BitField[]`)がこの規則の対象になる場合、配列は丸ごと置換になるため、フィールド
 1個だけを名前で狙い撃ちして書き換えることはできない。これが`registerOverrides`の
-ドットパス指定を廃止できない理由である(`registerOverrides`を参照)。
+ドットパス指定を廃止できない理由である([`registerOverrides`](#deviceconfig-registeroverrides)を参照)。
 
 **循環検出**: `includes`/`extends`チェーン(ファイル単位・エントリ単位とも)に循環が
 無いことをロード時に検証する。循環を想定しない解決アルゴリズムを保護するため。
 
+<a id="caller-override"></a>
 ### 呼び出し側による上書き
 
 テスト/CI専用の差分のように、恒久的な系譜には含めたくない一時的な追加層は、
@@ -314,21 +319,23 @@ flowchart TD
 ## `memoryRegions`
 
 **意味**: アドレス空間上の区画(RAM/ROM/未使用領域等)を宣言する。各フィールドの詳細は
-`MemoryRegion`を参照。
+[`MemoryRegion`](#memoryregion)を参照。
 
+<a id="deviceconfig-peripherals"></a>
 ## `peripherals`
 
 **書式**: インスタンス名をキーとする`PeripheralDefinition`の辞書
 (`Dictionary<string, PeripheralDefinition>`)。
 
 **意味**: 周辺モジュールのインスタンスを宣言する。実体化・削除の規則、名前重複の
-禁止は`PeripheralDefinition`を参照。
+禁止は[`PeripheralDefinition`](#peripheraldefinition)を参照。
 
 ## `cores`
 
 **意味**: CPUコアを宣言する。多くはシングルコア構成だが、マルチコアSoCへの拡張を
-見据えて配列で持つ。各フィールドの詳細は`Core`を参照。
+見据えて配列で持つ。各フィールドの詳細は[`Core`](#core)を参照。
 
+<a id="wiring-common-rules"></a>
 ## 配線の共通規約
 
 `pinConnections`と`clockConnections`はどちらも同じ形の宣言的なマップ
@@ -369,13 +376,13 @@ pinKey  := <pinName> | "<channelName>.<pinName>"
 割込みコントローラー以外でも記述できる形にする。コアとなるJSONスキーマには、ベクタ
 番号・優先度・グループ割込みといった特定コントローラーの概念を一切持たせない
 (それらは`params`に逃がす)。マップの一般的な構造・`null`の意味・
-ファンアウト/ファンインの扱いは「配線の共通規約」を参照。
+ファンアウト/ファンインの扱いは[配線の共通規約](#wiring-common-rules)を参照。
 
 **解決規則**: `instanceName`は実体化された`peripherals`のキー、または`cores[].name`の
 いずれか。各エントリの`instanceName`が実在し、`pinKey`が構築後のインスタンスが
 実際に公開する出力ピン(`from`側)/入力ピン(`to`側)と一致することをロード時に検証する
 (値が`null`のエントリは検証対象外)。同一ファイル内での`to`キー重複の扱いは
-「配線の共通規約」を参照。
+[配線の共通規約](#wiring-common-rules)を参照。
 
 **例**:
 
@@ -415,7 +422,7 @@ sourceName := <clockSourcesのnamespaceキー> | <実体化された peripherals
 受けて周波数を再計算し依存オブジェクトへ伝える動的な振る舞いを持つため、C#で実装する。
 配線の記法自体は汎用、`CLOCK`クラス自身(分周比の計算式)はチップ固有という分離のため、
 C#実装にしても汎用性は失われない。マップの一般的な構造・`null`の意味・
-ファンアウト/ファンインの扱いは「配線の共通規約」を参照。
+ファンアウト/ファンインの扱いは[配線の共通規約](#wiring-common-rules)を参照。
 
 **解決規則**: `from`は最初のセグメントが`clockSources`のnamespaceと一致すればそこから、
 しなければ実体化されたインスタンスの`ClockOutputs`から名前解決する。分周比が実行時に
@@ -489,6 +496,7 @@ C#実装にしても汎用性は失われない。マップの一般的な構造
 解決結果は`{ "osc": { "MAIN": 16000000, "SUB": 32768 } }`(`MAIN`だけ上書き、`SUB`は
 `board-base.json`側がそのまま残る)。
 
+<a id="deviceconfig-registeroverrides"></a>
 ## `registerOverrides`
 
 **書式**: ドット区切りパスをキー、マージする差分オブジェクトを値とする辞書
@@ -500,7 +508,7 @@ C#実装にしても汎用性は失われない。マップの一般的な構造
 ```
 
 `{index}`は`"[28]"`形式の配列レジスタ用(`channels`とは併用しない)。`dim`展開で
-生成されたフィールドの指定方法は`BitField`の「配列表現」を参照。`[index]`は
+生成されたフィールドの指定方法は`BitField`の[配列表現](#bitfield-array-expression)を参照。`[index]`は
 チャネル概念を持たない均一配列レジスタ専用で、フィールドの繰り返し圧縮とは
 別の機構。
 
@@ -526,7 +534,7 @@ C#実装にしても汎用性は失われない。マップの一般的な構造
 | --- | --- |
 | `{instance}.{channel}`(レジスタ名を含まない) | `mapped`のみ |
 | `{instance}[.{channel}].{register}[{index}]` | `offset`/`stride`/`sizeBits`/`fields`(丸ごと置換) |
-| `{instance}[.{channel}].{register}.{field}` | `bitOffset`/`bitWidth`/`access`/`resetValue`/`mapped`、および`enumeratedValuesOnly`/`enumeratedValuesExclude`(`BitField`の「`enumeratedValues`」を参照) |
+| `{instance}[.{channel}].{register}.{field}` | `bitOffset`/`bitWidth`/`access`/`resetValue`/`mapped`、および`enumeratedValuesOnly`/`enumeratedValuesExclude`(`BitField`の[`enumeratedValues`](#bitfield-enumeratedvalues)を参照) |
 | インスタンス単位(`peripherals`の`kind`/`baseAddress`/`channels`/`params`) | 対象外。これらを変えるには`includes`/`extends`や呼び出し側の`peripherals`定義そのものを操作する |
 
 マージは**部分適用**(指定したプロパティだけが置き換わる)。ただし種別定義に
@@ -564,7 +572,7 @@ C#実装にしても汎用性は失われない。マップの一般的な構造
 **意味**: **デバッグ用**で、標準MCUのJSONには一切登場しない
 (「呼び出し側による上書き」の典型的な使用例)。どのレジスタ/フィールドの
 読み書き・違反をログに出すかを、標準のdevice定義を一切変更せずに指定できる。
-`LogSetting`各プロパティの意味は`LogSetting`を参照。
+`LogSetting`各プロパティの意味は[`LogSetting`](#logsetting)を参照。
 
 **解決規則**:
 
@@ -603,6 +611,7 @@ C#実装にしても汎用性は失われない。マップの一般的な構造
 既定で違反ログだけを出す(`"*"`)。`TIMER0`配下は通常の書き込みトレースも追加で
 出す。`TIMER0.TCR.EN`だけは、より具体的なパスとして違反ログを個別にオフにする。
 
+<a id="memoryregion"></a>
 # MemoryRegion
 
 アドレス空間上の区画(RAM/ROM/未使用領域等)を表す。`peripherals`のように実体化された
@@ -631,12 +640,14 @@ C#オブジェクトを持たず、`begin`〜`end`の範囲情報として`BusMa
 
 **意味**: 区画の種別(RAM/ROM/未使用領域等)。値の解釈はローダー実装に委ねる。
 
+<a id="peripheraldefinition"></a>
 # PeripheralDefinition
 
 インスタンス名をキーにした辞書(`peripherals`)の各要素。`baseAddress`を持つエントリ
 だけが実際にインスタンス化される。持たないエントリはテンプレートとして扱われ、他の
 エントリから`extends`で参照されるだけで、それ自体は実体化されない。
 
+<a id="peripheraldefinition-extends"></a>
 ## `extends`
 
 **書式**: 同じ名前空間内のキー名の配列(`string[]`、任意。ファイルパスではない)。
@@ -646,9 +657,9 @@ C#オブジェクトを持たず、`begin`〜`end`の範囲情報として`BusMa
 `TIMER0`/`TIMER1`のように**元のキーと異なる名前で複数インスタンスを作りたい場合**に
 使う。
 
-**解決規則**: マージアルゴリズムは`includes`と共通(「合成と上書きの解決」の
-「マージ規則」を参照)。`extends`使用時の`registerOverrides`/`registerLog`のパスの
-先頭セグメントの扱いも「合成と上書きの解決」の「解決フロー」を参照。
+**解決規則**: マージアルゴリズムは`includes`と共通([マージ規則](#merge-rules)を参照)。
+`extends`使用時の`registerOverrides`/`registerLog`のパスの先頭セグメントの扱いも
+[合成と上書きの解決の解決フロー](#resolution-flow)を参照。
 
 **例**:
 
@@ -699,7 +710,7 @@ C#オブジェクトを持たず、`begin`〜`end`の範囲情報として`BusMa
 デバイス内で複数エントリの`baseAddress`が一致することはロード時エラーとする。
 `includes`元や呼び出し側による上書きなど、下流のファイルで`peripherals`の
 あるキーの値を`null`にすると、そのエントリ自体が削除される(実体化された
-インスタンス・テンプレートのどちらでも同様。「`null`の2つの意味」を参照)。
+インスタンス・テンプレートのどちらでも同様。[`null`の2つの意味](#null-meanings)を参照)。
 パッケージ差でモジュールそのものが丸ごと存在しない場合に使う。
 
 ## `channels`
@@ -806,7 +817,7 @@ C#オブジェクトを持たず、`begin`〜`end`の範囲情報として`BusMa
 
 **解決規則**: `fields`が`sizeBits`の範囲を隙間なく・重複なく覆っているかをロード時に
 検証する(全ビットがどれかの`BitField`に属することを保証する)。列挙されていない
-ビット範囲の自動補完については`BitField`の「`mapped`」を参照。
+ビット範囲の自動補完については`BitField`の[`mapped`](#bitfield-mapped)を参照。
 
 # BitField
 
@@ -859,6 +870,7 @@ JSONにのみ持たせる。
 「読み出し値が不定」とデータシートが明記している場合は、著者が`resetValue: 0`と
 書く(チェッカーボードパターン等の特別な慣習値は導入しない)。
 
+<a id="bitfield-mapped"></a>
 ## `mapped`
 
 **書式**: bool(既定`true`)。
@@ -908,6 +920,7 @@ JSONにのみ持たせる。
 | 読み値不定(データシートが不定と明記) | `resetValue:0`, `mapped:true` |
 | 通常の機能フィールド | `access:"rw"`, `mapped:true`(既定) |
 
+<a id="bitfield-array-expression"></a>
 ## 配列表現(`dim`/`dimIncrement`/`dimIndex`)
 
 **書式**:
@@ -935,6 +948,7 @@ JSONにのみ持たせる。
 
 `B0`(bitOffset 0)〜`B7`(bitOffset 7)が生成される。
 
+<a id="bitfield-enumeratedvalues"></a>
 ## `enumeratedValues`
 
 **書式**:
@@ -967,6 +981,7 @@ JSONにのみ持たせる。
 { "registerOverrides": { "PINMUX.P00.SEL": { "enumeratedValuesExclude": ["0x0A"] } } }
 ```
 
+<a id="core"></a>
 # Core
 
 CPUコアは`name`/`kind`/`params`を持つが、バスにマップされないため`baseAddress`/
@@ -997,6 +1012,7 @@ CPUコアは`name`/`kind`/`params`を持つが、バスにマップされない�
 { "cores": [ { "name": "CORE0", "kind": "core-v1", "params": { /* コア固有設定 */ } } ] }
 ```
 
+<a id="logsetting"></a>
 # LogSetting
 
 `registerLog`辞書の各値。4つのプロパティはすべて既定`false`(何も出力しない)。
